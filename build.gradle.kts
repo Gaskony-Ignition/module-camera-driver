@@ -35,6 +35,6 @@ ignitionModule {
         }
     }
 
-    // Enable module signing with self-signed certificate
-    skipModlSigning.set(false)
+    // Disable module signing for now (certificates not generated yet)
+    skipModlSigning.set(true)
 }

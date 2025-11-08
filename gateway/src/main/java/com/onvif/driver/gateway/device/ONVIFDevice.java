@@ -9,6 +9,8 @@ import org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
+
 /**
  * ONVIF Device implementation.
  *
@@ -134,5 +136,53 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
         // - etc.
 
         logger.info("Created root node: [{}]", deviceName);
+    }
+
+    /**
+     * Called when the monitoring mode of items changes.
+     * Required by AddressSpace interface.
+     *
+     * @param items List of monitored items that changed
+     */
+    @Override
+    public void onMonitoringModeChanged(List items) {
+        // Handle monitoring mode changes if needed
+        subscriptionModel.onMonitoringModeChanged(items);
+    }
+
+    /**
+     * Called when data items are created.
+     * Required by AddressSpace interface.
+     *
+     * @param items List of data items that were created
+     */
+    @Override
+    public void onDataItemsCreated(List items) {
+        // Handle data item creation if needed
+        subscriptionModel.onDataItemsCreated(items);
+    }
+
+    /**
+     * Called when data items are modified.
+     * Required by AddressSpace interface.
+     *
+     * @param items List of data items that were modified
+     */
+    @Override
+    public void onDataItemsModified(List items) {
+        // Handle data item modification if needed
+        subscriptionModel.onDataItemsModified(items);
+    }
+
+    /**
+     * Called when data items are deleted.
+     * Required by AddressSpace interface.
+     *
+     * @param items List of data items that were deleted
+     */
+    @Override
+    public void onDataItemsDeleted(List items) {
+        // Handle data item deletion if needed
+        subscriptionModel.onDataItemsDeleted(items);
     }
 }
