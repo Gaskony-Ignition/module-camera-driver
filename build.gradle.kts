@@ -35,6 +35,6 @@ ignitionModule {
         }
     }
 
-    // Disable module signing for now (certificates not generated yet)
-    skipModlSigning.set(true)
+    // Module signing enabled (configured in gradle.properties)
+    skipModlSigning.set(false)
 }
