@@ -2,9 +2,13 @@ package com.onvif.driver.gateway.device;
 
 import com.inductiveautomation.ignition.gateway.opcua.server.api.DeviceContext;
 import com.onvif.driver.gateway.onvif.DeviceInformation;
+import com.onvif.driver.gateway.onvif.MediaProfile;
+import com.onvif.driver.gateway.onvif.ONVIFClient;
 import com.onvif.driver.gateway.onvif.ONVIFService;
+import com.onvif.driver.gateway.onvif.PTZStatus;
 import org.eclipse.milo.opcua.sdk.core.AccessLevel;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaFolderNode;
+import org.eclipse.milo.opcua.sdk.server.nodes.UaMethodNode;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaNodeContext;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaVariableNode;
 import org.eclipse.milo.opcua.stack.core.Identifiers;
@@ -14,7 +18,9 @@ import org.eclipse.milo.opcua.stack.core.types.builtin.Variant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Builds OPC-UA address space from ONVIF data.
@@ -27,11 +33,17 @@ public class AddressSpaceBuilder {
     private final DeviceContext deviceContext;
     private final UaNodeContext nodeContext;
     private final UaFolderNode rootNode;
+    private final ONVIFClient onvifClient;
 
-    public AddressSpaceBuilder(DeviceContext deviceContext, UaNodeContext nodeContext, UaFolderNode rootNode) {
+    // Cache of variable nodes for updates
+    private final Map<String, UaVariableNode> nodeCache = new HashMap<>();
+
+    public AddressSpaceBuilder(DeviceContext deviceContext, UaNodeContext nodeContext,
+                              UaFolderNode rootNode, ONVIFClient onvifClient) {
         this.deviceContext = deviceContext;
         this.nodeContext = nodeContext;
         this.rootNode = rootNode;
+        this.onvifClient = onvifClient;
     }
 
     /**
@@ -165,6 +177,10 @@ public class AddressSpaceBuilder {
 
             parent.addComponent(variableNode);
 
+            // Cache node for updates
+            String nodePath = parent.getBrowseName().getName() + "/" + name;
+            nodeCache.put(nodePath, variableNode);
+
             logger.debug("Added variable: {} = {}", name, value);
 
         } catch (Exception e) {
@@ -173,18 +189,171 @@ public class AddressSpaceBuilder {
     }
 
     /**
+     * Builds Media Profiles section.
+     */
+    public void buildMediaProfiles(List<MediaProfile> profiles) {
+        logger.info("Building MediaProfiles address space");
+
+        UaFolderNode mediaFolder = new UaFolderNode(
+            nodeContext,
+            deviceContext.nodeId("MediaProfiles"),
+            deviceContext.qualifiedName("MediaProfiles"),
+            LocalizedText.english("Media Profiles")
+        );
+        rootNode.addComponent(mediaFolder);
+
+        for (MediaProfile profile : profiles) {
+            String profileName = profile.getName() != null ? profile.getName() : profile.getToken();
+
+            UaFolderNode profileFolder = new UaFolderNode(
+                nodeContext,
+                deviceContext.nodeId("MediaProfiles/" + profileName),
+                deviceContext.qualifiedName(profileName),
+                LocalizedText.english(profileName)
+            );
+            mediaFolder.addComponent(profileFolder);
+
+            // Add profile details
+            addVariableNode(profileFolder, "Token", profile.getToken());
+            addVariableNode(profileFolder, "Encoding", profile.getEncoding());
+            addVariableNode(profileFolder, "Width", profile.getWidth());
+            addVariableNode(profileFolder, "Height", profile.getHeight());
+            addVariableNode(profileFolder, "FrameRate", profile.getFrameRate());
+            addVariableNode(profileFolder, "Bitrate", profile.getBitrate());
+
+            // Add snapshot and stream URIs
+            try {
+                String snapshotUri = onvifClient.getSnapshotUri(profile.getToken());
+                if (snapshotUri != null) {
+                    addVariableNode(profileFolder, "SnapshotUri", snapshotUri);
+                }
+
+                String streamUri = onvifClient.getStreamUri(profile.getToken());
+                if (streamUri != null) {
+                    addVariableNode(profileFolder, "StreamUri", streamUri);
+                }
+            } catch (Exception e) {
+                logger.warn("Failed to get URIs for profile {}: {}", profileName, e.getMessage());
+            }
+        }
+
+        logger.info("MediaProfiles address space created with {} profiles", profiles.size());
+    }
+
+    /**
+     * Builds PTZ section with control nodes.
+     */
+    public void buildPTZ(PTZStatus initialStatus, String profileToken) {
+        logger.info("Building PTZ address space");
+
+        UaFolderNode ptzFolder = new UaFolderNode(
+            nodeContext,
+            deviceContext.nodeId("PTZ"),
+            deviceContext.qualifiedName("PTZ"),
+            LocalizedText.english("PTZ Control")
+        );
+        rootNode.addComponent(ptzFolder);
+
+        // Add status nodes (read-only)
+        addVariableNode(ptzFolder, "Pan", initialStatus.getPan());
+        addVariableNode(ptzFolder, "Tilt", initialStatus.getTilt());
+        addVariableNode(ptzFolder, "Zoom", initialStatus.getZoom());
+        addVariableNode(ptzFolder, "MoveStatus", initialStatus.getMoveStatus());
+        addVariableNode(ptzFolder, "LastUpdate", initialStatus.getTimestamp());
+
+        // Add control nodes (writable)
+        addWritableNode(ptzFolder, "SetPan", 0.0, (value) -> {
+            try {
+                double pan = ((Number) value).doubleValue();
+                PTZStatus current = onvifClient.getPTZStatus(profileToken);
+                onvifClient.absoluteMove(profileToken, pan, current.getTilt(), current.getZoom());
+            } catch (Exception e) {
+                logger.error("Failed to set pan", e);
+            }
+        });
+
+        addWritableNode(ptzFolder, "SetTilt", 0.0, (value) -> {
+            try {
+                double tilt = ((Number) value).doubleValue();
+                PTZStatus current = onvifClient.getPTZStatus(profileToken);
+                onvifClient.absoluteMove(profileToken, current.getPan(), tilt, current.getZoom());
+            } catch (Exception e) {
+                logger.error("Failed to set tilt", e);
+            }
+        });
+
+        addWritableNode(ptzFolder, "SetZoom", 0.0, (value) -> {
+            try {
+                double zoom = ((Number) value).doubleValue();
+                PTZStatus current = onvifClient.getPTZStatus(profileToken);
+                onvifClient.absoluteMove(profileToken, current.getPan(), current.getTilt(), zoom);
+            } catch (Exception e) {
+                logger.error("Failed to set zoom", e);
+            }
+        });
+
+        logger.info("PTZ address space created");
+    }
+
+    /**
      * Updates a variable node value.
      *
-     * @param nodePath Path to the variable node (e.g., "DeviceInfo/Manufacturer")
+     * @param nodePath Path to the variable node (e.g., "PTZ/Pan")
      * @param value New value
      */
     public void updateVariableValue(String nodePath, Object value) {
         try {
-            // This would be implemented to update existing node values
-            // For now, just log
-            logger.debug("Would update {} to {}", nodePath, value);
+            UaVariableNode node = nodeCache.get(nodePath);
+            if (node != null) {
+                node.setValue(new DataValue(new Variant(value)));
+                logger.trace("Updated {} to {}", nodePath, value);
+            } else {
+                logger.debug("Node not found in cache: {}", nodePath);
+            }
         } catch (Exception e) {
             logger.error("Failed to update variable: " + nodePath, e);
+        }
+    }
+
+    /**
+     * Updates multiple variable values.
+     */
+    public void updateVariableValues(Map<String, Object> updates) {
+        for (Map.Entry<String, Object> entry : updates.entrySet()) {
+            updateVariableValue(entry.getKey(), entry.getValue());
+        }
+    }
+
+    /**
+     * Adds a writable variable node.
+     * Note: For full PTZ control integration, use OPC-UA Methods or external scripting.
+     */
+    private void addWritableNode(UaFolderNode parent, String name, Object initialValue,
+                                 java.util.function.Consumer<Object> writeHandler) {
+        try {
+            org.eclipse.milo.opcua.stack.core.types.builtin.NodeId dataType = Identifiers.Double;
+
+            UaVariableNode variableNode = new UaVariableNode.UaVariableNodeBuilder(nodeContext)
+                .setNodeId(deviceContext.nodeId(parent.getBrowseName().getName() + "/" + name))
+                .setBrowseName(deviceContext.qualifiedName(name))
+                .setDisplayName(LocalizedText.english(name))
+                .setDataType(dataType)
+                .setTypeDefinition(Identifiers.BaseDataVariableType)
+                .setAccessLevel(AccessLevel.READ_WRITE)
+                .setUserAccessLevel(AccessLevel.READ_WRITE)
+                .build();
+
+            variableNode.setValue(new DataValue(new Variant(initialValue)));
+
+            parent.addComponent(variableNode);
+
+            String nodePath = parent.getBrowseName().getName() + "/" + name;
+            nodeCache.put(nodePath, variableNode);
+
+            logger.debug("Added writable variable: {} (write handler requires OPC-UA Methods for full integration)", name);
+
+        } catch (Exception e) {
+            logger.error("Failed to add writable node: " + name, e);
         }
     }
 }

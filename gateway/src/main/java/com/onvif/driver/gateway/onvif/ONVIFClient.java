@@ -37,6 +37,10 @@ public class ONVIFClient implements Closeable {
     private final int timeout;
     private final CloseableHttpClient httpClient;
 
+    // Service endpoints (discovered dynamically)
+    private String mediaServiceUrl;
+    private String ptzServiceUrl;
+
     /**
      * Creates a new ONVIF client.
      *
@@ -113,7 +117,161 @@ public class ONVIFClient implements Closeable {
         );
 
         String response = sendSoapRequest(soapRequest);
-        return parseServices(response);
+        List<ONVIFService> services = parseServices(response);
+
+        // Cache service URLs for later use
+        for (ONVIFService service : services) {
+            String serviceName = service.getServiceName().toLowerCase();
+            if (serviceName.contains("media")) {
+                mediaServiceUrl = service.getXAddr();
+                logger.info("Media service URL: {}", mediaServiceUrl);
+            } else if (serviceName.contains("ptz")) {
+                ptzServiceUrl = service.getXAddr();
+                logger.info("PTZ service URL: {}", ptzServiceUrl);
+            }
+        }
+
+        return services;
+    }
+
+    /**
+     * Gets media profiles from ONVIF device.
+     *
+     * @return List of media profiles
+     * @throws IOException if communication fails
+     */
+    public List<MediaProfile> getMediaProfiles() throws IOException {
+        if (mediaServiceUrl == null) {
+            throw new IOException("Media service not available - call getServices() first");
+        }
+
+        String soapRequest = buildSoapEnvelope(
+            "<trt:GetProfiles xmlns:trt=\"http://www.onvif.org/ver10/media/wsdl\"/>"
+        );
+
+        String response = sendSoapRequest(mediaServiceUrl, soapRequest);
+        return parseMediaProfiles(response);
+    }
+
+    /**
+     * Gets snapshot URI for a media profile.
+     *
+     * @param profileToken Profile token
+     * @return Snapshot URI
+     * @throws IOException if communication fails
+     */
+    public String getSnapshotUri(String profileToken) throws IOException {
+        if (mediaServiceUrl == null) {
+            throw new IOException("Media service not available");
+        }
+
+        String soapRequest = buildSoapEnvelope(
+            "<trt:GetSnapshotUri xmlns:trt=\"http://www.onvif.org/ver10/media/wsdl\">" +
+            "<trt:ProfileToken>" + profileToken + "</trt:ProfileToken>" +
+            "</trt:GetSnapshotUri>"
+        );
+
+        String response = sendSoapRequest(mediaServiceUrl, soapRequest);
+        return parseUri(response);
+    }
+
+    /**
+     * Gets stream URI for a media profile.
+     *
+     * @param profileToken Profile token
+     * @return Stream URI
+     * @throws IOException if communication fails
+     */
+    public String getStreamUri(String profileToken) throws IOException {
+        if (mediaServiceUrl == null) {
+            throw new IOException("Media service not available");
+        }
+
+        String soapRequest = buildSoapEnvelope(
+            "<trt:GetStreamUri xmlns:trt=\"http://www.onvif.org/ver10/media/wsdl\">" +
+            "<trt:StreamSetup>" +
+            "<tt:Stream xmlns:tt=\"http://www.onvif.org/ver10/schema\">RTP-Unicast</tt:Stream>" +
+            "<tt:Transport xmlns:tt=\"http://www.onvif.org/ver10/schema\">" +
+            "<tt:Protocol>RTSP</tt:Protocol>" +
+            "</tt:Transport>" +
+            "</trt:StreamSetup>" +
+            "<trt:ProfileToken>" + profileToken + "</trt:ProfileToken>" +
+            "</trt:GetStreamUri>"
+        );
+
+        String response = sendSoapRequest(mediaServiceUrl, soapRequest);
+        return parseUri(response);
+    }
+
+    /**
+     * Gets PTZ status.
+     *
+     * @param profileToken Profile token
+     * @return PTZ status
+     * @throws IOException if communication fails
+     */
+    public PTZStatus getPTZStatus(String profileToken) throws IOException {
+        if (ptzServiceUrl == null) {
+            throw new IOException("PTZ service not available");
+        }
+
+        String soapRequest = buildSoapEnvelope(
+            "<tptz:GetStatus xmlns:tptz=\"http://www.onvif.org/ver20/ptz/wsdl\">" +
+            "<tptz:ProfileToken>" + profileToken + "</tptz:ProfileToken>" +
+            "</tptz:GetStatus>"
+        );
+
+        String response = sendSoapRequest(ptzServiceUrl, soapRequest);
+        return parsePTZStatus(response);
+    }
+
+    /**
+     * Moves PTZ to absolute position.
+     *
+     * @param profileToken Profile token
+     * @param pan Pan position (-1.0 to 1.0)
+     * @param tilt Tilt position (-1.0 to 1.0)
+     * @param zoom Zoom position (0.0 to 1.0)
+     * @throws IOException if communication fails
+     */
+    public void absoluteMove(String profileToken, double pan, double tilt, double zoom) throws IOException {
+        if (ptzServiceUrl == null) {
+            throw new IOException("PTZ service not available");
+        }
+
+        String soapRequest = buildSoapEnvelope(
+            "<tptz:AbsoluteMove xmlns:tptz=\"http://www.onvif.org/ver20/ptz/wsdl\">" +
+            "<tptz:ProfileToken>" + profileToken + "</tptz:ProfileToken>" +
+            "<tptz:Position>" +
+            "<tt:PanTilt x=\"" + pan + "\" y=\"" + tilt + "\" xmlns:tt=\"http://www.onvif.org/ver10/schema\"/>" +
+            "<tt:Zoom x=\"" + zoom + "\" xmlns:tt=\"http://www.onvif.org/ver10/schema\"/>" +
+            "</tptz:Position>" +
+            "</tptz:AbsoluteMove>"
+        );
+
+        sendSoapRequest(ptzServiceUrl, soapRequest);
+    }
+
+    /**
+     * Stops PTZ movement.
+     *
+     * @param profileToken Profile token
+     * @throws IOException if communication fails
+     */
+    public void ptzStop(String profileToken) throws IOException {
+        if (ptzServiceUrl == null) {
+            throw new IOException("PTZ service not available");
+        }
+
+        String soapRequest = buildSoapEnvelope(
+            "<tptz:Stop xmlns:tptz=\"http://www.onvif.org/ver20/ptz/wsdl\">" +
+            "<tptz:ProfileToken>" + profileToken + "</tptz:ProfileToken>" +
+            "<tptz:PanTilt>true</tptz:PanTilt>" +
+            "<tptz:Zoom>true</tptz:Zoom>" +
+            "</tptz:Stop>"
+        );
+
+        sendSoapRequest(ptzServiceUrl, soapRequest);
     }
 
     /**
@@ -143,7 +301,19 @@ public class ONVIFClient implements Closeable {
      * @throws IOException if communication fails
      */
     private String sendSoapRequest(String soapRequest) throws IOException {
-        HttpPost post = new HttpPost(deviceUrl);
+        return sendSoapRequest(deviceUrl, soapRequest);
+    }
+
+    /**
+     * Sends SOAP request to specific service URL.
+     *
+     * @param url Service URL
+     * @param soapRequest SOAP envelope XML
+     * @return SOAP response XML
+     * @throws IOException if communication fails
+     */
+    private String sendSoapRequest(String url, String soapRequest) throws IOException {
+        HttpPost post = new HttpPost(url);
         post.setHeader("Content-Type", "application/soap+xml; charset=utf-8");
         post.setEntity(new StringEntity(soapRequest, StandardCharsets.UTF_8));
 
@@ -164,7 +334,7 @@ public class ONVIFClient implements Closeable {
                 throw new IOException("Empty response from ONVIF device");
             }
         } catch (IOException e) {
-            logger.error("Failed to send SOAP request to {}", deviceUrl, e);
+            logger.error("Failed to send SOAP request to {}", url, e);
             throw e;
         }
     }
@@ -273,6 +443,152 @@ public class ONVIFClient implements Closeable {
             Element child = (Element) children.item(i);
             if (child.getLocalName().equals(childName)) {
                 return child.getTextContent();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Parses GetProfiles response.
+     */
+    private List<MediaProfile> parseMediaProfiles(String xml) {
+        List<MediaProfile> profiles = new ArrayList<>();
+
+        try {
+            Document doc = parseXml(xml);
+            NodeList profileNodes = doc.getElementsByTagName("*");
+
+            for (int i = 0; i < profileNodes.getLength(); i++) {
+                if (profileNodes.item(i) instanceof Element) {
+                    Element element = (Element) profileNodes.item(i);
+                    if (element.getLocalName().equals("Profiles")) {
+                        MediaProfile profile = new MediaProfile();
+                        profile.setToken(element.getAttribute("token"));
+                        profile.setName(getChildTextContent(element, "Name"));
+
+                        // Parse video encoder configuration
+                        Element videoEncoder = findElement(element, "VideoEncoderConfiguration");
+                        if (videoEncoder != null) {
+                            profile.setEncoding(getChildTextContent(videoEncoder, "Encoding"));
+
+                            Element resolution = findElement(videoEncoder, "Resolution");
+                            if (resolution != null) {
+                                String width = getChildTextContent(resolution, "Width");
+                                String height = getChildTextContent(resolution, "Height");
+                                if (width != null) profile.setWidth(Integer.parseInt(width));
+                                if (height != null) profile.setHeight(Integer.parseInt(height));
+                            }
+
+                            String frameRate = getChildTextContent(videoEncoder, "FrameRate");
+                            String bitrate = getChildTextContent(videoEncoder, "Bitrate");
+                            if (frameRate != null) profile.setFrameRate(Integer.parseInt(frameRate));
+                            if (bitrate != null) profile.setBitrate(Integer.parseInt(bitrate));
+                        }
+
+                        profiles.add(profile);
+                        logger.debug("Parsed media profile: {}", profile);
+                    }
+                }
+            }
+
+            logger.info("Parsed {} media profiles", profiles.size());
+
+        } catch (Exception e) {
+            logger.error("Failed to parse media profiles", e);
+        }
+
+        return profiles;
+    }
+
+    /**
+     * Parses URI response (for snapshot or stream URI).
+     */
+    private String parseUri(String xml) {
+        try {
+            Document doc = parseXml(xml);
+            String uri = getTextContent(doc, "Uri");
+            logger.debug("Parsed URI: {}", uri);
+            return uri;
+        } catch (Exception e) {
+            logger.error("Failed to parse URI", e);
+            return null;
+        }
+    }
+
+    /**
+     * Parses PTZ status response.
+     */
+    private PTZStatus parsePTZStatus(String xml) {
+        try {
+            Document doc = parseXml(xml);
+            PTZStatus status = new PTZStatus();
+
+            // Find PanTilt element
+            Element panTilt = findElementByName(doc, "PanTilt");
+            if (panTilt != null) {
+                String panStr = panTilt.getAttribute("x");
+                String tiltStr = panTilt.getAttribute("y");
+                if (panStr != null && !panStr.isEmpty()) {
+                    status.setPan(Double.parseDouble(panStr));
+                }
+                if (tiltStr != null && !tiltStr.isEmpty()) {
+                    status.setTilt(Double.parseDouble(tiltStr));
+                }
+            }
+
+            // Find Zoom element
+            Element zoom = findElementByName(doc, "Zoom");
+            if (zoom != null) {
+                String zoomStr = zoom.getAttribute("x");
+                if (zoomStr != null && !zoomStr.isEmpty()) {
+                    status.setZoom(Double.parseDouble(zoomStr));
+                }
+            }
+
+            // Find move status
+            String moveStatus = getTextContent(doc, "MoveStatus");
+            if (moveStatus != null) {
+                status.setMoveStatus(moveStatus);
+            } else {
+                status.setMoveStatus("IDLE");
+            }
+
+            logger.debug("Parsed PTZ status: {}", status);
+            return status;
+
+        } catch (Exception e) {
+            logger.error("Failed to parse PTZ status", e);
+            return new PTZStatus();
+        }
+    }
+
+    /**
+     * Finds element by local name.
+     */
+    private Element findElementByName(Document doc, String localName) {
+        NodeList nodes = doc.getElementsByTagName("*");
+        for (int i = 0; i < nodes.getLength(); i++) {
+            if (nodes.item(i) instanceof Element) {
+                Element element = (Element) nodes.item(i);
+                if (element.getLocalName().equals(localName)) {
+                    return element;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Finds child element by local name.
+     */
+    private Element findElement(Element parent, String localName) {
+        NodeList children = parent.getElementsByTagName("*");
+        for (int i = 0; i < children.getLength(); i++) {
+            if (children.item(i) instanceof Element) {
+                Element child = (Element) children.item(i);
+                if (child.getLocalName().equals(localName)) {
+                    return child;
+                }
             }
         }
         return null;
