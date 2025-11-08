@@ -13,31 +13,45 @@ This module allows Ignition users to:
 
 ## Current Status
 
-**⚠️ SKELETON PROJECT - READY FOR IMPLEMENTATION**
+**✅ FULLY FUNCTIONAL - CORE FEATURES IMPLEMENTED**
 
-This project has been set up with the complete structure, configuration, and skeleton code based on learnings from the Ignition PLC Simulator project. The core ONVIF protocol communication has NOT been implemented yet.
+The ONVIF Driver is now fully operational with complete ONVIF protocol communication, authentication, and OPC-UA integration. Ready for deployment and testing with real ONVIF devices.
 
 ### What's Complete ✅
 
+**Phase 1-3: Core ONVIF Communication**
 - [x] Gradle build configuration
 - [x] Module structure (common, designer, gateway)
-- [x] Java skeleton files with extensive documentation
+- [x] Java implementation with extensive documentation
 - [x] Configuration UI setup (IP, Port, Username, Password, etc.)
 - [x] Resource bundle configuration (i18n)
 - [x] Validation logic
 - [x] Device lifecycle hooks (startup, shutdown)
-- [x] Critical learnings documented from PLC Simulator project
+- [x] **ONVIF SOAP client with HTTP/HTTPS support**
+- [x] **WS-UsernameToken authentication (SHA-1 digest)**
+- [x] **GetDeviceInformation implementation**
+- [x] **GetServices discovery**
+- [x] **OPC-UA address space builder**
+- [x] **DeviceInfo, Services, and Status nodes**
+- [x] **Complete XML parsing for SOAP responses**
 
-### What Needs Implementation ❌
+### Future Enhancements ⏳
 
-- [ ] ONVIF protocol communication (SOAP/XML)
-- [ ] WS-Discovery for service discovery
-- [ ] WS-UsernameToken authentication
-- [ ] Parse ONVIF service responses
-- [ ] Create OPC-UA nodes from ONVIF data
-- [ ] Implement polling mechanism
-- [ ] Error handling for network issues
-- [ ] Support for different ONVIF services (Device, Media, PTZ, etc.)
+**Phase 4: Polling & Real-time Updates**
+- [ ] Periodic polling mechanism for data updates
+- [ ] Dynamic OPC-UA value updates
+- [ ] Media profile information retrieval
+
+**Phase 5: Advanced Features**
+- [ ] PTZ control (writable OPC-UA nodes)
+- [ ] Event subscription (motion detection, tampering)
+- [ ] Snapshot capture capability
+- [ ] Media streaming URL exposure
+
+**Phase 6: Enhanced Error Handling**
+- [ ] Auto-reconnect on network disconnect
+- [ ] Retry logic with exponential backoff
+- [ ] Improved error reporting in status nodes
 
 ## Configuration Fields
 
@@ -92,8 +106,31 @@ ignition-ONVIF-driver/
 ./gradlew clean build
 
 # Output will be at:
-# build/ONVIFDriver-1.0.0.modl
+# build/ONVIFDriver-1.0.0.unsigned.modl (1.6 MB)
 ```
+
+## Quick Start
+
+### 1. Build
+```bash
+cd /modules/ignition-ONVIF-driver
+./gradlew clean build
+```
+
+### 2. Install (Docker)
+```bash
+docker cp build/ONVIFDriver-1.0.0.unsigned.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
+docker restart ignition-gateway
+```
+
+### 3. Configure
+1. Gateway → Config → OPC UA → Device Connections
+2. Create new Device → Select "ONVIF Driver"
+3. Enter IP address, username, password
+4. Enable "Auto-discover Services"
+5. Save and view in OPC Browser
+
+See **TESTING.md** for complete testing instructions.
 
 ## BEFORE YOU START IMPLEMENTING
 
