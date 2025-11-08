@@ -14,7 +14,10 @@ dependencies {
     compileOnly(libs.ignition.gateway.api)
     compileOnly(libs.ignition.driver.api)
 
-    // ONVIF Java library for connecting to ONVIF devices
-    // Note: You may need to add onvif-java or implement SOAP client manually
+    // HTTP client for ONVIF communication
+    modlImplementation("org.apache.httpcomponents:httpclient:4.5.14")
+    modlImplementation("org.apache.httpcomponents:httpcore:4.4.16")
+
+    // JSON support for configuration
     modlImplementation("com.google.code.gson:gson:2.10.1")
 }

@@ -2,6 +2,9 @@ package com.onvif.driver.gateway.device;
 
 import com.inductiveautomation.ignition.gateway.opcua.server.api.Device;
 import com.inductiveautomation.ignition.gateway.opcua.server.api.DeviceContext;
+import com.onvif.driver.gateway.onvif.DeviceInformation;
+import com.onvif.driver.gateway.onvif.ONVIFClient;
+import com.onvif.driver.gateway.onvif.ONVIFService;
 import org.eclipse.milo.opcua.sdk.server.ManagedAddressSpaceWithLifecycle;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaFolderNode;
 import org.eclipse.milo.opcua.sdk.server.util.SubscriptionModel;
@@ -38,6 +41,7 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
 
     private UaFolderNode rootNode;
     private String deviceStatus = "Initializing";
+    private ONVIFClient onvifClient;
 
     /**
      * Creates a new ONVIF Device.
@@ -70,26 +74,46 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
     private void onStartup() {
         try {
             logger.info("Starting ONVIF device: {}", context.getName());
-            deviceStatus = "Starting";
+            deviceStatus = "Connecting";
 
-            // Build connection URL
-            String protocol = config.connection().useHttps() ? "https" : "http";
-            String url = String.format("%s://%s:%d",
-                protocol,
+            // Create ONVIF client
+            onvifClient = new ONVIFClient(
                 config.connection().ipAddress(),
-                config.connection().port());
+                config.connection().port(),
+                config.connection().username(),
+                config.connection().password(),
+                config.connection().useHttps(),
+                config.connection().timeout()
+            );
 
-            logger.info("Connecting to ONVIF device at: {}", url);
+            // Test connection
+            logger.info("Testing connection to ONVIF device...");
+            if (!onvifClient.testConnection()) {
+                throw new Exception("Failed to connect to ONVIF device - connection test failed");
+            }
 
-            // TODO: Implement ONVIF connection
-            // 1. Connect to device
-            // 2. Authenticate
-            // 3. Discover services (if auto-discover enabled)
-            // 4. Get device information
-            // 5. Create OPC-UA address space
+            deviceStatus = "Discovering Services";
 
-            // For now, create a placeholder root node
+            // Get device information
+            DeviceInformation deviceInfo = onvifClient.getDeviceInformation();
+            if (deviceInfo == null) {
+                throw new Exception("Failed to retrieve device information");
+            }
+
+            logger.info("Connected to ONVIF device: {}", deviceInfo);
+
+            // Discover services if configured
+            List<ONVIFService> services = null;
+            if (config.onvif().autoDiscover()) {
+                logger.info("Discovering ONVIF services...");
+                services = onvifClient.getServices();
+                logger.info("Discovered {} ONVIF services", services != null ? services.size() : 0);
+            }
+
+            // Create OPC-UA address space
+            deviceStatus = "Building Address Space";
             createRootNode();
+            buildAddressSpace(deviceInfo, services);
 
             deviceStatus = "Running";
             logger.info("ONVIF device started successfully: {}", context.getName());
@@ -106,7 +130,15 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
     private void onShutdown() {
         logger.info("Shutting down ONVIF device: {}", context.getName());
 
-        // TODO: Close ONVIF connections
+        // Close ONVIF client
+        if (onvifClient != null) {
+            try {
+                onvifClient.close();
+                logger.info("ONVIF client closed");
+            } catch (Exception e) {
+                logger.error("Error closing ONVIF client", e);
+            }
+        }
 
         deviceStatus = "Stopped";
         logger.info("Device shutdown complete: {}", context.getName());
@@ -136,6 +168,33 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
         // - etc.
 
         logger.info("Created root node: [{}]", deviceName);
+    }
+
+    /**
+     * Builds the OPC-UA address space from ONVIF data.
+     *
+     * @param deviceInfo Device information from ONVIF
+     * @param services List of discovered services (may be null)
+     */
+    private void buildAddressSpace(DeviceInformation deviceInfo, List<ONVIFService> services) {
+        logger.info("Building OPC-UA address space from ONVIF data");
+
+        AddressSpaceBuilder builder = new AddressSpaceBuilder(context, getNodeContext(), rootNode);
+
+        // Build device information section
+        if (deviceInfo != null) {
+            builder.buildDeviceInfo(deviceInfo);
+        }
+
+        // Build services section if discovered
+        if (services != null && !services.isEmpty()) {
+            builder.buildServices(services);
+        }
+
+        // Build connection status section
+        builder.buildConnectionStatus("Connected");
+
+        logger.info("Address space built successfully");
     }
 
     /**
