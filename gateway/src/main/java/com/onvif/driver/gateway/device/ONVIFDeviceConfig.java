@@ -141,5 +141,10 @@ public record ONVIFDeviceConfig(General general, Connection connection, ONVIFSet
         public String getDisplayName() {
             return displayName;
         }
+
+        @Override
+        public String toString() {
+            return displayName;
+        }
     }
 }
