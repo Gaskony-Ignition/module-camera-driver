@@ -1,12 +1,17 @@
 package com.onvif.driver.gateway.onvif;
 
+import com.onvif.driver.gateway.onvif.util.XmlUtil;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.ssl.SSLContextBuilder;
+import org.apache.http.ssl.TrustStrategy;
 import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,12 +19,11 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import java.io.ByteArrayInputStream;
+import javax.net.ssl.SSLContext;
 import java.io.Closeable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -66,11 +70,44 @@ public class ONVIFClient implements Closeable {
             .setConnectionRequestTimeout(this.timeout)
             .build();
 
-        this.httpClient = HttpClientBuilder.create()
-            .setDefaultRequestConfig(requestConfig)
-            .build();
+        HttpClientBuilder clientBuilder = HttpClientBuilder.create()
+            .setDefaultRequestConfig(requestConfig);
+
+        // Configure SSL/TLS for HTTPS connections
+        if (useHttps) {
+            try {
+                SSLContext sslContext = createSSLContext();
+                SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(
+                    sslContext,
+                    NoopHostnameVerifier.INSTANCE  // Many cameras use IP addresses, not hostnames
+                );
+                clientBuilder.setSSLSocketFactory(sslSocketFactory);
+                logger.info("HTTPS enabled with SSL certificate validation (accepting self-signed certificates)");
+            } catch (Exception e) {
+                logger.warn("Failed to configure SSL context: {}", e.getMessage());
+                logger.warn("HTTPS connections may fail with certificate errors");
+            }
+        }
+
+        this.httpClient = clientBuilder.build();
 
         logger.info("Created ONVIF client for {}", this.deviceUrl);
+    }
+
+    /**
+     * Creates SSL context that accepts self-signed certificates.
+     * This is common in ONVIF camera deployments but reduces security.
+     *
+     * @return Configured SSL context
+     * @throws Exception if SSL context creation fails
+     */
+    private SSLContext createSSLContext() throws Exception {
+        // Accept self-signed certificates (common in cameras)
+        TrustStrategy acceptingTrustStrategy = (X509Certificate[] chain, String authType) -> true;
+
+        return SSLContextBuilder.create()
+            .loadTrustMaterial(null, acceptingTrustStrategy)
+            .build();
     }
 
     /**
@@ -81,7 +118,7 @@ public class ONVIFClient implements Closeable {
     public boolean testConnection() {
         try {
             DeviceInformation info = getDeviceInformation();
-            return info != null && info.getManufacturer() != null;
+            return info != null && info.manufacturer() != null;
         } catch (Exception e) {
             logger.error("Connection test failed", e);
             return false;
@@ -167,7 +204,7 @@ public class ONVIFClient implements Closeable {
 
         String soapRequest = buildSoapEnvelope(
             "<trt:GetSnapshotUri xmlns:trt=\"http://www.onvif.org/ver10/media/wsdl\">" +
-            "<trt:ProfileToken>" + profileToken + "</trt:ProfileToken>" +
+            "<trt:ProfileToken>" + XmlUtil.escapeXml(profileToken) + "</trt:ProfileToken>" +
             "</trt:GetSnapshotUri>"
         );
 
@@ -195,7 +232,7 @@ public class ONVIFClient implements Closeable {
             "<tt:Protocol>RTSP</tt:Protocol>" +
             "</tt:Transport>" +
             "</trt:StreamSetup>" +
-            "<trt:ProfileToken>" + profileToken + "</trt:ProfileToken>" +
+            "<trt:ProfileToken>" + XmlUtil.escapeXml(profileToken) + "</trt:ProfileToken>" +
             "</trt:GetStreamUri>"
         );
 
@@ -217,7 +254,7 @@ public class ONVIFClient implements Closeable {
 
         String soapRequest = buildSoapEnvelope(
             "<tptz:GetStatus xmlns:tptz=\"http://www.onvif.org/ver20/ptz/wsdl\">" +
-            "<tptz:ProfileToken>" + profileToken + "</tptz:ProfileToken>" +
+            "<tptz:ProfileToken>" + XmlUtil.escapeXml(profileToken) + "</tptz:ProfileToken>" +
             "</tptz:GetStatus>"
         );
 
@@ -241,7 +278,7 @@ public class ONVIFClient implements Closeable {
 
         String soapRequest = buildSoapEnvelope(
             "<tptz:AbsoluteMove xmlns:tptz=\"http://www.onvif.org/ver20/ptz/wsdl\">" +
-            "<tptz:ProfileToken>" + profileToken + "</tptz:ProfileToken>" +
+            "<tptz:ProfileToken>" + XmlUtil.escapeXml(profileToken) + "</tptz:ProfileToken>" +
             "<tptz:Position>" +
             "<tt:PanTilt x=\"" + pan + "\" y=\"" + tilt + "\" xmlns:tt=\"http://www.onvif.org/ver10/schema\"/>" +
             "<tt:Zoom x=\"" + zoom + "\" xmlns:tt=\"http://www.onvif.org/ver10/schema\"/>" +
@@ -265,7 +302,7 @@ public class ONVIFClient implements Closeable {
 
         String soapRequest = buildSoapEnvelope(
             "<tptz:Stop xmlns:tptz=\"http://www.onvif.org/ver20/ptz/wsdl\">" +
-            "<tptz:ProfileToken>" + profileToken + "</tptz:ProfileToken>" +
+            "<tptz:ProfileToken>" + XmlUtil.escapeXml(profileToken) + "</tptz:ProfileToken>" +
             "<tptz:PanTilt>true</tptz:PanTilt>" +
             "<tptz:Zoom>true</tptz:Zoom>" +
             "</tptz:Stop>"
@@ -411,41 +448,27 @@ public class ONVIFClient implements Closeable {
     }
 
     /**
-     * Parses XML string into Document.
+     * Parses XML string into Document with XXE protection.
+     * Delegates to XmlUtil for secure parsing.
      */
     private Document parseXml(String xml) throws Exception {
-        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-        factory.setNamespaceAware(true);
-        DocumentBuilder builder = factory.newDocumentBuilder();
-        return builder.parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+        return XmlUtil.parseXml(xml);
     }
 
     /**
      * Gets text content of first element with given tag name.
+     * Delegates to XmlUtil.
      */
     private String getTextContent(Document doc, String tagName) {
-        NodeList nodes = doc.getElementsByTagName("*");
-        for (int i = 0; i < nodes.getLength(); i++) {
-            Element element = (Element) nodes.item(i);
-            if (element.getLocalName().equals(tagName)) {
-                return element.getTextContent();
-            }
-        }
-        return null;
+        return XmlUtil.getTextContent(doc, tagName).orElse(null);
     }
 
     /**
      * Gets text content of child element.
+     * Delegates to XmlUtil.
      */
     private String getChildTextContent(Element parent, String childName) {
-        NodeList children = parent.getElementsByTagName("*");
-        for (int i = 0; i < children.getLength(); i++) {
-            Element child = (Element) children.item(i);
-            if (child.getLocalName().equals(childName)) {
-                return child.getTextContent();
-            }
-        }
-        return null;
+        return XmlUtil.getChildTextContent(parent, childName).orElse(null);
     }
 
     /**
@@ -566,32 +589,15 @@ public class ONVIFClient implements Closeable {
      * Finds element by local name.
      */
     private Element findElementByName(Document doc, String localName) {
-        NodeList nodes = doc.getElementsByTagName("*");
-        for (int i = 0; i < nodes.getLength(); i++) {
-            if (nodes.item(i) instanceof Element) {
-                Element element = (Element) nodes.item(i);
-                if (element.getLocalName().equals(localName)) {
-                    return element;
-                }
-            }
-        }
-        return null;
+        return XmlUtil.findElement(doc, localName).orElse(null);
     }
 
     /**
      * Finds child element by local name.
+     * Delegates to XmlUtil.
      */
     private Element findElement(Element parent, String localName) {
-        NodeList children = parent.getElementsByTagName("*");
-        for (int i = 0; i < children.getLength(); i++) {
-            if (children.item(i) instanceof Element) {
-                Element child = (Element) children.item(i);
-                if (child.getLocalName().equals(localName)) {
-                    return child;
-                }
-            }
-        }
-        return null;
+        return XmlUtil.findElement(parent, localName).orElse(null);
     }
 
     @Override

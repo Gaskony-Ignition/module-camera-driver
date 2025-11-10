@@ -64,11 +64,11 @@ public class AddressSpaceBuilder {
         rootNode.addComponent(deviceInfoFolder);
 
         // Add device info variables
-        addVariableNode(deviceInfoFolder, "Manufacturer", deviceInfo.getManufacturer());
-        addVariableNode(deviceInfoFolder, "Model", deviceInfo.getModel());
-        addVariableNode(deviceInfoFolder, "FirmwareVersion", deviceInfo.getFirmwareVersion());
-        addVariableNode(deviceInfoFolder, "SerialNumber", deviceInfo.getSerialNumber());
-        addVariableNode(deviceInfoFolder, "HardwareId", deviceInfo.getHardwareId());
+        addVariableNode(deviceInfoFolder, "Manufacturer", deviceInfo.manufacturer());
+        addVariableNode(deviceInfoFolder, "Model", deviceInfo.model());
+        addVariableNode(deviceInfoFolder, "FirmwareVersion", deviceInfo.firmwareVersion());
+        addVariableNode(deviceInfoFolder, "SerialNumber", deviceInfo.serialNumber());
+        addVariableNode(deviceInfoFolder, "HardwareId", deviceInfo.hardwareId());
 
         logger.info("DeviceInfo address space created with {} variables", 5);
     }

@@ -13,6 +13,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 /**
@@ -32,7 +33,7 @@ public class ONVIFPoller {
     private List<MediaProfile> mediaProfiles;
     private boolean hasPTZ = false;
 
-    private int consecutiveErrors = 0;
+    private final AtomicInteger consecutiveErrors = new AtomicInteger(0);
     private static final int MAX_CONSECUTIVE_ERRORS = 3;
 
     /**
@@ -154,14 +155,14 @@ public class ONVIFPoller {
             }
 
             // Reset error counter on success
-            consecutiveErrors = 0;
+            consecutiveErrors.set(0);
 
         } catch (Exception e) {
-            consecutiveErrors++;
+            int errorCount = consecutiveErrors.incrementAndGet();
             logger.error("Polling error (attempt {}/{}): {}",
-                consecutiveErrors, MAX_CONSECUTIVE_ERRORS, e.getMessage());
+                errorCount, MAX_CONSECUTIVE_ERRORS, e.getMessage());
 
-            if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+            if (errorCount >= MAX_CONSECUTIVE_ERRORS) {
                 logger.error("Max consecutive errors reached - device may be disconnected");
 
                 // Notify callback of error state
@@ -178,17 +179,19 @@ public class ONVIFPoller {
 
     /**
      * Resets the consecutive error counter.
+     * Thread-safe operation.
      */
     public void resetErrorCounter() {
-        consecutiveErrors = 0;
+        consecutiveErrors.set(0);
     }
 
     /**
      * Gets the consecutive error count.
+     * Thread-safe operation.
      *
      * @return Error count
      */
     public int getConsecutiveErrors() {
-        return consecutiveErrors;
+        return consecutiveErrors.get();
     }
 }

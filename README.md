@@ -13,45 +13,41 @@ This module allows Ignition users to:
 
 ## Current Status
 
-**✅ FULLY FUNCTIONAL - CORE FEATURES IMPLEMENTED**
+**✅ PHASE 1-6 COMPLETE - READY FOR HARDWARE TESTING**
+**Version**: 1.0.3
 
-The ONVIF Driver is now fully operational with complete ONVIF protocol communication, authentication, and OPC-UA integration. Ready for deployment and testing with real ONVIF devices.
+The ONVIF Driver is now fully operational with complete ONVIF protocol communication, PTZ control, polling, auto-reconnect, and OPC-UA integration. The core implementation is complete and ready for comprehensive testing with real ONVIF devices.
 
 ### What's Complete ✅
 
-**Phase 1-3: Core ONVIF Communication**
-- [x] Gradle build configuration
-- [x] Module structure (common, designer, gateway)
-- [x] Java implementation with extensive documentation
-- [x] Configuration UI setup (IP, Port, Username, Password, etc.)
-- [x] Resource bundle configuration (i18n)
-- [x] Validation logic
-- [x] Device lifecycle hooks (startup, shutdown)
-- [x] **ONVIF SOAP client with HTTP/HTTPS support**
-- [x] **WS-UsernameToken authentication (SHA-1 digest)**
-- [x] **GetDeviceInformation implementation**
-- [x] **GetServices discovery**
-- [x] **OPC-UA address space builder**
-- [x] **DeviceInfo, Services, and Status nodes**
-- [x] **Complete XML parsing for SOAP responses**
+**Phase 1-6: Full ONVIF Implementation**
+- [x] Complete Gradle build configuration with module signing
+- [x] Multi-module structure (common, designer, gateway)
+- [x] Configuration UI with validation (IP, Port, Credentials, ONVIF settings)
+- [x] Localized resource bundles (i18n) - properly configured
+- [x] **Secure ONVIF SOAP client** with HTTP/HTTPS support
+- [x] **WS-UsernameToken authentication** (SHA-1 digest with nonce)
+- [x] **XXE-protected XML parsing** (secure against injection attacks)
+- [x] **GetDeviceInformation** - manufacturer, model, firmware, serial number
+- [x] **GetServices** - dynamic ONVIF service discovery
+- [x] **GetMediaProfiles** - video encoder configurations
+- [x] **PTZ Status retrieval** - pan, tilt, zoom positions
+- [x] **PTZ Control** - absolute positioning and stop commands
+- [x] **Polling mechanism** - configurable interval updates
+- [x] **Auto-reconnect** - exponential backoff retry (max 5 attempts)
+- [x] **Hierarchical OPC-UA address space** - DeviceInfo, MediaProfiles, PTZ, Status
+- [x] **Thread-safe operations** - AtomicInteger for concurrent access
+- [x] **Comprehensive error handling** and logging
+- [x] **SSL/TLS support** - accepts self-signed certificates
 
-### Future Enhancements ⏳
+### Potential Future Enhancements ⏳
 
-**Phase 4: Polling & Real-time Updates**
-- [ ] Periodic polling mechanism for data updates
-- [ ] Dynamic OPC-UA value updates
-- [ ] Media profile information retrieval
-
-**Phase 5: Advanced Features**
-- [ ] PTZ control (writable OPC-UA nodes)
-- [ ] Event subscription (motion detection, tampering)
-- [ ] Snapshot capture capability
+**Phase 7: Additional Features**
+- [ ] Event subscription (motion detection, tampering alerts)
+- [ ] Snapshot capture via GetSnapshotUri
 - [ ] Media streaming URL exposure
-
-**Phase 6: Enhanced Error Handling**
-- [ ] Auto-reconnect on network disconnect
-- [ ] Retry logic with exponential backoff
-- [ ] Improved error reporting in status nodes
+- [ ] ONVIF Profile G support (recording search and playback)
+- [ ] Comprehensive automated test suite
 
 ## Configuration Fields
 
@@ -106,7 +102,7 @@ ignition-ONVIF-driver/
 ./gradlew clean build
 
 # Output will be at:
-# build/ONVIFDriver-1.0.0.unsigned.modl (1.6 MB)
+# build/ONVIFDriver-1.0.3.unsigned.modl (1.6 MB)
 ```
 
 ## Quick Start
@@ -119,7 +115,7 @@ cd /modules/ignition-ONVIF-driver
 
 ### 2. Install (Docker)
 ```bash
-docker cp build/ONVIFDriver-1.0.0.unsigned.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
+docker cp build/ONVIFDriver-1.0.3.unsigned.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
 docker restart ignition-gateway
 ```
 
@@ -181,7 +177,12 @@ When testing in Docker (like the Ignition gateway):
 
 ## Version History
 
-- **1.0.0** - Initial skeleton project (current)
+See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
+
+- **1.0.3** - Security hardening, code quality improvements (current)
+- **1.0.2** - Property bundle fixes, certificate updates
+- **1.0.1** - Module signing fixes
+- **1.0.0** - Initial implementation complete (Phases 1-6)
 
 ## License
 

@@ -383,8 +383,8 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
      * @param items List of monitored items that changed
      */
     @Override
+    @SuppressWarnings("rawtypes")  // SDK interface uses raw types
     public void onMonitoringModeChanged(List items) {
-        // Handle monitoring mode changes if needed
         subscriptionModel.onMonitoringModeChanged(items);
     }
 
@@ -395,8 +395,8 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
      * @param items List of data items that were created
      */
     @Override
+    @SuppressWarnings("rawtypes")  // SDK interface uses raw types
     public void onDataItemsCreated(List items) {
-        // Handle data item creation if needed
         subscriptionModel.onDataItemsCreated(items);
     }
 
@@ -407,8 +407,8 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
      * @param items List of data items that were modified
      */
     @Override
+    @SuppressWarnings("rawtypes")  // SDK interface uses raw types
     public void onDataItemsModified(List items) {
-        // Handle data item modification if needed
         subscriptionModel.onDataItemsModified(items);
     }
 
@@ -419,8 +419,8 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
      * @param items List of data items that were deleted
      */
     @Override
+    @SuppressWarnings("rawtypes")  // SDK interface uses raw types
     public void onDataItemsDeleted(List items) {
-        // Handle data item deletion if needed
         subscriptionModel.onDataItemsDeleted(items);
     }
 }

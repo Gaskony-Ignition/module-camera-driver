@@ -6,12 +6,16 @@ The ONVIF Driver module is now fully implemented with complete ONVIF protocol co
 
 ## What's Been Implemented
 
-### ✅ Phase 1-3: Complete ONVIF Communication
-- **ONVIF SOAP Client** - Full HTTP/HTTPS SOAP communication
+### ✅ Phase 1-6: Complete ONVIF Implementation
+- **ONVIF SOAP Client** - Full HTTP/HTTPS SOAP communication with XXE protection
 - **WS-UsernameToken Authentication** - Secure digest-based authentication
 - **GetDeviceInformation** - Retrieves manufacturer, model, firmware, serial number
 - **GetServices** - Discovers available ONVIF services
-- **OPC-UA Address Space** - Hierarchical nodes representing ONVIF data
+- **GetMediaProfiles** - Retrieves media stream profiles
+- **PTZ Control** - Get status, absolute move, stop commands
+- **Polling Mechanism** - Periodic device updates via ONVIFPoller
+- **Auto-Reconnect** - Exponential backoff retry logic
+- **OPC-UA Address Space** - Hierarchical nodes representing ONVIF data (DeviceInfo, MediaProfiles, PTZ, Status)
 
 ### 🔧 Components
 
@@ -34,14 +38,14 @@ cd /modules/ignition-ONVIF-driver
 ./gradlew clean build
 ```
 
-Output: `build/ONVIFDriver-1.0.0.unsigned.modl` (1.6 MB)
+Output: `build/ONVIFDriver-1.0.3.unsigned.modl` (1.6 MB)
 
 ### 2. Install in Ignition Gateway
 
 **Option A: Docker (Recommended)**
 ```bash
 # Copy module to container
-docker cp build/ONVIFDriver-1.0.0.unsigned.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
+docker cp build/ONVIFDriver-1.0.3.unsigned.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
 
 # Restart gateway
 docker restart ignition-gateway
@@ -54,14 +58,14 @@ docker logs -f ignition-gateway
 1. Open Ignition Gateway (http://localhost:8088)
 2. Go to Config → System → Modules
 3. Click "Install or Upgrade a Module"
-4. Upload `ONVIFDriver-1.0.0.unsigned.modl`
+4. Upload `ONVIFDriver-1.0.3.unsigned.modl`
 5. Gateway will restart automatically
 
 ### 3. Verify Installation
 
 After restart, check:
 1. Config → System → Modules
-2. Look for "ONVIF Driver 1.0.0" in the module list
+2. Look for "ONVIF Driver 1.0.3" in the module list
 3. Status should be "Running"
 
 ## Configuration

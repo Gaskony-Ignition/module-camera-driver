@@ -60,7 +60,7 @@ public ONVIFDeviceExtensionPoint() {
 
 **Step 3: Create Properties File**
 
-File: `gateway/src/main/resources/com/onvif/driver/gateway/ONVIFDevice.properties`
+File: `gateway/src/main/resources/com/onvif/driver/gateway/device/ONVIFDevice.properties`
 
 ```properties
 ONVIFDevice.Meta.DisplayName=ONVIF Driver
