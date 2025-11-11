@@ -61,7 +61,7 @@ public class AddressSpaceBuilder {
             deviceContext.qualifiedName("DeviceInfo"),
             LocalizedText.english("Device Information")
         );
-        rootNode.addComponent(deviceInfoFolder);
+        rootNode.addOrganizes(deviceInfoFolder);
 
         // Add device info variables
         addVariableNode(deviceInfoFolder, "Manufacturer", deviceInfo.manufacturer());
@@ -88,7 +88,7 @@ public class AddressSpaceBuilder {
             deviceContext.qualifiedName("Services"),
             LocalizedText.english("ONVIF Services")
         );
-        rootNode.addComponent(servicesFolder);
+        rootNode.addOrganizes(servicesFolder);
 
         // Add each service
         for (int i = 0; i < services.size(); i++) {
@@ -114,11 +114,15 @@ public class AddressSpaceBuilder {
     }
 
     /**
-     * Builds Connection Status section.
+     * Builds Connection Status section with detailed connection information.
      *
      * @param status Connection status
+     * @param ipAddress Camera IP address
+     * @param port Camera port
+     * @param useHttps Whether HTTPS is used
+     * @param deviceInfo Device information
      */
-    public void buildConnectionStatus(String status) {
+    public void buildConnectionStatus(String status, String ipAddress, int port, boolean useHttps, DeviceInformation deviceInfo) {
         logger.info("Building ConnectionStatus address space");
 
         // Create Status folder
@@ -128,13 +132,27 @@ public class AddressSpaceBuilder {
             deviceContext.qualifiedName("Status"),
             LocalizedText.english("Connection Status")
         );
-        rootNode.addComponent(statusFolder);
+        rootNode.addOrganizes(statusFolder);
 
-        // Add status variable
+        // Add connection status variables
         addVariableNode(statusFolder, "ConnectionStatus", status);
         addVariableNode(statusFolder, "LastUpdate", System.currentTimeMillis());
 
-        logger.info("ConnectionStatus address space created");
+        // Add connection details
+        addVariableNode(statusFolder, "IPAddress", ipAddress);
+        addVariableNode(statusFolder, "Port", port);
+        addVariableNode(statusFolder, "Protocol", useHttps ? "HTTPS" : "HTTP");
+        addVariableNode(statusFolder, "Endpoint", String.format("%s://%s:%d",
+            useHttps ? "https" : "http", ipAddress, port));
+
+        // Add device summary
+        if (deviceInfo != null) {
+            addVariableNode(statusFolder, "DeviceManufacturer", deviceInfo.manufacturer());
+            addVariableNode(statusFolder, "DeviceModel", deviceInfo.model());
+            addVariableNode(statusFolder, "FirmwareVersion", deviceInfo.firmwareVersion());
+        }
+
+        logger.info("ConnectionStatus address space created with detailed connection info");
     }
 
     /**
@@ -200,7 +218,7 @@ public class AddressSpaceBuilder {
             deviceContext.qualifiedName("MediaProfiles"),
             LocalizedText.english("Media Profiles")
         );
-        rootNode.addComponent(mediaFolder);
+        rootNode.addOrganizes(mediaFolder);
 
         for (MediaProfile profile : profiles) {
             String profileName = profile.getName() != null ? profile.getName() : profile.getToken();
@@ -252,7 +270,7 @@ public class AddressSpaceBuilder {
             deviceContext.qualifiedName("PTZ"),
             LocalizedText.english("PTZ Control")
         );
-        rootNode.addComponent(ptzFolder);
+        rootNode.addOrganizes(ptzFolder);
 
         // Add status nodes (read-only)
         addVariableNode(ptzFolder, "Pan", initialStatus.getPan());

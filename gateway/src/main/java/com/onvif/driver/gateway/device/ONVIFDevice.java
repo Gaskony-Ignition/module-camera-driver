@@ -2,19 +2,24 @@ package com.onvif.driver.gateway.device;
 
 import com.inductiveautomation.ignition.gateway.opcua.server.api.Device;
 import com.inductiveautomation.ignition.gateway.opcua.server.api.DeviceContext;
+import com.inductiveautomation.ignition.gateway.secrets.Plaintext;
+import com.inductiveautomation.ignition.gateway.secrets.Secret;
 import com.onvif.driver.gateway.onvif.DeviceInformation;
 import com.onvif.driver.gateway.onvif.MediaProfile;
 import com.onvif.driver.gateway.onvif.ONVIFClient;
 import com.onvif.driver.gateway.onvif.ONVIFService;
 import com.onvif.driver.gateway.onvif.PTZStatus;
+import org.eclipse.milo.opcua.sdk.core.Reference;
 import org.eclipse.milo.opcua.sdk.server.ManagedAddressSpaceWithLifecycle;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaFolderNode;
 import org.eclipse.milo.opcua.sdk.server.util.SubscriptionModel;
+import org.eclipse.milo.opcua.stack.core.NodeIds;
 import org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -81,8 +86,12 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
     /**
      * Called when device starts up.
      * Connects to ONVIF device and builds address space.
+     *
+     * Note: ManagedAddressSpaceWithLifecycle handles address space registration automatically.
+     * The critical step for visibility is adding the inverse reference in createRootNode().
      */
     private void onStartup() {
+        logger.info("=== ONVIF Device Startup: {} ===", context.getName());
         connectWithRetry();
     }
 
@@ -129,34 +138,73 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
      * Performs the actual connection and initialization.
      */
     private void performConnection() throws Exception {
-        logger.info("Starting ONVIF device: {}", context.getName());
+        logger.info("=== Starting ONVIF Device Connection ===");
+        logger.info("Device Name: {}", context.getName());
+        logger.info("IP Address: {}", config.connection().ipAddress());
+        logger.info("Port: {}", config.connection().port());
+        logger.info("Username: {}", config.connection().username());
+        logger.info("Use HTTPS: {}", config.connection().useHttps());
+        logger.info("Connection Timeout: {} seconds", config.connection().timeout());
+        logger.info("Poll Interval: {} seconds", config.onvif().pollInterval());
+        logger.info("Auto-discover: {}", config.onvif().autoDiscover());
+
         deviceStatus = "Connecting";
 
+        // Retrieve password from SecretConfig
+        String password;
+        if (config.connection().password() != null) {
+            try (Plaintext plaintext = Secret.create(context.getGatewayContext(), config.connection().password()).getPlaintext()) {
+                password = plaintext.getAsString(StandardCharsets.UTF_8);
+                logger.info("Password retrieved successfully from SecretConfig");
+            } catch (Exception e) {
+                logger.error("Failed to retrieve password from SecretConfig", e);
+                throw new RuntimeException("Failed to retrieve password", e);
+            }
+        } else {
+            throw new IllegalArgumentException("Password is required");
+        }
+
         // Create ONVIF client
+        logger.info("Creating ONVIF client with endpoint: {}://{}:{}",
+            config.connection().useHttps() ? "https" : "http",
+            config.connection().ipAddress(),
+            config.connection().port());
+
         onvifClient = new ONVIFClient(
             config.connection().ipAddress(),
             config.connection().port(),
             config.connection().username(),
-            config.connection().password(),
+            password,
             config.connection().useHttps(),
             config.connection().timeout()
         );
 
         // Test connection
-        logger.info("Testing connection to ONVIF device...");
+        logger.info("Testing connection to ONVIF device at {}:{}...",
+            config.connection().ipAddress(), config.connection().port());
         if (!onvifClient.testConnection()) {
+            logger.error("❌ Connection test FAILED to {}:{}",
+                config.connection().ipAddress(), config.connection().port());
             throw new IOException("Connection test failed");
         }
+        logger.info("✅ Connection test PASSED");
 
         deviceStatus = "Discovering Services";
 
         // Get device information
+        logger.info("Retrieving device information...");
         DeviceInformation deviceInfo = onvifClient.getDeviceInformation();
         if (deviceInfo == null) {
+            logger.error("❌ Failed to retrieve device information");
             throw new IOException("Failed to retrieve device information");
         }
 
-        logger.info("Connected to ONVIF device: {}", deviceInfo);
+        logger.info("✅ Device Information Retrieved:");
+        logger.info("  - Manufacturer: {}", deviceInfo.manufacturer());
+        logger.info("  - Model: {}", deviceInfo.model());
+        logger.info("  - Firmware: {}", deviceInfo.firmwareVersion());
+        logger.info("  - Serial Number: {}", deviceInfo.serialNumber());
+        logger.info("  - Hardware ID: {}", deviceInfo.hardwareId());
 
         // Discover services if configured
         List<ONVIFService> services = null;
@@ -164,39 +212,86 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
         boolean hasPTZ = false;
 
         if (config.onvif().autoDiscover()) {
-            logger.info("Discovering ONVIF services...");
+            logger.info("Auto-discovering ONVIF services...");
             services = onvifClient.getServices();
-            logger.info("Discovered {} ONVIF services", services != null ? services.size() : 0);
+            if (services != null && !services.isEmpty()) {
+                logger.info("✅ Discovered {} ONVIF service(s):", services.size());
+                for (ONVIFService service : services) {
+                    logger.info("  - {} (v{}): {}",
+                        service.getServiceName(),
+                        service.getVersion(),
+                        service.getXAddr());
+                }
+            } else {
+                logger.warn("⚠️ No ONVIF services discovered");
+            }
 
             // Get media profiles if media service available
             if (services != null) {
                 for (ONVIFService service : services) {
                     if (service.getServiceName().equalsIgnoreCase("media")) {
                         try {
+                            logger.info("Retrieving media profiles...");
                             mediaProfiles = onvifClient.getMediaProfiles();
-                            logger.info("Retrieved {} media profiles", mediaProfiles.size());
+                            if (mediaProfiles != null && !mediaProfiles.isEmpty()) {
+                                logger.info("✅ Retrieved {} media profile(s):", mediaProfiles.size());
+                                for (MediaProfile profile : mediaProfiles) {
+                                    logger.info("  - {}: {}x{} @ {}fps ({})",
+                                        profile.getName(),
+                                        profile.getWidth(),
+                                        profile.getHeight(),
+                                        profile.getFrameRate(),
+                                        profile.getEncoding());
+                                }
+                            }
                         } catch (Exception e) {
-                            logger.warn("Failed to get media profiles: {}", e.getMessage());
+                            logger.warn("⚠️ Failed to get media profiles: {}", e.getMessage());
                         }
                     } else if (service.getServiceName().equalsIgnoreCase("ptz")) {
                         hasPTZ = true;
+                        logger.info("✅ PTZ support detected");
                     }
                 }
             }
+        } else {
+            logger.info("Auto-discover disabled, skipping service discovery");
         }
 
         // Create OPC-UA address space
         deviceStatus = "Building Address Space";
+        logger.info("Creating OPC UA address space...");
         createRootNode();
         buildAddressSpace(deviceInfo, services, mediaProfiles, hasPTZ);
+        logger.info("✅ OPC UA address space created successfully");
 
         // Start polling if configured
         if (config.onvif().pollInterval() > 0) {
+            logger.info("Starting polling with interval: {} seconds", config.onvif().pollInterval());
             startPolling(mediaProfiles, hasPTZ);
+            logger.info("✅ Polling started successfully");
+        } else {
+            logger.info("Polling disabled (interval = 0)");
         }
 
         deviceStatus = "Running";
-        logger.info("ONVIF device started successfully: {}", context.getName());
+        logger.info("===========================================");
+        logger.info("✅ ONVIF DEVICE STARTED SUCCESSFULLY");
+        logger.info("Device Name: {}", context.getName());
+        logger.info("Status: CONNECTED AND RUNNING");
+        logger.info("Endpoint: {}://{}:{}",
+            config.connection().useHttps() ? "https" : "http",
+            config.connection().ipAddress(),
+            config.connection().port());
+        logger.info("Device: {} {} ({})",
+            deviceInfo.manufacturer(),
+            deviceInfo.model(),
+            deviceInfo.firmwareVersion());
+        logger.info("Services: {} discovered", services != null ? services.size() : 0);
+        logger.info("Media Profiles: {} available", mediaProfiles != null ? mediaProfiles.size() : 0);
+        logger.info("PTZ Support: {}", hasPTZ ? "YES" : "NO");
+        logger.info("Tags should now be visible in Tag Browser");
+        logger.info("Navigate to: OPC UA > [{}]", context.getName());
+        logger.info("===========================================");
     }
 
     /**
@@ -253,12 +348,14 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
         // Add the folder node to the server
         getNodeManager().addNode(rootNode);
 
-        // TODO: Add child nodes for ONVIF data
-        // - Device Information
-        // - Network Settings
-        // - Media Profiles
-        // - PTZ Status (if supported)
-        // - etc.
+        // CRITICAL: Add reference to the root "Devices" folder node
+        // Without this, the device will not be visible in the tag browser!
+        rootNode.addReference(new Reference(
+            rootNode.getNodeId(),
+            NodeIds.Organizes,
+            context.getRootNodeId().expanded(),
+            Reference.Direction.INVERSE
+        ));
 
         logger.info("Created root node: [{}]", deviceName);
     }
@@ -303,8 +400,14 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
             }
         }
 
-        // Build connection status section
-        addressSpaceBuilder.buildConnectionStatus("Connected");
+        // Build connection status section with details
+        addressSpaceBuilder.buildConnectionStatus(
+            "Connected",
+            config.connection().ipAddress(),
+            config.connection().port(),
+            config.connection().useHttps(),
+            deviceInfo
+        );
 
         logger.info("Address space built successfully");
     }

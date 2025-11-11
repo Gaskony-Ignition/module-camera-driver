@@ -122,7 +122,7 @@ public class ONVIFDeviceExtensionPoint extends DeviceExtensionPoint<ONVIFDeviceC
         if (config.connection().username() == null || config.connection().username().trim().isEmpty()) {
             errors.check(false, "Username is required");
         }
-        if (config.connection().password() == null || config.connection().password().trim().isEmpty()) {
+        if (config.connection().password() == null) {
             errors.check(false, "Password is required");
         }
 

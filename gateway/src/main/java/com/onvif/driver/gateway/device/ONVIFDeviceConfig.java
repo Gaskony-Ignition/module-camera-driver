@@ -6,6 +6,7 @@ import com.inductiveautomation.ignition.gateway.dataroutes.openapi.annotations.F
 import com.inductiveautomation.ignition.gateway.dataroutes.openapi.annotations.FormField;
 import com.inductiveautomation.ignition.gateway.dataroutes.openapi.annotations.Label;
 import com.inductiveautomation.ignition.gateway.dataroutes.openapi.annotations.Required;
+import com.inductiveautomation.ignition.gateway.secrets.SecretConfig;
 import com.inductiveautomation.ignition.gateway.web.nav.FormFieldType;
 
 /**
@@ -56,8 +57,8 @@ public record ONVIFDeviceConfig(General general, Connection connection, ONVIFSet
         @FormCategory("CONNECTION")
         @Label("Port")
         @FormField(FormFieldType.NUMBER)
-        @Description("ONVIF service port (default: 80 for HTTP, 443 for HTTPS)")
-        @DefaultValue("80")
+        @Description("ONVIF service port (default: 8000, or 80 for HTTP, 443 for HTTPS)")
+        @DefaultValue("8000")
         @Required
         int port,
 
@@ -73,7 +74,7 @@ public record ONVIFDeviceConfig(General general, Connection connection, ONVIFSet
         @FormField(FormFieldType.SECRET)
         @Description("ONVIF authentication password")
         @Required
-        String password,
+        SecretConfig password,
 
         @FormCategory("CONNECTION")
         @Label("Use HTTPS")
