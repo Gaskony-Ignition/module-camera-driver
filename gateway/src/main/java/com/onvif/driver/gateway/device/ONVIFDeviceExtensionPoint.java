@@ -9,8 +9,10 @@ import com.inductiveautomation.ignition.gateway.opcua.server.api.DeviceProfileCo
 import com.inductiveautomation.ignition.gateway.web.nav.ExtensionPointResourceForm;
 import com.inductiveautomation.ignition.gateway.web.nav.WebUiComponent;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Extension point for the ONVIF Driver device.
@@ -31,6 +33,12 @@ public class ONVIFDeviceExtensionPoint extends DeviceExtensionPoint<ONVIFDeviceC
      * This will be used internally by Ignition to identify this device driver.
      */
     public static final String TYPE_ID = "com.onvif.driver.ONVIFDevice";
+
+    /**
+     * Registry of all active ONVIF devices.
+     * Used by servlets to look up devices by name.
+     */
+    private static final Map<String, ONVIFDevice> deviceRegistry = new ConcurrentHashMap<>();
 
     /**
      * Constructor registers this device type with Ignition.
@@ -133,5 +141,46 @@ public class ONVIFDeviceExtensionPoint extends DeviceExtensionPoint<ONVIFDeviceC
         if (config.onvif().pollInterval() < 1) {
             errors.check(false, "Poll interval must be at least 1 second");
         }
+    }
+
+    /**
+     * Registers a device in the registry.
+     * Called by ONVIFDevice when it starts up.
+     *
+     * @param name Device name
+     * @param device Device instance
+     */
+    public static void registerDevice(String name, ONVIFDevice device) {
+        deviceRegistry.put(name, device);
+    }
+
+    /**
+     * Unregisters a device from the registry.
+     * Called by ONVIFDevice when it shuts down.
+     *
+     * @param name Device name
+     */
+    public static void unregisterDevice(String name) {
+        deviceRegistry.remove(name);
+    }
+
+    /**
+     * Gets a device by name.
+     * Used by servlets to access device instances.
+     *
+     * @param name Device name
+     * @return Device instance or null if not found
+     */
+    public ONVIFDevice getDevice(String name) {
+        return deviceRegistry.get(name);
+    }
+
+    /**
+     * Gets all registered devices.
+     *
+     * @return Map of device names to device instances
+     */
+    public static Map<String, ONVIFDevice> getAllDevices() {
+        return Map.copyOf(deviceRegistry);
     }
 }

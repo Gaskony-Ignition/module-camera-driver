@@ -3,9 +3,14 @@ package com.onvif.driver.gateway.onvif;
 import com.onvif.driver.gateway.onvif.util.XmlUtil;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.conn.ssl.NoopHostnameVerifier;
+import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
@@ -598,6 +603,60 @@ public class ONVIFClient implements Closeable {
      */
     private Element findElement(Element parent, String localName) {
         return XmlUtil.findElement(parent, localName).orElse(null);
+    }
+
+    /**
+     * Gets a snapshot image from the camera as a byte array.
+     * This method retrieves the snapshot URI and then fetches the actual JPEG image.
+     *
+     * @param profileToken Profile token to get snapshot from
+     * @return JPEG image as byte array
+     * @throws IOException if snapshot retrieval fails
+     */
+    public byte[] getSnapshot(String profileToken) throws IOException {
+        // Get snapshot URI from camera
+        String snapshotUri = getSnapshotUri(profileToken);
+
+        if (snapshotUri == null || snapshotUri.isEmpty()) {
+            throw new IOException("Snapshot URI not available for profile: " + profileToken);
+        }
+
+        logger.debug("Fetching snapshot from: {}", snapshotUri);
+
+        // Create HTTP GET request
+        HttpGet httpGet = new HttpGet(snapshotUri);
+
+        try {
+            // Execute request
+            HttpResponse response = httpClient.execute(httpGet);
+            HttpEntity entity = response.getEntity();
+
+            int statusCode = response.getStatusLine().getStatusCode();
+
+            if (statusCode != 200) {
+                String errorMsg = String.format("Snapshot request failed with status %d: %s",
+                    statusCode, response.getStatusLine().getReasonPhrase());
+                logger.error(errorMsg);
+                throw new IOException(errorMsg);
+            }
+
+            if (entity == null) {
+                throw new IOException("No content in snapshot response");
+            }
+
+            // Read image bytes
+            byte[] imageBytes = EntityUtils.toByteArray(entity);
+
+            logger.debug("Retrieved snapshot: {} bytes", imageBytes.length);
+
+            return imageBytes;
+
+        } catch (IOException e) {
+            logger.error("Failed to retrieve snapshot from {}: {}", snapshotUri, e.getMessage());
+            throw e;
+        } finally {
+            httpGet.releaseConnection();
+        }
     }
 
     @Override

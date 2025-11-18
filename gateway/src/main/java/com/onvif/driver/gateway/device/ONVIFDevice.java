@@ -92,6 +92,11 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
      */
     private void onStartup() {
         logger.info("=== ONVIF Device Startup: {} ===", context.getName());
+
+        // Register this device in the extension point registry
+        ONVIFDeviceExtensionPoint.registerDevice(context.getName(), this);
+        logger.info("Device registered in registry: {}", context.getName());
+
         connectWithRetry();
     }
 
@@ -329,6 +334,11 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
         }
 
         deviceStatus = "Stopped";
+
+        // Unregister this device from the extension point registry
+        ONVIFDeviceExtensionPoint.unregisterDevice(context.getName());
+        logger.info("Device unregistered from registry: {}", context.getName());
+
         logger.info("Device shutdown complete: {}", context.getName());
     }
 
@@ -529,5 +539,15 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
     @SuppressWarnings("rawtypes")  // SDK interface uses raw types
     public void onDataItemsDeleted(List items) {
         subscriptionModel.onDataItemsDeleted(items);
+    }
+
+    /**
+     * Gets the ONVIF client instance for this device.
+     * Used by servlets to access camera functionality.
+     *
+     * @return ONVIF client instance or null if not connected
+     */
+    public ONVIFClient getClient() {
+        return onvifClient;
     }
 }

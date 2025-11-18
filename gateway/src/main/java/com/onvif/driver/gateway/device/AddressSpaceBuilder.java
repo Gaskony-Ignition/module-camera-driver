@@ -21,6 +21,9 @@ import org.eclipse.milo.opcua.stack.core.types.builtin.Variant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -325,7 +328,7 @@ public class AddressSpaceBuilder {
             addVariableNode(profileFolder, "FrameRate", profile.getFrameRate());
             addVariableNode(profileFolder, "Bitrate", profile.getBitrate());
 
-            // Add snapshot and stream URIs
+            // Add snapshot and stream URIs from camera
             try {
                 String snapshotUri = onvifClient.getSnapshotUri(profile.getToken());
                 if (snapshotUri != null) {
@@ -339,6 +342,26 @@ public class AddressSpaceBuilder {
             } catch (Exception e) {
                 logger.warn("Failed to get URIs for profile {}: {}", profileName, e.getMessage());
             }
+
+            // Add Ignition route URLs for easy access in Perspective
+            String deviceName = deviceContext.getName();
+            String profileToken = profile.getToken();
+
+            // Snapshot route URL (GET /main/data/onvif-driver/snapshot)
+            String snapshotUrl = String.format(
+                "/main/data/onvif-driver/snapshot?device=%s&profile=%s",
+                urlEncode(deviceName), urlEncode(profileToken)
+            );
+            addVariableNode(profileFolder, "IgnitionSnapshotUrl", snapshotUrl);
+
+            // MJPEG stream route URL (GET /main/data/onvif-driver/stream)
+            String streamUrl = String.format(
+                "/main/data/onvif-driver/stream?device=%s&profile=%s&fps=10",
+                urlEncode(deviceName), urlEncode(profileToken)
+            );
+            addVariableNode(profileFolder, "IgnitionStreamUrl", streamUrl);
+
+            logger.debug("Added Ignition route URLs for profile {}", profileName);
         }
 
         logger.info("MediaProfiles address space created with {} profiles", profiles.size());
@@ -479,6 +502,21 @@ public class AddressSpaceBuilder {
 
         } catch (Exception e) {
             logger.error("Failed to add writable node: " + name, e);
+        }
+    }
+
+    /**
+     * URL encodes a string for use in URL parameters.
+     *
+     * @param value String to encode
+     * @return URL-encoded string
+     */
+    private String urlEncode(String value) {
+        try {
+            return URLEncoder.encode(value, StandardCharsets.UTF_8.toString());
+        } catch (UnsupportedEncodingException e) {
+            logger.warn("Failed to URL encode value: {}", value);
+            return value;
         }
     }
 }
