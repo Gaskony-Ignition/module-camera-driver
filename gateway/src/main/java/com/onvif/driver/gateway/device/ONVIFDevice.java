@@ -262,7 +262,7 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
         logger.info("Creating OPC UA address space...");
         createRootNode();
         buildAddressSpace(deviceInfo, services, mediaProfiles, hasPTZ);
-        logger.info("✅ OPC UA address space created successfully");
+        logger.info("OPC UA address space created successfully");
 
         // Start polling if configured
         if (config.onvif().pollInterval() > 0) {
@@ -334,9 +334,13 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
 
     /**
      * Creates the root folder node for this device.
+     *
+     * Uses the connection name from DeviceContext (context.getName()) to ensure
+     * the OPC-UA folder name matches the device connection name shown in the Gateway UI.
      */
     private void createRootNode() {
-        String deviceName = config.general().deviceName();
+        // Use connection name from Ignition's DeviceContext
+        String deviceName = context.getName();
 
         rootNode = new UaFolderNode(
             getNodeContext(),
@@ -357,7 +361,7 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
             Reference.Direction.INVERSE
         ));
 
-        logger.info("Created root node: [{}]", deviceName);
+        logger.info("Created root node: [{}] (matches connection name)", deviceName);
     }
 
     /**
@@ -372,7 +376,7 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
                                   List<MediaProfile> mediaProfiles, boolean hasPTZ) {
         logger.info("Building OPC-UA address space from ONVIF data");
 
-        addressSpaceBuilder = new AddressSpaceBuilder(context, getNodeContext(), rootNode, onvifClient);
+        addressSpaceBuilder = new AddressSpaceBuilder(context, getNodeContext(), rootNode, onvifClient, getNodeManager()::addNode);
 
         // Build device information section
         if (deviceInfo != null) {

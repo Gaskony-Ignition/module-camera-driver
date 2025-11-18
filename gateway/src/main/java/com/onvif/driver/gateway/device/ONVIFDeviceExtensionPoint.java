@@ -95,10 +95,8 @@ public class ONVIFDeviceExtensionPoint extends DeviceExtensionPoint<ONVIFDeviceC
      */
     @Override
     protected void validate(ONVIFDeviceConfig config, Builder errors) {
-        // Validate device name
-        if (config.general().deviceName() == null || config.general().deviceName().trim().isEmpty()) {
-            errors.check(false, "Device name is required");
-        }
+        // NOTE: Device connection name is validated by Ignition's DeviceProfileConfig
+        // We only validate module-specific configuration here
 
         // Validate IP address
         String ipAddress = config.connection().ipAddress();

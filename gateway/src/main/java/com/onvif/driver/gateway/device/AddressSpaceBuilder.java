@@ -7,11 +7,14 @@ import com.onvif.driver.gateway.onvif.ONVIFClient;
 import com.onvif.driver.gateway.onvif.ONVIFService;
 import com.onvif.driver.gateway.onvif.PTZStatus;
 import org.eclipse.milo.opcua.sdk.core.AccessLevel;
+import org.eclipse.milo.opcua.sdk.core.Reference;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaFolderNode;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaMethodNode;
+import org.eclipse.milo.opcua.sdk.server.nodes.UaNode;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaNodeContext;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaVariableNode;
 import org.eclipse.milo.opcua.stack.core.Identifiers;
+import org.eclipse.milo.opcua.stack.core.NodeIds;
 import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
 import org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText;
 import org.eclipse.milo.opcua.stack.core.types.builtin.Variant;
@@ -21,10 +24,15 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * Builds OPC-UA address space from ONVIF data.
  * Creates hierarchical folder and variable nodes representing ONVIF device information.
+ *
+ * IMPORTANT: ALL nodes (folders and variables) must be added to the NodeManager AND
+ * linked via references. The ManagedAddressSpaceWithLifecycle manages their lifecycle,
+ * but does NOT automatically discover nodes - they must be explicitly added.
  */
 public class AddressSpaceBuilder {
 
@@ -34,16 +42,18 @@ public class AddressSpaceBuilder {
     private final UaNodeContext nodeContext;
     private final UaFolderNode rootNode;
     private final ONVIFClient onvifClient;
+    private final Consumer<UaNode> addNodeCallback;
 
     // Cache of variable nodes for updates
     private final Map<String, UaVariableNode> nodeCache = new HashMap<>();
 
     public AddressSpaceBuilder(DeviceContext deviceContext, UaNodeContext nodeContext,
-                              UaFolderNode rootNode, ONVIFClient onvifClient) {
+                              UaFolderNode rootNode, ONVIFClient onvifClient, Consumer<UaNode> addNodeCallback) {
         this.deviceContext = deviceContext;
         this.nodeContext = nodeContext;
         this.rootNode = rootNode;
         this.onvifClient = onvifClient;
+        this.addNodeCallback = addNodeCallback;
     }
 
     /**
@@ -61,7 +71,18 @@ public class AddressSpaceBuilder {
             deviceContext.qualifiedName("DeviceInfo"),
             LocalizedText.english("Device Information")
         );
+
+        // Add to NodeManager
+        addNodeCallback.accept(deviceInfoFolder);
+
+        // Create bidirectional reference
         rootNode.addOrganizes(deviceInfoFolder);
+        deviceInfoFolder.addReference(new Reference(
+            deviceInfoFolder.getNodeId(),
+            NodeIds.Organizes,
+            rootNode.getNodeId().expanded(),
+            Reference.Direction.INVERSE
+        ));
 
         // Add device info variables
         addVariableNode(deviceInfoFolder, "Manufacturer", deviceInfo.manufacturer());
@@ -88,7 +109,18 @@ public class AddressSpaceBuilder {
             deviceContext.qualifiedName("Services"),
             LocalizedText.english("ONVIF Services")
         );
+
+        // Add to NodeManager
+        addNodeCallback.accept(servicesFolder);
+
+        // Create bidirectional reference
         rootNode.addOrganizes(servicesFolder);
+        servicesFolder.addReference(new Reference(
+            servicesFolder.getNodeId(),
+            NodeIds.Organizes,
+            rootNode.getNodeId().expanded(),
+            Reference.Direction.INVERSE
+        ));
 
         // Add each service
         for (int i = 0; i < services.size(); i++) {
@@ -102,7 +134,18 @@ public class AddressSpaceBuilder {
                 deviceContext.qualifiedName(serviceName),
                 LocalizedText.english(serviceName + " Service")
             );
+
+            // Add to NodeManager
+            addNodeCallback.accept(serviceFolder);
+
+            // Create bidirectional reference
             servicesFolder.addComponent(serviceFolder);
+            serviceFolder.addReference(new Reference(
+                serviceFolder.getNodeId(),
+                NodeIds.HasComponent,
+                servicesFolder.getNodeId().expanded(),
+                Reference.Direction.INVERSE
+            ));
 
             // Add service details
             addVariableNode(serviceFolder, "Namespace", service.getNamespace());
@@ -132,7 +175,18 @@ public class AddressSpaceBuilder {
             deviceContext.qualifiedName("Status"),
             LocalizedText.english("Connection Status")
         );
+
+        // Add to NodeManager
+        addNodeCallback.accept(statusFolder);
+
+        // Create bidirectional reference
         rootNode.addOrganizes(statusFolder);
+        statusFolder.addReference(new Reference(
+            statusFolder.getNodeId(),
+            NodeIds.Organizes,
+            rootNode.getNodeId().expanded(),
+            Reference.Direction.INVERSE
+        ));
 
         // Add connection status variables
         addVariableNode(statusFolder, "ConnectionStatus", status);
@@ -193,7 +247,17 @@ public class AddressSpaceBuilder {
 
             variableNode.setValue(new DataValue(new Variant(value)));
 
+            // Add to NodeManager
+            addNodeCallback.accept(variableNode);
+
+            // Create bidirectional reference
             parent.addComponent(variableNode);
+            variableNode.addReference(new Reference(
+                variableNode.getNodeId(),
+                NodeIds.HasComponent,
+                parent.getNodeId().expanded(),
+                Reference.Direction.INVERSE
+            ));
 
             // Cache node for updates
             String nodePath = parent.getBrowseName().getName() + "/" + name;
@@ -218,7 +282,18 @@ public class AddressSpaceBuilder {
             deviceContext.qualifiedName("MediaProfiles"),
             LocalizedText.english("Media Profiles")
         );
+
+        // Add to NodeManager
+        addNodeCallback.accept(mediaFolder);
+
+        // Create bidirectional reference
         rootNode.addOrganizes(mediaFolder);
+        mediaFolder.addReference(new Reference(
+            mediaFolder.getNodeId(),
+            NodeIds.Organizes,
+            rootNode.getNodeId().expanded(),
+            Reference.Direction.INVERSE
+        ));
 
         for (MediaProfile profile : profiles) {
             String profileName = profile.getName() != null ? profile.getName() : profile.getToken();
@@ -229,7 +304,18 @@ public class AddressSpaceBuilder {
                 deviceContext.qualifiedName(profileName),
                 LocalizedText.english(profileName)
             );
+
+            // Add to NodeManager
+            addNodeCallback.accept(profileFolder);
+
+            // Create bidirectional reference
             mediaFolder.addComponent(profileFolder);
+            profileFolder.addReference(new Reference(
+                profileFolder.getNodeId(),
+                NodeIds.HasComponent,
+                mediaFolder.getNodeId().expanded(),
+                Reference.Direction.INVERSE
+            ));
 
             // Add profile details
             addVariableNode(profileFolder, "Token", profile.getToken());
@@ -270,7 +356,18 @@ public class AddressSpaceBuilder {
             deviceContext.qualifiedName("PTZ"),
             LocalizedText.english("PTZ Control")
         );
+
+        // Add to NodeManager
+        addNodeCallback.accept(ptzFolder);
+
+        // Create bidirectional reference
         rootNode.addOrganizes(ptzFolder);
+        ptzFolder.addReference(new Reference(
+            ptzFolder.getNodeId(),
+            NodeIds.Organizes,
+            rootNode.getNodeId().expanded(),
+            Reference.Direction.INVERSE
+        ));
 
         // Add status nodes (read-only)
         addVariableNode(ptzFolder, "Pan", initialStatus.getPan());
@@ -363,7 +460,17 @@ public class AddressSpaceBuilder {
 
             variableNode.setValue(new DataValue(new Variant(initialValue)));
 
+            // Add to NodeManager
+            addNodeCallback.accept(variableNode);
+
+            // Create bidirectional reference
             parent.addComponent(variableNode);
+            variableNode.addReference(new Reference(
+                variableNode.getNodeId(),
+                NodeIds.HasComponent,
+                parent.getNodeId().expanded(),
+                Reference.Direction.INVERSE
+            ));
 
             String nodePath = parent.getBrowseName().getName() + "/" + name;
             nodeCache.put(nodePath, variableNode);

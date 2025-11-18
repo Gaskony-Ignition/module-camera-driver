@@ -26,15 +26,12 @@ public record ONVIFDeviceConfig(General general, Connection connection, ONVIFSet
 
     /**
      * General device settings.
+     *
+     * NOTE: The device connection name is managed by Ignition's DeviceProfileConfig
+     * and can be edited in the "Name" field when editing the device connection.
+     * It does not need to be duplicated here.
      */
     public record General(
-        @FormCategory("GENERAL")
-        @Label("Device Name")
-        @FormField(FormFieldType.TEXT)
-        @Description("Name of the ONVIF device connection")
-        @Required
-        String deviceName,
-
         @FormCategory("GENERAL")
         @Label("Enabled")
         @FormField(FormFieldType.CHECKBOX)
