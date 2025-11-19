@@ -31,12 +31,12 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
     @Override
     public void setup(GatewayContext context) {
         this.context = context;
-        logger.info("ONVIF Driver module setup");
+        logger.info("========== ONVIF Driver module setup ==========");
     }
 
     @Override
     public void startup(LicenseState licenseState) {
-        logger.info("ONVIF Driver module starting...");
+        logger.info("========== ONVIF Driver module starting... ==========");
 
         // CRITICAL: Register resource bundle for i18n support
         // Without this, display names will show as "¿ONVIFDevice.Meta.DisplayName?"
@@ -50,7 +50,7 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
         // Create device extension point
         deviceExtensionPoint = new ONVIFDeviceExtensionPoint();
 
-        logger.info("ONVIF Driver module started successfully");
+        logger.info("========== ONVIF Driver module started successfully ==========");
     }
 
     /**
@@ -63,8 +63,13 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
      */
     @Override
     public void mountRouteHandlers(RouteGroup routes) {
-        logger.info("Mounting ONVIF route handlers");
+        logger.info("========== mountRouteHandlers() CALLED! ==========");
+        logger.info("========== Mounting ONVIF route handlers at /main/data/onvif-driver/* ==========");
+        logger.info("RouteGroup object: " + routes);
+
         new ONVIFRoutes(context, deviceExtensionPoint).mountRoutes(routes);
+
+        logger.info("========== Route handlers mounted successfully ==========");
     }
 
     /**
@@ -73,13 +78,14 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
      */
     @Override
     public Optional<String> getMountPathAlias() {
+        logger.info("========== getMountPathAlias() CALLED! Returning: onvif-driver ==========");
         return Optional.of("onvif-driver");
     }
 
     @Override
     public void shutdown() {
-        logger.info("ONVIF Driver module shutting down");
-        logger.info("ONVIF Driver module shutdown complete");
+        logger.info("========== ONVIF Driver module shutting down ==========");
+        logger.info("========== ONVIF Driver module shutdown complete ==========");
     }
 
     /**
@@ -88,6 +94,7 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
      */
     @Override
     protected List<DeviceExtensionPoint<?>> getDeviceExtensionPoints() {
+        logger.info("========== getDeviceExtensionPoints() CALLED! ==========");
         // Return the same instance we use for servlets
         if (deviceExtensionPoint == null) {
             deviceExtensionPoint = new ONVIFDeviceExtensionPoint();

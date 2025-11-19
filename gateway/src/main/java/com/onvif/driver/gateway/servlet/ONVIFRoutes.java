@@ -43,11 +43,13 @@ public class ONVIFRoutes {
         // Mount snapshot endpoint at /main/data/onvif-driver/snapshot
         routes.newRoute("/snapshot")
             .handler(this::handleSnapshot)
+            .type(RouteGroup.TYPE_JSON)  // Specify route type
             .mount();
 
         // Mount stream endpoint at /main/data/onvif-driver/stream
         routes.newRoute("/stream")
             .handler(this::handleStream)
+            .type(RouteGroup.TYPE_JSON)  // Specify route type
             .mount();
 
         logger.info("Mounted ONVIF routes: /snapshot and /stream");
