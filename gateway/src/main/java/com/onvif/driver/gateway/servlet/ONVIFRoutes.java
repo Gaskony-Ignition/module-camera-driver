@@ -1,5 +1,6 @@
 package com.onvif.driver.gateway.servlet;
 
+import com.inductiveautomation.ignition.gateway.dataroutes.AccessControlStrategy;
 import com.inductiveautomation.ignition.gateway.dataroutes.RequestContext;
 import com.inductiveautomation.ignition.gateway.dataroutes.RouteGroup;
 import com.inductiveautomation.ignition.gateway.model.GatewayContext;
@@ -43,13 +44,15 @@ public class ONVIFRoutes {
         // Mount snapshot endpoint at /main/data/onvif-driver/snapshot
         routes.newRoute("/snapshot")
             .handler(this::handleSnapshot)
-            .type(RouteGroup.TYPE_JSON)  // Specify route type
+            .type(RouteGroup.TYPE_OCTET_STREAM)  // Binary data (handler sets image/jpeg)
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)  // Public access
             .mount();
 
         // Mount stream endpoint at /main/data/onvif-driver/stream
         routes.newRoute("/stream")
             .handler(this::handleStream)
-            .type(RouteGroup.TYPE_JSON)  // Specify route type
+            .type(RouteGroup.TYPE_OCTET_STREAM)  // Binary data (handler sets multipart/x-mixed-replace)
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)  // Public access
             .mount();
 
         logger.info("Mounted ONVIF routes: /snapshot and /stream");
