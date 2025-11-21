@@ -3,13 +3,13 @@ plugins {
     id("io.ia.sdk.modl") version "0.4.0"
 }
 
-version = "1.0.14"
+version = "1.0.23"
 group = "com.onvif.driver"
 
 ignitionModule {
     fileName.set("ONVIFDriver-${project.version}")
     name.set("ONVIF Driver")
-    id.set("com.inductiveautomation.opcua.drivers.onvif")
+    id.set("com.onvif.driver.opcua")
     moduleVersion.set(project.version.toString())
     license.set("license.html")
     moduleDescription.set("ONVIF network device driver for connecting to IP cameras and devices supporting ONVIF protocol")

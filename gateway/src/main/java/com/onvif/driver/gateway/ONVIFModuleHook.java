@@ -31,7 +31,11 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
     @Override
     public void setup(GatewayContext context) {
         this.context = context;
+        // CRITICAL: Create device extension point in setup, NOT startup
+        // This ensures it's available when getDeviceExtensionPoints() is called
+        this.deviceExtensionPoint = new ONVIFDeviceExtensionPoint();
         logger.info("========== ONVIF Driver module setup ==========");
+        logger.info("========== Created device extension point: " + deviceExtensionPoint + " ==========");
     }
 
     @Override
@@ -47,24 +51,27 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
         );
         logger.info("Registered ONVIFDevice resource bundle");
 
-        // Create device extension point
-        deviceExtensionPoint = new ONVIFDeviceExtensionPoint();
-
+        // Device extension point already created in setup()
+        // Just log confirmation
+        logger.info("========== Device extension point ready: " + deviceExtensionPoint + " ==========");
         logger.info("========== ONVIF Driver module started successfully ==========");
     }
 
     /**
      * Mounts route handlers for snapshot and stream endpoints.
-     * Routes will be available at /main/data/onvif-driver/*
+     * Routes will be available at /data/onvif-driver/*
+     *
+     * IMPORTANT: URLs are /data/{alias}/* NOT /main/data/{alias}/*
      *
      * Specifically:
-     * - /main/data/onvif-driver/snapshot?device=X&profile=Y
-     * - /main/data/onvif-driver/stream?device=X&profile=Y&fps=Z
+     * - http://gateway:8088/data/onvif-driver/test
+     * - http://gateway:8088/data/onvif-driver/snapshot?device=X&profile=Y
+     * - http://gateway:8088/data/onvif-driver/stream?device=X&profile=Y&fps=Z
      */
     @Override
     public void mountRouteHandlers(RouteGroup routes) {
         logger.info("========== mountRouteHandlers() CALLED! ==========");
-        logger.info("========== Mounting ONVIF route handlers at /main/data/onvif-driver/* ==========");
+        logger.info("========== Mounting ONVIF route handlers at /data/onvif-driver/* ==========");
         logger.info("RouteGroup object: " + routes);
 
         new ONVIFRoutes(context, deviceExtensionPoint).mountRoutes(routes);
@@ -95,10 +102,14 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
     @Override
     protected List<DeviceExtensionPoint<?>> getDeviceExtensionPoints() {
         logger.info("========== getDeviceExtensionPoints() CALLED! ==========");
-        // Return the same instance we use for servlets
+        // CRITICAL: Return the SAME instance created in setup()
+        // Do NOT create a new instance here!
         if (deviceExtensionPoint == null) {
+            logger.error("========== ERROR: deviceExtensionPoint is null in getDeviceExtensionPoints()! ==========");
+            logger.error("========== This should have been created in setup()! ==========");
             deviceExtensionPoint = new ONVIFDeviceExtensionPoint();
         }
+        logger.info("========== Returning device extension point: " + deviceExtensionPoint + " ==========");
         return List.of(deviceExtensionPoint);
     }
 

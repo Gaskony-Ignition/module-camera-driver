@@ -16,7 +16,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Route handlers for ONVIF snapshot and streaming endpoints.
- * Registers routes under /main/data/onvif-driver/*
+ * Registers routes under /data/onvif-driver/*
+ *
+ * IMPORTANT: Actual URLs are /data/{alias}/* NOT /main/data/{alias}/*
+ * Example: http://gateway:8088/data/onvif-driver/snapshot?device=SideCamera&profile=000
  */
 public class ONVIFRoutes {
 
@@ -41,28 +44,80 @@ public class ONVIFRoutes {
      * Mounts the ONVIF routes on the provided RouteGroup.
      */
     public void mountRoutes(RouteGroup routes) {
+        logger.info("========== mountRoutes() called with RouteGroup: " + routes + " ==========");
+        logger.info("========== RouteGroup class: " + routes.getClass().getName() + " ==========");
+
+        // DIAGNOSTIC: Mount a simple test route first
+        logger.info("========== Mounting TEST route at /test ==========");
+        routes.newRoute("/test")
+            .handler(this::handleTest)
+            .type(RouteGroup.TYPE_JSON)
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)
+            .mount();
+        logger.info("========== TEST route mounted ==========");
+
         // Mount snapshot endpoint at /main/data/onvif-driver/snapshot
+        logger.info("========== Mounting SNAPSHOT route at /snapshot ==========");
         routes.newRoute("/snapshot")
             .handler(this::handleSnapshot)
             .type(RouteGroup.TYPE_OCTET_STREAM)  // Binary data (handler sets image/jpeg)
             .accessControl(AccessControlStrategy.OPEN_ROUTE)  // Public access
             .mount();
+        logger.info("========== SNAPSHOT route mounted ==========");
 
         // Mount stream endpoint at /main/data/onvif-driver/stream
+        logger.info("========== Mounting STREAM route at /stream ==========");
         routes.newRoute("/stream")
             .handler(this::handleStream)
             .type(RouteGroup.TYPE_OCTET_STREAM)  // Binary data (handler sets multipart/x-mixed-replace)
             .accessControl(AccessControlStrategy.OPEN_ROUTE)  // Public access
             .mount();
+        logger.info("========== STREAM route mounted ==========");
 
-        logger.info("Mounted ONVIF routes: /snapshot and /stream");
+        logger.info("Mounted ONVIF routes: /test, /snapshot and /stream");
+    }
+
+    /**
+     * DIAGNOSTIC: Simple test handler to verify routing works at all.
+     * URL: http://gateway:8088/data/onvif-driver/test
+     */
+    private Object handleTest(RequestContext context, HttpServletResponse response) throws Exception {
+        logger.info("========================================");
+        logger.info("========== handleTest() CALLED! ==========");
+        logger.info("========== TEST ROUTE IS WORKING! ==========");
+        logger.info("========================================");
+        logger.info("Request URL: " + context.getRequest().getRequestURL());
+        logger.info("Request URI: " + context.getRequest().getRequestURI());
+        logger.info("Context Path: " + context.getRequest().getContextPath());
+        logger.info("Servlet Path: " + context.getRequest().getServletPath());
+        logger.info("Path Info: " + context.getRequest().getPathInfo());
+        logger.info("Query String: " + context.getRequest().getQueryString());
+
+        response.setContentType("application/json");
+        response.setStatus(200);
+        String jsonResponse = "{\"status\":\"success\",\"message\":\"ONVIF Driver test route is working!\",\"timestamp\":" + System.currentTimeMillis() + "}";
+        response.getWriter().write(jsonResponse);
+
+        logger.info("========== Test response sent successfully ==========");
+        return null;
     }
 
     /**
      * Handles snapshot requests.
-     * URL: /main/data/onvif-driver/snapshot?device=DeviceName&profile=ProfileToken
+     * URL: http://gateway:8088/data/onvif-driver/snapshot?device=DeviceName&profile=ProfileToken
      */
     private Object handleSnapshot(RequestContext context, HttpServletResponse response) throws Exception {
+        logger.info("========== handleSnapshot() CALLED! ==========");
+        logger.info("Request URL: " + context.getRequest().getRequestURL());
+        logger.info("Query String: " + context.getRequest().getQueryString());
+
+        // Check if deviceExtensionPoint is available
+        if (deviceExtensionPoint == null) {
+            logger.error("========== ERROR: deviceExtensionPoint is NULL in handler! ==========");
+            response.sendError(500, "Device extension point not initialized");
+            return null;
+        }
+
         if (activeSnapshots.get() >= MAX_CONCURRENT_SNAPSHOTS) {
             logger.warn("Snapshot request rejected - max concurrent requests reached");
             response.sendError(503, "Maximum concurrent snapshot requests reached");
@@ -76,16 +131,20 @@ public class ONVIFRoutes {
             // Get parameters
             String deviceName = context.getParameter("device");
             String profileToken = context.getParameter("profile");
+            logger.info(">>> Step 1: Got parameters - device={}, profile={}", deviceName, profileToken);
 
             if (deviceName == null || deviceName.trim().isEmpty()) {
+                logger.info(">>> ERROR: Missing device parameter");
                 response.sendError(400, "Missing required parameter: device");
                 return null;
             }
 
             if (profileToken == null || profileToken.trim().isEmpty()) {
+                logger.info(">>> ERROR: Missing profile parameter");
                 response.sendError(400, "Missing required parameter: profile");
                 return null;
             }
+            logger.info(">>> Step 2: Parameters present");
 
             // Validate parameter format
             if (!deviceName.matches("[a-zA-Z0-9_-]+")) {
@@ -99,37 +158,80 @@ public class ONVIFRoutes {
                 response.sendError(400, "Invalid profile token format");
                 return null;
             }
-
-            logger.debug("Snapshot request - device: {}, profile: {}", deviceName, profileToken);
+            logger.info(">>> Step 3: Parameters validated");
 
             // Get device
+            logger.info(">>> Step 4: Looking up device: {}", deviceName);
             ONVIFDevice device = deviceExtensionPoint.getDevice(deviceName);
             if (device == null) {
                 logger.warn("Device not found: {}", deviceName);
                 response.sendError(404, "Device not found: " + deviceName);
                 return null;
             }
+            logger.info(">>> Step 5: Device found: {}", device);
 
             // Check device status
             String deviceStatus = device.getStatus();
+            logger.info(">>> Step 6: Device status: {}", deviceStatus);
             if (!"Running".equals(deviceStatus) && !"Connected".equals(deviceStatus)) {
                 logger.warn("Device not in running state: {} - status: {}", deviceName, deviceStatus);
                 response.sendError(503, "Device is not connected: " + deviceStatus);
                 return null;
             }
+            logger.info(">>> Step 7: Device status OK");
 
             // Get snapshot
+            logger.info(">>> Step 8: Requesting snapshot from device for profile: {}", profileToken);
             byte[] snapshotBytes;
             try {
                 snapshotBytes = device.getClient().getSnapshot(profileToken);
+                logger.info(">>> Step 9: Snapshot received, size: {} bytes", snapshotBytes.length);
+
+                // CRITICAL: Validate that we actually received a JPEG image, not HTML or other content
+                if (snapshotBytes.length > 0) {
+                    // Check for JPEG magic bytes (FF D8 FF)
+                    boolean isJpeg = snapshotBytes.length >= 3 &&
+                                    (snapshotBytes[0] & 0xFF) == 0xFF &&
+                                    (snapshotBytes[1] & 0xFF) == 0xD8 &&
+                                    (snapshotBytes[2] & 0xFF) == 0xFF;
+
+                    // Check for HTML content
+                    String contentStart = new String(snapshotBytes, 0, Math.min(100, snapshotBytes.length));
+                    boolean isHtml = contentStart.toLowerCase().contains("<!doctype") ||
+                                    contentStart.toLowerCase().contains("<html");
+
+                    logger.info(">>> Step 9a: Content validation - isJPEG: {}, isHTML: {}", isJpeg, isHtml);
+                    logger.info(">>> Step 9b: First 100 bytes: {}", contentStart);
+
+                    if (!isJpeg || isHtml) {
+                        logger.error("========== CAMERA DOES NOT COMPLY WITH ONVIF SPECIFICATION ==========");
+                        logger.error("Camera returned {} instead of JPEG image", isHtml ? "HTML login page" : "non-JPEG content");
+                        logger.error("Camera: {}, Profile: {}", deviceName, profileToken);
+                        logger.error("Snapshot URL: {}", device.getClient().getSnapshotUri(profileToken));
+                        logger.error("");
+                        logger.error("This camera does not properly implement the ONVIF GetSnapshotUri specification.");
+                        logger.error("The snapshot URL requires authentication methods not supported by ONVIF standard.");
+                        logger.error("");
+                        logger.error("RESOLUTION:");
+                        logger.error("1. Use the RTSP StreamUri from OPC-UA tags: [default]OPC UA/{}/Profiles/{}/StreamUri", deviceName, profileToken);
+                        logger.error("2. Contact camera manufacturer about ONVIF compliance");
+                        logger.error("3. Consider using a camera with better ONVIF support (Axis, Hikvision, Dahua)");
+
+                        response.sendError(500, "Camera does not properly implement ONVIF snapshot specification. " +
+                            "Use RTSP StreamUri from OPC-UA tags instead: [default]OPC UA/" + deviceName + "/Profiles/" + profileToken + "/StreamUri");
+                        return null;
+                    }
+                }
             } catch (IOException e) {
                 logger.error("Failed to get snapshot from device {}, profile {}: {}",
                     deviceName, profileToken, e.getMessage());
+                logger.error("Exception details:", e);
                 response.sendError(500, "Failed to retrieve snapshot from camera");
                 return null;
             }
 
             // Send response
+            logger.info(">>> Step 10: Setting response headers");
             response.setContentType("image/jpeg");
             response.setContentLength(snapshotBytes.length);
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -137,10 +239,11 @@ public class ONVIFRoutes {
             response.setHeader("Expires", "0");
             response.setHeader("Access-Control-Allow-Origin", "*");
 
+            logger.info(">>> Step 11: Writing {} bytes to response", snapshotBytes.length);
             response.getOutputStream().write(snapshotBytes);
 
             long duration = System.currentTimeMillis() - startTime;
-            logger.debug("Snapshot delivered - device: {}, profile: {}, size: {} bytes, duration: {} ms",
+            logger.info(">>> Step 12: SUCCESS! Snapshot delivered - device: {}, profile: {}, size: {} bytes, duration: {} ms",
                 deviceName, profileToken, snapshotBytes.length, duration);
 
         } finally {
@@ -152,9 +255,20 @@ public class ONVIFRoutes {
 
     /**
      * Handles MJPEG stream requests.
-     * URL: /main/data/onvif-driver/stream?device=DeviceName&profile=ProfileToken&fps=10
+     * URL: http://gateway:8088/data/onvif-driver/stream?device=DeviceName&profile=ProfileToken&fps=10
      */
     private Object handleStream(RequestContext context, HttpServletResponse response) throws Exception {
+        logger.info("========== handleStream() CALLED! ==========");
+        logger.info("Request URL: " + context.getRequest().getRequestURL());
+        logger.info("Query String: " + context.getRequest().getQueryString());
+
+        // Check if deviceExtensionPoint is available
+        if (deviceExtensionPoint == null) {
+            logger.error("========== ERROR: deviceExtensionPoint is NULL in handler! ==========");
+            response.sendError(500, "Device extension point not initialized");
+            return null;
+        }
+
         if (activeStreams.get() >= MAX_CONCURRENT_STREAMS) {
             logger.warn("Stream request rejected - max concurrent streams reached");
             response.sendError(503, "Maximum concurrent streams reached");

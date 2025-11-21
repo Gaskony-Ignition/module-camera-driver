@@ -73,25 +73,35 @@ public class ONVIFClient implements Closeable {
             .setConnectTimeout(this.timeout)
             .setSocketTimeout(this.timeout)
             .setConnectionRequestTimeout(this.timeout)
+            .setRedirectsEnabled(true)  // CRITICAL: Follow HTTP -> HTTPS redirects
+            .setMaxRedirects(5)
             .build();
 
         HttpClientBuilder clientBuilder = HttpClientBuilder.create()
             .setDefaultRequestConfig(requestConfig);
 
-        // Configure SSL/TLS for HTTPS connections
-        if (useHttps) {
-            try {
-                SSLContext sslContext = createSSLContext();
-                SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(
-                    sslContext,
-                    NoopHostnameVerifier.INSTANCE  // Many cameras use IP addresses, not hostnames
-                );
-                clientBuilder.setSSLSocketFactory(sslSocketFactory);
-                logger.info("HTTPS enabled with SSL certificate validation (accepting self-signed certificates)");
-            } catch (Exception e) {
-                logger.warn("Failed to configure SSL context: {}", e.getMessage());
-                logger.warn("HTTPS connections may fail with certificate errors");
-            }
+        // Configure HTTP authentication for snapshot URLs
+        CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
+        credentialsProvider.setCredentials(
+            AuthScope.ANY,
+            new UsernamePasswordCredentials(username, password)
+        );
+        clientBuilder.setDefaultCredentialsProvider(credentialsProvider);
+
+        // CRITICAL: Always configure SSL/TLS to trust self-signed certificates
+        // Even if the device service URL is HTTP, snapshot URLs might be HTTPS
+        try {
+            SSLContext sslContext = createSSLContext();
+            SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(
+                sslContext,
+                NoopHostnameVerifier.INSTANCE  // Many cameras use IP addresses, not hostnames
+            );
+            clientBuilder.setSSLSocketFactory(sslSocketFactory);
+            logger.info("SSL configured to accept self-signed certificates (device uses {})",
+                useHttps ? "HTTPS" : "HTTP");
+        } catch (Exception e) {
+            logger.warn("Failed to configure SSL context: {}", e.getMessage());
+            logger.warn("HTTPS connections may fail with certificate errors");
         }
 
         this.httpClient = clientBuilder.build();
