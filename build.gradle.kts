@@ -35,6 +35,6 @@ ignitionModule {
         }
     }
 
-    // Module signing enabled
-    skipModlSigning.set(false)
+    // Module signing disabled - unsigned module
+    skipModlSigning.set(true)
 }
