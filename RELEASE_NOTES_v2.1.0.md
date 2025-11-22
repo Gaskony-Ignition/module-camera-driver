@@ -1,8 +1,9 @@
 # Release Notes - ONVIF Driver v2.1.0
 
 **Release Date**: November 22, 2025
-**Module File**: ONVIFDriver-2.1.0.unsigned.modl (1.7 MB)
-**Module Type**: Unsigned (compatible with all Ignition installations)
+**Module Files**:
+- ONVIFDriver-2.1.0.modl (1.7 MB, signed)
+- ONVIFDriver-2.1.0.unsigned.modl (1.7 MB, unsigned)
 **Status**: Production Ready - Authentication & Testing Update
 **Previous Version**: v2.0.0
 
@@ -400,12 +401,12 @@ All documentation updated to reflect v2.1.0:
 ## 💾 Build Information
 
 **Module Details**:
-- Filename: ONVIFDriver-2.1.0.unsigned.modl
-- Size: 1.7 MB
-- Type: Unsigned module (compatible with all Ignition installations)
+- Primary: ONVIFDriver-2.1.0.modl (signed, 1.7 MB)
+- Alternative: ONVIFDriver-2.1.0.unsigned.modl (unsigned, 1.7 MB)
 - Java: 17 (compatible with JDK 21)
 - Ignition: 8.3.0+
 - Gradle: 8.x with Kotlin DSL
+- Signing: Self-signed certificate (onvif-driver)
 
 **Dependencies**:
 - Apache HttpClient 4.5.14

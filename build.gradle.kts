@@ -35,6 +35,6 @@ ignitionModule {
         }
     }
 
-    // Module signing disabled - unsigned module
-    skipModlSigning.set(true)
+    // Module signing enabled (configured in gradle.properties)
+    skipModlSigning.set(false)
 }
