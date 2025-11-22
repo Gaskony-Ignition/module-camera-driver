@@ -35,6 +35,6 @@ ignitionModule {
         }
     }
 
-    // Module signing temporarily disabled for build testing
-    skipModlSigning.set(true)
+    // Module signing enabled
+    skipModlSigning.set(false)
 }
