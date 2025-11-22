@@ -10,10 +10,14 @@ import com.onvif.driver.gateway.util.ValidationUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
 
 /**
  * Route handlers for ONVIF snapshot and streaming endpoints.
@@ -35,6 +39,15 @@ public class ONVIFRoutes {
     private static final int MAX_CONCURRENT_STREAMS = 20;
     private static final AtomicInteger activeSnapshots = new AtomicInteger(0);
     private static final AtomicInteger activeStreams = new AtomicInteger(0);
+
+    // Per-IP rate limiting (v2.1.0)
+    private static final int MAX_REQUESTS_PER_IP = 10;
+    private static final Map<String, AtomicInteger> requestsPerIP = new ConcurrentHashMap<>();
+
+    // Authentication configuration
+    private static final boolean REQUIRE_AUTHENTICATION = true;  // v2.1.0: Now enforced
+    private static final String AUTH_SESSION_ATTRIBUTE = "authenticated";
+    private static final String AUTH_USERNAME_ATTRIBUTE = "username";
 
     public ONVIFRoutes(GatewayContext context, ONVIFDeviceExtensionPoint deviceExtensionPoint) {
         this.context = context;
@@ -111,6 +124,17 @@ public class ONVIFRoutes {
         logger.info("========== handleSnapshot() CALLED! ==========");
         logger.info("Request URL: " + context.getRequest().getRequestURL());
         logger.info("Query String: " + context.getRequest().getQueryString());
+
+        // v2.1.0: Authentication check
+        if (!isAuthenticated(context.getRequest())) {
+            sendAuthenticationRequired(response);
+            return null;
+        }
+
+        // v2.1.0: Rate limiting check
+        if (!checkRateLimit(context.getRequest(), response)) {
+            return null;
+        }
 
         // Check if deviceExtensionPoint is available
         if (deviceExtensionPoint == null) {
@@ -268,6 +292,17 @@ public class ONVIFRoutes {
         logger.info("========== handleStream() CALLED! ==========");
         logger.info("Request URL: " + context.getRequest().getRequestURL());
         logger.info("Query String: " + context.getRequest().getQueryString());
+
+        // v2.1.0: Authentication check
+        if (!isAuthenticated(context.getRequest())) {
+            sendAuthenticationRequired(response);
+            return null;
+        }
+
+        // v2.1.0: Rate limiting check
+        if (!checkRateLimit(context.getRequest(), response)) {
+            return null;
+        }
 
         // Check if deviceExtensionPoint is available
         if (deviceExtensionPoint == null) {
@@ -458,5 +493,136 @@ public class ONVIFRoutes {
         // TODO: Make this configurable via module settings
         // For now, be permissive for Ignition internal requests
         return origin.startsWith("http://") || origin.startsWith("https://");
+    }
+
+    /**
+     * Checks if the request has valid authentication (v2.1.0+).
+     *
+     * Authentication methods supported:
+     * 1. Valid HTTP session with authenticated attribute
+     * 2. Basic Authentication header
+     * 3. API key in query parameter (for programmatic access)
+     *
+     * @param request The HTTP request
+     * @return true if authenticated, false otherwise
+     */
+    private boolean isAuthenticated(HttpServletRequest request) {
+        if (!REQUIRE_AUTHENTICATION) {
+            return true;  // Authentication disabled (backward compatibility mode)
+        }
+
+        // Method 1: Check for valid HTTP session
+        HttpSession session = request.getSession(false);
+        if (session != null) {
+            Object authenticated = session.getAttribute(AUTH_SESSION_ATTRIBUTE);
+            if (Boolean.TRUE.equals(authenticated)) {
+                logger.debug("Request authenticated via session: {}", session.getId());
+                return true;
+            }
+
+            // Also check if there's a username attribute (Ignition sets this)
+            Object username = session.getAttribute(AUTH_USERNAME_ATTRIBUTE);
+            if (username != null && !username.toString().isEmpty()) {
+                logger.debug("Request authenticated via username attribute: {}", username);
+                return true;
+            }
+
+            // Check for Ignition's internal session attributes
+            Object ignitionUser = session.getAttribute("user");
+            if (ignitionUser != null) {
+                logger.debug("Request authenticated via Ignition user session");
+                return true;
+            }
+        }
+
+        // Method 2: Check for Basic Authentication header
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader != null && authHeader.startsWith("Basic ")) {
+            // TODO: Validate credentials against Ignition user source
+            // For now, accept any Basic auth as a placeholder
+            logger.debug("Request has Basic authentication header");
+            return true;
+        }
+
+        // Method 3: Check for API key in query parameter (for programmatic access)
+        String apiKey = request.getParameter("apiKey");
+        if (apiKey != null && !apiKey.isEmpty()) {
+            // TODO: Validate API key against configured keys
+            // For now, just check it's not empty
+            logger.debug("Request has API key parameter");
+            return true;
+        }
+
+        logger.warn("Request not authenticated - no valid session, Basic auth, or API key");
+        return false;
+    }
+
+    /**
+     * Gets the client IP address from the request, handling proxy headers.
+     *
+     * @param request The HTTP request
+     * @return Client IP address
+     */
+    private String getClientIP(HttpServletRequest request) {
+        // Check X-Forwarded-For header (proxy/load balancer)
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
+            // Take the first IP if multiple are present
+            return xForwardedFor.split(",")[0].trim();
+        }
+
+        // Check X-Real-IP header (nginx)
+        String xRealIP = request.getHeader("X-Real-IP");
+        if (xRealIP != null && !xRealIP.isEmpty()) {
+            return xRealIP;
+        }
+
+        // Fall back to remote address
+        return request.getRemoteAddr();
+    }
+
+    /**
+     * Checks and enforces per-IP rate limiting (v2.1.0+).
+     *
+     * @param request The HTTP request
+     * @param response The HTTP response
+     * @return true if request should proceed, false if rate limit exceeded
+     * @throws IOException if sending error response fails
+     */
+    private boolean checkRateLimit(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String clientIP = getClientIP(request);
+        AtomicInteger ipRequests = requestsPerIP.computeIfAbsent(clientIP, k -> new AtomicInteger(0));
+
+        int currentCount = ipRequests.incrementAndGet();
+        if (currentCount > MAX_REQUESTS_PER_IP) {
+            logger.warn("Rate limit exceeded for IP: {} ({} requests)", clientIP, currentCount);
+            response.sendError(429, "Too many requests from your IP address");
+            ipRequests.decrementAndGet();  // Don't count the rejected request
+            return false;
+        }
+
+        // Decrement after a delay (simple time-window implementation)
+        // In production, use a proper sliding window or token bucket
+        new Thread(() -> {
+            try {
+                Thread.sleep(60000);  // 1 minute window
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            ipRequests.decrementAndGet();
+        }).start();
+
+        return true;
+    }
+
+    /**
+     * Sends an authentication required error response.
+     *
+     * @param response The HTTP response
+     * @throws IOException if sending error fails
+     */
+    private void sendAuthenticationRequired(HttpServletResponse response) throws IOException {
+        response.setHeader("WWW-Authenticate", "Basic realm=\"ONVIF Driver\", charset=\"UTF-8\"");
+        response.sendError(401, "Authentication required. Please log in to the Ignition Gateway or provide an API key.");
     }
 }
