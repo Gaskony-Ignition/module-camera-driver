@@ -34,13 +34,13 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
         // CRITICAL: Create device extension point in setup, NOT startup
         // This ensures it's available when getDeviceExtensionPoints() is called
         this.deviceExtensionPoint = new ONVIFDeviceExtensionPoint();
-        logger.info("========== ONVIF Driver module setup ==========");
-        logger.info("========== Created device extension point: " + deviceExtensionPoint + " ==========");
+        logger.info("ONVIF Driver module setup complete");
+        logger.debug("Created device extension point: {}", deviceExtensionPoint);
     }
 
     @Override
     public void startup(LicenseState licenseState) {
-        logger.info("========== ONVIF Driver module starting... ==========");
+        logger.info("ONVIF Driver module starting...");
 
         // CRITICAL: Register resource bundle for i18n support
         // Without this, display names will show as "¿ONVIFDevice.Meta.DisplayName?"
@@ -49,12 +49,11 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
             ONVIFDeviceExtensionPoint.class,
             "ONVIFDevice"
         );
-        logger.info("Registered ONVIFDevice resource bundle");
+        logger.debug("Registered ONVIFDevice resource bundle");
 
         // Device extension point already created in setup()
-        // Just log confirmation
-        logger.info("========== Device extension point ready: " + deviceExtensionPoint + " ==========");
-        logger.info("========== ONVIF Driver module started successfully ==========");
+        logger.debug("Device extension point ready: {}", deviceExtensionPoint);
+        logger.info("ONVIF Driver module started successfully");
     }
 
     /**
@@ -70,13 +69,12 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
      */
     @Override
     public void mountRouteHandlers(RouteGroup routes) {
-        logger.info("========== mountRouteHandlers() CALLED! ==========");
-        logger.info("========== Mounting ONVIF route handlers at /data/onvif-driver/* ==========");
-        logger.info("RouteGroup object: " + routes);
+        logger.info("Mounting ONVIF route handlers at /data/onvif-driver/*");
+        logger.debug("RouteGroup: {}", routes);
 
         new ONVIFRoutes(context, deviceExtensionPoint).mountRoutes(routes);
 
-        logger.info("========== Route handlers mounted successfully ==========");
+        logger.info("Route handlers mounted successfully");
     }
 
     /**
@@ -85,14 +83,22 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
      */
     @Override
     public Optional<String> getMountPathAlias() {
-        logger.info("========== getMountPathAlias() CALLED! Returning: onvif-driver ==========");
+        logger.debug("getMountPathAlias() returning: onvif-driver");
         return Optional.of("onvif-driver");
     }
 
     @Override
     public void shutdown() {
-        logger.info("========== ONVIF Driver module shutting down ==========");
-        logger.info("========== ONVIF Driver module shutdown complete ==========");
+        logger.info("ONVIF Driver module shutting down...");
+
+        // Shutdown rate limiting executor to prevent resource leak
+        try {
+            ONVIFRoutes.shutdown();
+        } catch (Exception e) {
+            logger.error("Error shutting down ONVIF routes", e);
+        }
+
+        logger.info("ONVIF Driver module shutdown complete");
     }
 
     /**
@@ -101,15 +107,14 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
      */
     @Override
     protected List<DeviceExtensionPoint<?>> getDeviceExtensionPoints() {
-        logger.info("========== getDeviceExtensionPoints() CALLED! ==========");
+        logger.debug("getDeviceExtensionPoints() called");
         // CRITICAL: Return the SAME instance created in setup()
         // Do NOT create a new instance here!
         if (deviceExtensionPoint == null) {
-            logger.error("========== ERROR: deviceExtensionPoint is null in getDeviceExtensionPoints()! ==========");
-            logger.error("========== This should have been created in setup()! ==========");
+            logger.error("ERROR: deviceExtensionPoint is null - should have been created in setup()!");
             deviceExtensionPoint = new ONVIFDeviceExtensionPoint();
         }
-        logger.info("========== Returning device extension point: " + deviceExtensionPoint + " ==========");
+        logger.debug("Returning device extension point: {}", deviceExtensionPoint);
         return List.of(deviceExtensionPoint);
     }
 

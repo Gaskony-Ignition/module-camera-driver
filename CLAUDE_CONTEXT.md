@@ -244,7 +244,7 @@ See LEARNINGS.md for complete details.
 - httpcore:4.4.16
 
 // JSON (modlImplementation)
-- gson:2.10.1  // TODO: Update to 2.13.2
+- gson:2.11.0
 
 // Servlet API (compileOnly)
 - jakarta.servlet-api:5.0.0

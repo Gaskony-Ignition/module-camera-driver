@@ -1,9 +1,30 @@
+# ============================================================================
+# Ignition ONVIF Driver - Gradle Properties Template
+# ============================================================================
+#
+# SETUP INSTRUCTIONS:
+# 1. Copy this file: cp gradle.properties.template gradle.properties
+# 2. Set environment variables with your actual passwords:
+#    export KEYSTORE_PASSWORD="your-secure-password-here"
+#    export CERT_PASSWORD="your-secure-password-here"
+# 3. Build the module: ./gradlew clean build
+#
+# SECURITY WARNING:
+# - NEVER commit gradle.properties with real passwords to version control
+# - The gradle.properties file is in .gitignore to prevent accidental commits
+# - The keystore and certificate files are also in .gitignore
+#
+# For production deployments:
+# - Use strong passwords (16+ characters)
+# - Store passwords in secure vault (not plain text)
+# - Regenerate certificates periodically
+# ============================================================================
+
 # Ignition SDK version
 ignition.sdk.version=8.3.0
 
 # Module signing configuration
-# SECURITY: Copy this file to gradle.properties and set actual values
-# DO NOT commit gradle.properties with real credentials to version control
+# These values reference environment variables for security
 ignition.signing.keystoreFile=onvif-driver.jks
 ignition.signing.keystorePassword=${KEYSTORE_PASSWORD}
 ignition.signing.certFile=onvif-driver.der

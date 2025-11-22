@@ -1,0 +1,71 @@
+# .gitattributes for ONVIF Driver module
+# Ensures consistent line endings and file handling across platforms
+
+# Auto detect text files and normalize line endings to LF
+* text=auto eol=lf
+
+# Source code
+*.java text eol=lf
+*.xml text eol=lf
+*.properties text eol=lf
+*.gradle text eol=lf
+*.kt text eol=lf
+*.kts text eol=lf
+
+# Documentation
+*.md text eol=lf
+*.txt text eol=lf
+*.adoc text eol=lf
+
+# Configuration files
+.gitignore text eol=lf
+.gitattributes text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+
+# Web files
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+
+# Shell scripts (Unix line endings)
+*.sh text eol=lf
+
+# Windows scripts (Windows line endings)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files (explicitly marked as binary)
+*.jar binary
+*.modl binary
+*.jks binary
+*.der binary
+*.class binary
+*.so binary
+*.dll binary
+*.dylib binary
+*.exe binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.tgz binary
+*.7z binary
+
+# Images
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary
+
+# Git diff behavior
+*.java diff=java
+*.md diff=markdown
+
+# Ignore generated files in linguist statistics
+build/** linguist-generated=true
+.gradle/** linguist-generated=true
+**/build/** linguist-generated=true

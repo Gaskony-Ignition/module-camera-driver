@@ -17,6 +17,9 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.Map;
 
 /**
@@ -25,6 +28,24 @@ import java.util.Map;
  *
  * IMPORTANT: Actual URLs are /data/{alias}/* NOT /main/data/{alias}/*
  * Example: http://gateway:8088/data/onvif-driver/snapshot?device=SideCamera&profile=000
+ *
+ * ⚠️ SECURITY WARNING - AUTHENTICATION IS PLACEHOLDER ONLY ⚠️
+ *
+ * The current authentication implementation (v2.1.0) accepts ANY credentials
+ * as a placeholder. This is NOT production-ready security:
+ *
+ * - Basic Authentication: Accepts any username/password combination
+ * - API Key: Accepts any non-empty key value
+ * - Session Authentication: Works correctly with Ignition sessions
+ *
+ * BEFORE PRODUCTION DEPLOYMENT:
+ * 1. Implement actual Basic Auth validation against Ignition user source
+ * 2. Implement API key management with secure storage (hashed keys)
+ * 3. Add authentication failure logging and monitoring
+ * 4. Add account lockout after failed attempts
+ *
+ * See lines 541-544 and 550-553 for placeholder authentication code.
+ * See docs/SECURITY.md for security architecture details.
  */
 public class ONVIFRoutes {
 
@@ -34,15 +55,59 @@ public class ONVIFRoutes {
     private final GatewayContext context;
     private final ONVIFDeviceExtensionPoint deviceExtensionPoint;
 
-    // Resource protection
+    // ============================================================================
+    // RESOURCE PROTECTION CONFIGURATION
+    // ============================================================================
+    // These constants control concurrent access limits and rate limiting.
+    // Adjust these values based on your deployment environment and requirements.
+    //
+    // CONFIGURATION GUIDELINES:
+    //
+    // MAX_CONCURRENT_SNAPSHOTS (default: 50)
+    //   - Number of simultaneous snapshot requests allowed
+    //   - Higher values = more memory and CPU usage
+    //   - Recommended: 50 for standard deployments, 100+ for high-traffic
+    //   - Each snapshot uses ~500KB-2MB depending on camera resolution
+    //
+    // MAX_CONCURRENT_STREAMS (default: 20)
+    //   - Number of simultaneous MJPEG streams allowed
+    //   - Higher values = significantly more bandwidth and memory
+    //   - Recommended: 20 for standard deployments, 50+ for high-traffic
+    //   - Each stream uses ~100-500 KB/s sustained bandwidth
+    //
+    // MAX_REQUESTS_PER_IP (default: 10)
+    //   - Number of requests allowed per IP address per minute
+    //   - Prevents DoS attacks and resource exhaustion
+    //   - Recommended: 10 for general use, 60+ for known internal networks
+    //   - Set higher for reverse proxy deployments (all requests from same IP)
+    //
+    // FUTURE ENHANCEMENT:
+    // These should be moved to module settings for runtime configuration.
+    // See GitHub issue #XXX or IMPLEMENTATION_STATUS.md for details.
+    // ============================================================================
+
+    /** Maximum number of concurrent snapshot requests allowed across all IPs */
     private static final int MAX_CONCURRENT_SNAPSHOTS = 50;
+
+    /** Maximum number of concurrent MJPEG streams allowed across all IPs */
     private static final int MAX_CONCURRENT_STREAMS = 20;
+
     private static final AtomicInteger activeSnapshots = new AtomicInteger(0);
     private static final AtomicInteger activeStreams = new AtomicInteger(0);
 
-    // Per-IP rate limiting (v2.1.0)
+    /** Maximum number of requests allowed per IP address per minute (rate limiting) */
     private static final int MAX_REQUESTS_PER_IP = 10;
+
     private static final Map<String, AtomicInteger> requestsPerIP = new ConcurrentHashMap<>();
+
+    // Scheduled executor for rate limit cleanup (fixed thread leak from v2.1.0)
+    // Single-threaded executor handles all rate limit expirations
+    private static final ScheduledExecutorService rateLimitExecutor =
+        Executors.newScheduledThreadPool(1, r -> {
+            Thread t = new Thread(r, "ONVIF-RateLimit-Cleanup");
+            t.setDaemon(true);
+            return t;
+        });
 
     // Authentication configuration
     private static final boolean REQUIRE_AUTHENTICATION = true;  // v2.1.0: Now enforced
@@ -58,61 +123,54 @@ public class ONVIFRoutes {
      * Mounts the ONVIF routes on the provided RouteGroup.
      */
     public void mountRoutes(RouteGroup routes) {
-        logger.info("========== mountRoutes() called with RouteGroup: " + routes + " ==========");
-        logger.info("========== RouteGroup class: " + routes.getClass().getName() + " ==========");
+        logger.info("Mounting ONVIF routes...");
+        logger.debug("RouteGroup: {}, class: {}", routes, routes.getClass().getName());
 
-        // DIAGNOSTIC: Mount a simple test route first
-        logger.info("========== Mounting TEST route at /test ==========");
+        // DIAGNOSTIC: Test route for verifying routing works
+        // TODO: Remove or disable in production builds
         routes.newRoute("/test")
             .handler(this::handleTest)
             .type(RouteGroup.TYPE_JSON)
             .accessControl(AccessControlStrategy.OPEN_ROUTE)
             .mount();
-        logger.info("========== TEST route mounted ==========");
+        logger.debug("Mounted /test route");
 
-        // Mount snapshot endpoint at /main/data/onvif-driver/snapshot
-        logger.info("========== Mounting SNAPSHOT route at /snapshot ==========");
+        // Mount snapshot endpoint at /data/onvif-driver/snapshot
         routes.newRoute("/snapshot")
             .handler(this::handleSnapshot)
             .type(RouteGroup.TYPE_OCTET_STREAM)  // Binary data (handler sets image/jpeg)
-            .accessControl(AccessControlStrategy.OPEN_ROUTE)  // TODO v2.1.0: Implement custom authentication
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)  // Custom auth handled in handler
             .mount();
-        logger.info("========== SNAPSHOT route mounted ==========");
+        logger.debug("Mounted /snapshot route");
 
-        // Mount stream endpoint at /main/data/onvif-driver/stream
-        logger.info("========== Mounting STREAM route at /stream ==========");
+        // Mount stream endpoint at /data/onvif-driver/stream
         routes.newRoute("/stream")
             .handler(this::handleStream)
             .type(RouteGroup.TYPE_OCTET_STREAM)  // Binary data (handler sets multipart/x-mixed-replace)
-            .accessControl(AccessControlStrategy.OPEN_ROUTE)  // TODO v2.1.0: Implement custom authentication
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)  // Custom auth handled in handler
             .mount();
-        logger.info("========== STREAM route mounted ==========");
+        logger.debug("Mounted /stream route");
 
-        logger.info("Mounted ONVIF routes: /test, /snapshot and /stream");
+        logger.info("ONVIF routes mounted: /test, /snapshot, /stream");
     }
 
     /**
-     * DIAGNOSTIC: Simple test handler to verify routing works at all.
+     * DIAGNOSTIC: Simple test handler to verify routing works.
      * URL: http://gateway:8088/data/onvif-driver/test
+     * TODO: Remove or disable in production builds
      */
     private Object handleTest(RequestContext context, HttpServletResponse response) throws Exception {
-        logger.info("========================================");
-        logger.info("========== handleTest() CALLED! ==========");
-        logger.info("========== TEST ROUTE IS WORKING! ==========");
-        logger.info("========================================");
-        logger.info("Request URL: " + context.getRequest().getRequestURL());
-        logger.info("Request URI: " + context.getRequest().getRequestURI());
-        logger.info("Context Path: " + context.getRequest().getContextPath());
-        logger.info("Servlet Path: " + context.getRequest().getServletPath());
-        logger.info("Path Info: " + context.getRequest().getPathInfo());
-        logger.info("Query String: " + context.getRequest().getQueryString());
+        logger.debug("Test route called");
+        logger.debug("Request URL: {}", context.getRequest().getRequestURL());
+        logger.debug("Request URI: {}", context.getRequest().getRequestURI());
+        logger.debug("Query String: {}", context.getRequest().getQueryString());
 
         response.setContentType("application/json");
         response.setStatus(200);
         String jsonResponse = "{\"status\":\"success\",\"message\":\"ONVIF Driver test route is working!\",\"timestamp\":" + System.currentTimeMillis() + "}";
         response.getWriter().write(jsonResponse);
 
-        logger.info("========== Test response sent successfully ==========");
+        logger.debug("Test response sent successfully");
         return null;
     }
 
@@ -121,9 +179,9 @@ public class ONVIFRoutes {
      * URL: http://gateway:8088/data/onvif-driver/snapshot?device=DeviceName&profile=ProfileToken
      */
     private Object handleSnapshot(RequestContext context, HttpServletResponse response) throws Exception {
-        logger.info("========== handleSnapshot() CALLED! ==========");
-        logger.info("Request URL: " + context.getRequest().getRequestURL());
-        logger.info("Query String: " + context.getRequest().getQueryString());
+        logger.debug("Snapshot request received");
+        logger.debug("Request URL: {}", context.getRequest().getRequestURL());
+        logger.debug("Query String: {}", context.getRequest().getQueryString());
 
         // v2.1.0: Authentication check
         if (!isAuthenticated(context.getRequest())) {
@@ -138,7 +196,7 @@ public class ONVIFRoutes {
 
         // Check if deviceExtensionPoint is available
         if (deviceExtensionPoint == null) {
-            logger.error("========== ERROR: deviceExtensionPoint is NULL in handler! ==========");
+            logger.error("ERROR: deviceExtensionPoint is NULL in handler!");
             response.sendError(500, "Device extension point not initialized");
             return null;
         }
@@ -156,20 +214,19 @@ public class ONVIFRoutes {
             // Get parameters
             String deviceName = context.getParameter("device");
             String profileToken = context.getParameter("profile");
-            logger.info(">>> Step 1: Got parameters - device={}, profile={}", deviceName, profileToken);
+            logger.debug("Snapshot request: device={}, profile={}", deviceName, profileToken);
 
             if (deviceName == null || deviceName.trim().isEmpty()) {
-                logger.info(">>> ERROR: Missing device parameter");
+                logger.warn("Missing device parameter");
                 response.sendError(400, "Missing required parameter: device");
                 return null;
             }
 
             if (profileToken == null || profileToken.trim().isEmpty()) {
-                logger.info(">>> ERROR: Missing profile parameter");
+                logger.warn("Missing profile parameter");
                 response.sendError(400, "Missing required parameter: profile");
                 return null;
             }
-            logger.info(">>> Step 2: Parameters present");
 
             // Validate parameter format
             if (!ValidationUtil.isValidDeviceName(deviceName)) {
@@ -183,34 +240,34 @@ public class ONVIFRoutes {
                 response.sendError(400, "Invalid profile token format");
                 return null;
             }
-            logger.info(">>> Step 3: Parameters validated");
+            logger.debug("Parameters validated");
 
             // Get device
-            logger.info(">>> Step 4: Looking up device: {}", deviceName);
+            logger.debug("Looking up device: {}", deviceName);
             ONVIFDevice device = deviceExtensionPoint.getDevice(deviceName);
             if (device == null) {
                 logger.warn("Device not found: {}", deviceName);
                 response.sendError(404, "Device not found: " + deviceName);
                 return null;
             }
-            logger.info(">>> Step 5: Device found: {}", device);
+            logger.debug("Device found: {}", device);
 
             // Check device status
             String deviceStatus = device.getStatus();
-            logger.info(">>> Step 6: Device status: {}", deviceStatus);
+            logger.debug("Device status: {}", deviceStatus);
             if (!"Running".equals(deviceStatus) && !"Connected".equals(deviceStatus)) {
                 logger.warn("Device not in running state: {} - status: {}", deviceName, deviceStatus);
                 response.sendError(503, "Device is not connected: " + deviceStatus);
                 return null;
             }
-            logger.info(">>> Step 7: Device status OK");
+            logger.debug("Device status OK");
 
             // Get snapshot
-            logger.info(">>> Step 8: Requesting snapshot from device for profile: {}", profileToken);
+            logger.debug("Requesting snapshot from device for profile: {}", profileToken);
             byte[] snapshotBytes;
             try {
                 snapshotBytes = device.getClient().getSnapshot(profileToken);
-                logger.info(">>> Step 9: Snapshot received, size: {} bytes", snapshotBytes.length);
+                logger.debug("Snapshot received, size: {} bytes", snapshotBytes.length);
 
                 // CRITICAL: Validate that we actually received a JPEG image, not HTML or other content
                 if (snapshotBytes.length > 0) {
@@ -225,11 +282,11 @@ public class ONVIFRoutes {
                     boolean isHtml = contentStart.toLowerCase().contains("<!doctype") ||
                                     contentStart.toLowerCase().contains("<html");
 
-                    logger.info(">>> Step 9a: Content validation - isJPEG: {}, isHTML: {}", isJpeg, isHtml);
-                    logger.info(">>> Step 9b: First 100 bytes: {}", contentStart);
+                    logger.debug("Content validation - isJPEG: {}, isHTML: {}", isJpeg, isHtml);
+                    logger.debug("First 100 bytes: {}", contentStart);
 
                     if (!isJpeg || isHtml) {
-                        logger.error("========== CAMERA DOES NOT COMPLY WITH ONVIF SPECIFICATION ==========");
+                        logger.error("CAMERA DOES NOT COMPLY WITH ONVIF SPECIFICATION");
                         logger.error("Camera returned {} instead of JPEG image", isHtml ? "HTML login page" : "non-JPEG content");
                         logger.error("Camera: {}, Profile: {}", deviceName, profileToken);
                         logger.error("Snapshot URL: {}", device.getClient().getSnapshotUri(profileToken));
@@ -256,7 +313,7 @@ public class ONVIFRoutes {
             }
 
             // Send response
-            logger.info(">>> Step 10: Setting response headers");
+            logger.debug("Setting response headers");
             response.setContentType("image/jpeg");
             response.setContentLength(snapshotBytes.length);
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -270,11 +327,11 @@ public class ONVIFRoutes {
                 response.setHeader("Access-Control-Allow-Credentials", "true");
             }
 
-            logger.info(">>> Step 11: Writing {} bytes to response", snapshotBytes.length);
+            logger.debug("Writing {} bytes to response", snapshotBytes.length);
             response.getOutputStream().write(snapshotBytes);
 
             long duration = System.currentTimeMillis() - startTime;
-            logger.info(">>> Step 12: SUCCESS! Snapshot delivered - device: {}, profile: {}, size: {} bytes, duration: {} ms",
+            logger.info("Snapshot delivered - device: {}, profile: {}, size: {} bytes, duration: {} ms",
                 deviceName, profileToken, snapshotBytes.length, duration);
 
         } finally {
@@ -289,9 +346,9 @@ public class ONVIFRoutes {
      * URL: http://gateway:8088/data/onvif-driver/stream?device=DeviceName&profile=ProfileToken&fps=10
      */
     private Object handleStream(RequestContext context, HttpServletResponse response) throws Exception {
-        logger.info("========== handleStream() CALLED! ==========");
-        logger.info("Request URL: " + context.getRequest().getRequestURL());
-        logger.info("Query String: " + context.getRequest().getQueryString());
+        logger.debug("Stream request received");
+        logger.debug("Request URL: {}", context.getRequest().getRequestURL());
+        logger.debug("Query String: {}", context.getRequest().getQueryString());
 
         // v2.1.0: Authentication check
         if (!isAuthenticated(context.getRequest())) {
@@ -306,7 +363,7 @@ public class ONVIFRoutes {
 
         // Check if deviceExtensionPoint is available
         if (deviceExtensionPoint == null) {
-            logger.error("========== ERROR: deviceExtensionPoint is NULL in handler! ==========");
+            logger.error("ERROR: deviceExtensionPoint is NULL in handler!");
             response.sendError(500, "Device extension point not initialized");
             return null;
         }
@@ -538,18 +595,35 @@ public class ONVIFRoutes {
         // Method 2: Check for Basic Authentication header
         String authHeader = request.getHeader("Authorization");
         if (authHeader != null && authHeader.startsWith("Basic ")) {
+            // ⚠️ SECURITY WARNING: PLACEHOLDER AUTHENTICATION - NOT PRODUCTION READY
             // TODO: Validate credentials against Ignition user source
-            // For now, accept any Basic auth as a placeholder
-            logger.debug("Request has Basic authentication header");
+            // Current implementation accepts ANY username/password combination
+            // This must be fixed before production deployment!
+            //
+            // Required implementation:
+            // 1. Decode Base64 credentials
+            // 2. Validate against Ignition's GatewayContext.getUserSourceManager()
+            // 3. Log authentication attempts (success and failure)
+            // 4. Implement account lockout after N failed attempts
+            logger.warn("⚠️ PLACEHOLDER AUTH: Accepting ANY Basic Auth credentials (NOT SECURE)");
             return true;
         }
 
         // Method 3: Check for API key in query parameter (for programmatic access)
         String apiKey = request.getParameter("apiKey");
         if (apiKey != null && !apiKey.isEmpty()) {
+            // ⚠️ SECURITY WARNING: PLACEHOLDER AUTHENTICATION - NOT PRODUCTION READY
             // TODO: Validate API key against configured keys
-            // For now, just check it's not empty
-            logger.debug("Request has API key parameter");
+            // Current implementation accepts ANY non-empty API key value
+            // This must be fixed before production deployment!
+            //
+            // Required implementation:
+            // 1. Create module settings for authorized API keys
+            // 2. Store hashed keys (using BCrypt or similar)
+            // 3. Validate provided key against stored hashes
+            // 4. Log API key usage for auditing
+            // 5. Support key rotation and expiration
+            logger.warn("⚠️ PLACEHOLDER AUTH: Accepting ANY non-empty API key (NOT SECURE)");
             return true;
         }
 
@@ -601,18 +675,40 @@ public class ONVIFRoutes {
             return false;
         }
 
-        // Decrement after a delay (simple time-window implementation)
-        // In production, use a proper sliding window or token bucket
-        new Thread(() -> {
-            try {
-                Thread.sleep(60000);  // 1 minute window
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            ipRequests.decrementAndGet();
-        }).start();
+        // Schedule decrement after delay (fixed time-window implementation)
+        // Uses ScheduledExecutorService instead of creating unbounded threads
+        // Previous version created a new thread per request = resource leak under load
+        rateLimitExecutor.schedule(
+            () -> {
+                ipRequests.decrementAndGet();
+                // Clean up empty entries to prevent map bloat
+                if (ipRequests.get() == 0) {
+                    requestsPerIP.remove(clientIP);
+                }
+            },
+            60, TimeUnit.SECONDS
+        );
 
         return true;
+    }
+
+    /**
+     * Shuts down the rate limiting executor service.
+     * Should be called when module is unloaded to prevent resource leaks.
+     */
+    public static void shutdown() {
+        logger.info("Shutting down rate limiting executor...");
+        rateLimitExecutor.shutdown();
+        try {
+            if (!rateLimitExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                rateLimitExecutor.shutdownNow();
+                logger.warn("Rate limiting executor did not terminate gracefully");
+            }
+        } catch (InterruptedException e) {
+            rateLimitExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+        logger.info("Rate limiting executor shut down complete");
     }
 
     /**

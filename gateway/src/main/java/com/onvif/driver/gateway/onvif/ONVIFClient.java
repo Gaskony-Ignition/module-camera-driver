@@ -129,14 +129,18 @@ public class ONVIFClient implements Closeable {
                 return SSLContext.getDefault();
 
             case TRUST_FIRST_USE:
-                // TODO: Implement certificate pinning on first connection
-                // For now, fall back to accepting self-signed
-                logger.warn("TRUST_FIRST_USE mode not fully implemented - using INSECURE mode");
-                // Fall through to INSECURE
+                // TRUST_FIRST_USE mode is not implemented
+                // Certificate pinning would require persistent storage and complexity
+                // Users should choose either STRICT (production) or INSECURE (development)
+                throw new IllegalArgumentException(
+                    "TRUST_FIRST_USE SSL mode is not implemented. " +
+                    "Please use STRICT mode (recommended for production) or INSECURE mode (development only). " +
+                    "Planned for future release."
+                );
 
             case INSECURE:
             default:
-                // Accept all certificates (common in camera deployments)
+                // Accept all certificates (common in camera deployments with self-signed certs)
                 logger.warn("Using INSECURE SSL validation - accepting any certificate (NOT recommended for production)");
                 TrustStrategy acceptingTrustStrategy = (X509Certificate[] chain, String authType) -> true;
                 return SSLContextBuilder.create()

@@ -28,17 +28,19 @@ import java.util.Map;
  *
  * This device:
  * 1. Connects to an ONVIF-compatible IP camera/device via network
- * 2. Authenticates using provided credentials
- * 3. Discovers available ONVIF services
+ * 2. Authenticates using WS-UsernameToken with SHA-1 digest
+ * 3. Discovers available ONVIF services via GetServices
  * 4. Creates hierarchical OPC-UA address space with device data
  * 5. Polls device for updates at configured interval
+ * 6. Supports PTZ control, media profiles, and device information
  *
- * TODO: Implement ONVIF protocol communication
- * - SOAP/XML requests for ONVIF services
- * - WS-Discovery for service discovery
- * - Authentication (WS-UsernameToken)
- * - Parse ONVIF responses
- * - Create OPC-UA nodes from ONVIF data
+ * ONVIF Protocol Features:
+ * - SOAP/XML requests for ONVIF services (Device, Media, PTZ, Imaging, Analytics)
+ * - WS-UsernameToken authentication with nonce and timestamp
+ * - Secure XML parsing with XXE protection
+ * - GetDeviceInformation, GetMediaProfiles, GetPTZStatus, PTZ control
+ * - Auto-reconnect with exponential backoff
+ * - Configurable SSL/TLS validation modes
  */
 public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Device {
 

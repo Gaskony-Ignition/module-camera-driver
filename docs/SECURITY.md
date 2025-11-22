@@ -167,13 +167,25 @@ ONVIF WS-UsernameToken specification **requires** SHA-1 for password digests. Th
 
 ## Vulnerability Disclosure
 
-If you discover a security vulnerability, please report it to:
+If you discover a security vulnerability, please report it responsibly:
 
-- **Email**: [Your security contact email]
-- **GitHub Issues**: Mark as "Security" label
-- **Response Time**: We aim to respond within 48 hours
+### Reporting Security Issues
 
-**Please do NOT** publicly disclose vulnerabilities until a patch is available.
+1. **GitHub Security Advisories** (Preferred):
+   - Visit: https://github.com/nigelgwork/ignition-ONVIF-driver/security/advisories
+   - Click "Report a vulnerability"
+   - Provide detailed description of the vulnerability
+
+2. **GitHub Issues**:
+   - Create an issue at: https://github.com/nigelgwork/ignition-ONVIF-driver/issues
+   - Mark with "Security" label
+   - Include version number, steps to reproduce, and impact assessment
+
+3. **Email**: For sensitive disclosures, contact via GitHub profile
+
+**Response Time**: We aim to respond within 48 hours
+
+**Please do NOT** publicly disclose vulnerabilities until a patch is available and users have been given reasonable time to update (typically 90 days).
 
 ## Security Audit History
 

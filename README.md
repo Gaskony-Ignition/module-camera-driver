@@ -199,8 +199,8 @@ When testing in Docker (like the Ignition gateway):
 
 ## Git Repository
 
-- **Location**: `/modules/ignition-ONVIF-driver/`
-- **Remote**: (To be added when ready to push to GitHub)
+- **Local Path**: `/modules/ignition-ONVIF-driver/`
+- **Remote**: https://github.com/nigelgwork/ignition-ONVIF-driver.git
 
 ## Version History
 
@@ -214,8 +214,21 @@ See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
 
 ## License
 
-(Add license information)
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Contact
+Copyright (c) 2025 Nigel Gwork
 
-(Add contact/author information)
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Project Links
+
+- **GitHub Repository**: https://github.com/nigelgwork/ignition-ONVIF-driver
+- **Issue Tracker**: https://github.com/nigelgwork/ignition-ONVIF-driver/issues
+- **Security Policy**: See [SECURITY.md](docs/SECURITY.md) for reporting security vulnerabilities
+
+## Author
+
+**Nigel Gwork**
+- GitHub: [@nigelgwork](https://github.com/nigelgwork)
