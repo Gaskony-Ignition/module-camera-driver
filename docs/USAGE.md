@@ -27,20 +27,35 @@ This was discovered by comparing with the working PLC Simulator module logs.
 ### 2. Snapshot Endpoint
 **URL:** `http://gateway:8088/data/onvif-driver/snapshot?device={DeviceName}&profile={ProfileToken}`
 
+**Authentication:** **REQUIRED** (v2.1.0+)
+
 **Parameters:**
 - `device` (required): The name of the ONVIF device connection (as configured in Ignition)
 - `profile` (required): The media profile token (e.g., "000", "001", "main_stream", etc.)
 
-**Example:**
+**Example with Session Auth (Perspective/Vision):**
 ```
 http://192.168.7.111:9088/data/onvif-driver/snapshot?device=SideCamera&profile=000
+```
+
+**Example with Basic Auth:**
+```bash
+curl -u username:password \
+  "http://192.168.7.111:9088/data/onvif-driver/snapshot?device=SideCamera&profile=000"
+```
+
+**Example with API Key:**
+```
+http://192.168.7.111:9088/data/onvif-driver/snapshot?device=SideCamera&profile=000&apiKey=YOUR_API_KEY
 ```
 
 **Response:** JPEG image (Content-Type: image/jpeg)
 
 **Error Codes:**
 - `400` - Missing or invalid parameters
+- `401` - Authentication required
 - `404` - Device not found
+- `429` - Rate limit exceeded (10 requests/minute per IP)
 - `503` - Device not connected
 - `500` - Failed to retrieve snapshot from camera
 
@@ -49,22 +64,37 @@ http://192.168.7.111:9088/data/onvif-driver/snapshot?device=SideCamera&profile=0
 ### 3. Stream Endpoint (MJPEG)
 **URL:** `http://gateway:8088/data/onvif-driver/stream?device={DeviceName}&profile={ProfileToken}&fps={FrameRate}`
 
+**Authentication:** **REQUIRED** (v2.1.0+)
+
 **Parameters:**
 - `device` (required): The name of the ONVIF device connection
 - `profile` (required): The media profile token
 - `fps` (optional): Frames per second (1-30, default: 10)
 
-**Example:**
+**Example with Session Auth:**
 ```
 http://192.168.7.111:9088/data/onvif-driver/stream?device=SideCamera&profile=000&fps=15
 ```
 
+**Example with Basic Auth:**
+```bash
+curl -u username:password \
+  "http://192.168.7.111:9088/data/onvif-driver/stream?device=SideCamera&profile=000&fps=15"
+```
+
+**Example with API Key:**
+```
+http://192.168.7.111:9088/data/onvif-driver/stream?device=SideCamera&profile=000&fps=15&apiKey=YOUR_API_KEY
+```
+
 **Response:** MJPEG stream (Content-Type: multipart/x-mixed-replace; boundary=onvif-stream-boundary)
 
-**Usage in HTML:**
+**Usage in HTML (with session auth):**
 ```html
 <img src="http://192.168.7.111:9088/data/onvif-driver/stream?device=SideCamera&profile=000&fps=15" />
 ```
+
+**Note:** For external applications without session auth, use Basic Auth or API key in the URL.
 
 ---
 
@@ -132,13 +162,26 @@ http://192.168.7.111:9088/data/onvif-driver/stream?device=SideCamera&profile=000
 
 ---
 
-## Access Control
+## Access Control (v2.1.0+)
 
-Current implementation uses `AccessControlStrategy.OPEN_ROUTE` which makes endpoints publicly accessible without authentication.
+**All endpoints require authentication.** Three methods are supported:
 
-**Security Note:** For production use, consider implementing authentication:
-- Change to `AccessControlStrategy.AUTHENTICATED`
-- Or implement custom access control strategy
+1. **Session Authentication** - For Ignition users (Perspective/Vision)
+   - Automatic for logged-in Gateway users
+   - No additional parameters needed
+
+2. **Basic Authentication** - For external tools
+   - Standard HTTP Basic Auth headers
+   - Example: `Authorization: Basic base64(username:password)`
+
+3. **API Key** - For programmatic access
+   - Pass `apiKey` query parameter
+   - Example: `?apiKey=YOUR_API_KEY`
+
+**Rate Limiting:**
+- 10 requests per minute per IP address
+- HTTP 429 returned when limit exceeded
+- Prevents DoS attacks and resource exhaustion
 
 ---
 

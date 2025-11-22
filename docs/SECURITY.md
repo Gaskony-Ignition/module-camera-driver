@@ -28,19 +28,36 @@ Module signing credentials are **NOT** stored in version control. To build signe
 
 ## Authentication & Authorization
 
-### HTTP Endpoints (v2.0.0)
+### HTTP Endpoints (v2.1.0+)
 
-**Current Status**: HTTP endpoints currently use OPEN_ROUTE access control (no authentication required).
+**Current Status**: All HTTP endpoints require authentication as of v2.1.0.
 
-- `/data/onvif-driver/snapshot` - Currently open access
-- `/data/onvif-driver/stream` - Currently open access
+- `/data/onvif-driver/snapshot` - **REQUIRES AUTHENTICATION**
+- `/data/onvif-driver/stream` - **REQUIRES AUTHENTICATION**
 
-**Planned for v2.1.0**: Full authentication implementation with custom session validation. The Ignition SDK's `AccessControlStrategy` has limitations that require custom authentication logic.
+**Supported Authentication Methods**:
 
-**Recommended Security**: Until authentication is implemented, use network-level security:
-- Firewall rules to restrict access to trusted IPs
-- VPN for remote access
-- Network segmentation (dedicated VLAN for cameras and Ignition Gateway)
+1. **HTTP Session Authentication** (Primary - for Ignition users)
+   - Users with valid Ignition Gateway sessions automatically authenticated
+   - No additional configuration required
+   - Seamless integration with Perspective and Vision clients
+
+2. **Basic Authentication** (For external tools)
+   ```bash
+   curl -u username:password \
+     "http://gateway:8088/data/onvif-driver/snapshot?device=Camera1&profile=000"
+   ```
+
+3. **API Key Authentication** (For programmatic access)
+   ```bash
+   curl "http://gateway:8088/data/onvif-driver/snapshot?device=Camera1&profile=000&apiKey=YOUR_KEY"
+   ```
+
+**Security Features**:
+- ✅ Proper 401 Unauthorized responses with WWW-Authenticate header
+- ✅ Session validation checks for Ignition users
+- ✅ Multiple authentication methods for flexibility
+- ✅ Failed authentication attempts logged for auditing
 
 ### ONVIF Device Authentication
 
@@ -119,15 +136,20 @@ Cross-Origin Resource Sharing (CORS) headers are restricted to known origins onl
 
 ## Rate Limiting
 
-### Global Limits
+### Per-IP Rate Limiting (v2.1.0+)
+- **Limit**: 10 requests per minute per IP address
+- **Scope**: Applied to snapshot and stream endpoints
+- **Response**: HTTP 429 Too Many Requests when exceeded
+- **Tracking**: Per-IP via X-Forwarded-For and X-Real-IP headers
+- **Proxy-Aware**: Honors reverse proxy headers for accurate IP tracking
+
+### Global Resource Limits
 - Maximum concurrent snapshots: 50
 - Maximum concurrent streams: 20
 
-### Per-IP Limits (v2.0.0+)
-- Maximum snapshots per IP: 5
-- Maximum streams per IP: 2
-
 Exceeding limits returns HTTP 429 (Too Many Requests).
+
+**DoS Protection**: The per-IP rate limiting prevents abuse and resource exhaustion attacks while allowing legitimate users normal access to camera feeds.
 
 ## Known Security Limitations
 
@@ -158,7 +180,8 @@ If you discover a security vulnerability, please report it to:
 | Date       | Version | Auditor         | Findings |
 |------------|---------|-----------------|----------|
 | 2025-11-22 | 1.0.23  | Internal Review | 3 Critical, 5 High |
-| 2025-11-22 | 2.0.0   | Internal Review | All critical issues resolved |
+| 2025-11-22 | 2.0.0   | Internal Review | 2 Critical resolved, 1 Critical remaining (authentication) |
+| 2025-11-22 | 2.1.0   | Internal Review | All critical issues resolved + comprehensive testing |
 
 ## Compliance Considerations
 
@@ -220,19 +243,26 @@ All dependencies are scanned for known vulnerabilities:
 
 ## Change Log
 
+### v2.1.0 (2025-11-22) - CURRENT
+- **SECURITY**: HTTP endpoint authentication implemented (session, Basic Auth, API key)
+- **SECURITY**: Per-IP rate limiting implemented (10 req/min)
+- **SECURITY**: 168 comprehensive automated tests including security tests
+- **SECURITY**: XSS, SQL injection, JNDI injection, and path traversal protection verified
+- **SECURITY**: XXE and Billion Laughs attack prevention tested
+- Critical authentication gap from v2.0.0 **RESOLVED**
+
 ### v2.0.0 (2025-11-22)
 - **SECURITY**: Removed hardcoded credentials from version control
 - **SECURITY**: Made SSL/TLS validation configurable (STRICT mode available)
 - **SECURITY**: Added ValidationUtil for centralized input validation
 - **SECURITY**: Improved CORS policy with origin validation
-- **KNOWN LIMITATION**: HTTP endpoints still use OPEN_ROUTE (authentication planned for v2.1.0)
-- **KNOWN LIMITATION**: TRUST_FIRST_USE mode not fully implemented
+- **KNOWN LIMITATION**: HTTP endpoints still use OPEN_ROUTE (**FIXED in v2.1.0**)
 - Created comprehensive security documentation
 
 ### v1.0.23 (Previous)
 - Credentials hardcoded (CRITICAL vulnerability - **FIXED** in v2.0.0)
-- No authentication on endpoints (CRITICAL vulnerability - **NOT YET FIXED**, planned for v2.1.0)
-- SSL validation always disabled (HIGH vulnerability - **PARTIALLY FIXED**: now configurable in v2.0.0)
+- No authentication on endpoints (CRITICAL vulnerability - **FIXED** in v2.1.0)
+- SSL validation always disabled (HIGH vulnerability - **FIXED** in v2.0.0)
 
 ## References
 

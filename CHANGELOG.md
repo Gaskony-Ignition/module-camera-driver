@@ -91,7 +91,7 @@ If upgrading from v2.0.0:
   - TRUST_FIRST_USE: Trust certificate on first connection (planned for future)
   - INSECURE: Accept all certificates (backward compatibility mode)
 - Environment-based credential management for module signing
-- Created comprehensive SECURITY.md documentation
+- Created comprehensive docs/SECURITY.md documentation
 - Added ValidationUtil for centralized input validation
 
 ### BREAKING CHANGES
@@ -104,7 +104,7 @@ If upgrading from v2.0.0:
 - SSL validation configuration field in device configuration UI
 - ValidationUtil class for centralized input validation (eliminates code duplication)
 - CLAUDE_CONTEXT.md for AI-assisted development
-- Comprehensive SECURITY.md documentation
+- Comprehensive docs/SECURITY.md documentation
 - gradle.properties.template for secure credential setup
 - CORS origin validation helper methods
 
@@ -219,7 +219,7 @@ If upgrading from v2.0.0:
 - HTTPS certificate validation with self-signed certificate support
 - Thread-safe error counting using AtomicInteger in ONVIFPoller
 - Comprehensive security hardening across all network operations
-- IMPLEMENTATION_STATUS.md document tracking project completion
+- docs/IMPLEMENTATION_STATUS.md document tracking project completion
 - Proper @SuppressWarnings annotations for SDK interface compliance
 
 ### Changed
@@ -229,7 +229,7 @@ If upgrading from v2.0.0:
 - All SOAP requests now escape user-controlled data to prevent XML injection
 - SSL/TLS configuration added to HTTP client for secure HTTPS connections
 - Updated README.md to reflect Phase 1-6 completion status
-- Updated TESTING.md with correct version numbers and feature list
+- Updated docs/TESTING.md with correct version numbers and feature list
 
 ### Fixed
 - Critical XXE vulnerability in DocumentBuilderFactory configuration

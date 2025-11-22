@@ -314,7 +314,7 @@ String clientIP = getClientIP(request);
 
 All documentation updated to reflect v2.1.0:
 - README.md - Authentication requirements
-- SECURITY.md - Authentication methods
+- docs/SECURITY.md - Authentication methods
 - CHANGELOG.md - Comprehensive v2.1.0 entry
 - This file - RELEASE_NOTES_v2.1.0.md
 
@@ -434,7 +434,7 @@ All documentation updated to reflect v2.1.0:
 
 ### Resources
 - **CHANGELOG.md**: Complete version history
-- **SECURITY.md**: Security architecture and best practices
+- **docs/SECURITY.md**: Security architecture and best practices
 - **README.md**: Getting started guide
 - **CLAUDE_CONTEXT.md**: Developer context
 
@@ -469,7 +469,7 @@ For upgrading from v2.0.0:
 - [ ] Test API key authentication (if needed)
 - [ ] Verify rate limiting doesn't impact normal usage
 - [ ] Update any custom scripts to include authentication
-- [ ] Review SECURITY.md for new authentication methods
+- [ ] Review docs/SECURITY.md for new authentication methods
 - [ ] Test all cameras still connect and stream properly
 - [ ] Monitor Gateway logs for authentication failures
 - [ ] Document API keys if using programmatic access

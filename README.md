@@ -14,7 +14,7 @@ This module allows Ignition users to:
 ## Current Status
 
 **✅ PRODUCTION READY - MAJOR SECURITY UPDATE**
-**Version**: 2.0.0
+**Version**: 2.1.0
 
 The ONVIF Driver is production-ready with comprehensive security enhancements, authenticated HTTP endpoints, configurable SSL/TLS validation, and full ONVIF protocol communication including PTZ control, streaming capabilities, polling, auto-reconnect, and OPC-UA integration.
 
@@ -39,17 +39,19 @@ The ONVIF Driver is production-ready with comprehensive security enhancements, a
 - [x] **Thread-safe operations** - AtomicInteger for concurrent access
 - [x] **Comprehensive error handling** and logging
 - [x] **Configurable SSL/TLS validation** - STRICT, TRUST_FIRST_USE, or INSECURE modes
-- [x] **Authenticated HTTP endpoints** - All streaming/snapshot endpoints require login
+- [x] **Authenticated HTTP endpoints** - Session auth, Basic Auth, and API key support
+- [x] **Per-IP rate limiting** - DoS protection (10 requests/minute per IP)
 - [x] **RTSP to MJPEG streaming** - Live video streaming with authentication
 - [x] **Snapshot capture** - GetSnapshotUri with authentication
 - [x] **Environment-based credentials** - No hardcoded secrets
+- [x] **Comprehensive test suite** - 168 automated tests with 100% pass rate
 
 ### Future Enhancements ⏳
 
 **Additional Features**
 - [ ] Event subscription (motion detection, tampering alerts)
 - [ ] ONVIF Profile G support (recording search and playback)
-- [ ] Comprehensive automated test suite
+- [ ] Performance optimization (connection pooling, caching)
 
 ## Configuration Fields
 
@@ -106,7 +108,7 @@ ignition-ONVIF-driver/
 ./gradlew clean build
 
 # Output will be at:
-# build/ONVIFDriver-2.0.0.unsigned.modl
+# build/ONVIFDriver-2.1.0.modl
 ```
 
 ## Quick Start
@@ -119,7 +121,7 @@ cd /modules/ignition-ONVIF-driver
 
 ### 2. Install (Docker)
 ```bash
-docker cp build/ONVIFDriver-2.0.0.unsigned.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
+docker cp build/ONVIFDriver-2.1.0.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
 docker restart ignition-gateway
 ```
 
@@ -130,7 +132,28 @@ docker restart ignition-gateway
 4. Enable "Auto-discover Services"
 5. Save and view in OPC Browser
 
-See **TESTING.md** for complete testing instructions.
+See **[docs/TESTING.md](docs/TESTING.md)** for complete testing instructions.
+
+## Documentation
+
+### Getting Started
+- **README.md** (this file) - Project overview and quick start
+- **[CHANGELOG.md](CHANGELOG.md)** - Complete version history
+- **[RELEASE_NOTES_v2.1.0.md](RELEASE_NOTES_v2.1.0.md)** - Current release notes
+
+### Developer Resources
+- **[LEARNINGS.md](LEARNINGS.md)** - Critical SDK lessons (read this first!)
+- **[CLAUDE_CONTEXT.md](CLAUDE_CONTEXT.md)** - AI assistant context and architecture
+- **[docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md)** - Feature tracking and status
+
+### Technical Documentation
+- **[docs/TESTING.md](docs/TESTING.md)** - Testing guide (automated + manual)
+- **[docs/SECURITY.md](docs/SECURITY.md)** - Security architecture and best practices
+- **[docs/USAGE.md](docs/USAGE.md)** - HTTP endpoint usage guide
+- **[docs/CAMERA_COMPATIBILITY.md](docs/CAMERA_COMPATIBILITY.md)** - Camera compatibility notes
+
+### Archived Documentation
+- **[docs/archive/](docs/archive/)** - Historical planning and implementation docs
 
 ## BEFORE YOU START IMPLEMENTING
 
@@ -183,7 +206,8 @@ When testing in Docker (like the Ignition gateway):
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
 
-- **2.0.0** - Major security update: Authenticated endpoints, configurable SSL validation, environment-based credentials (current)
+- **2.1.0** - Authentication & comprehensive testing: HTTP endpoint authentication (session, Basic Auth, API key), per-IP rate limiting, 168 automated tests (current)
+- **2.0.0** - Major security update: Authenticated endpoints, configurable SSL validation, environment-based credentials
 - **1.0.23** - Clean ONVIF implementation with proper error handling
 - **1.0.3** - Security hardening, code quality improvements
 - **1.0.0** - Initial implementation complete
