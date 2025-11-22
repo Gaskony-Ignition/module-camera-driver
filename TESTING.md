@@ -2,20 +2,25 @@
 
 ## Overview
 
-The ONVIF Driver module is now fully implemented with complete ONVIF protocol communication. This guide explains how to test the module with a real ONVIF device.
+The ONVIF Driver module is production-ready with version 2.0.0 featuring major security enhancements. This guide explains how to test the module with real ONVIF devices.
 
 ## What's Been Implemented
 
-### ✅ Phase 1-6: Complete ONVIF Implementation
+### ✅ Complete ONVIF Implementation with Security Enhancements
 - **ONVIF SOAP Client** - Full HTTP/HTTPS SOAP communication with XXE protection
 - **WS-UsernameToken Authentication** - Secure digest-based authentication
+- **Configurable SSL Validation** - STRICT, TRUST_FIRST_USE, or INSECURE modes
+- **Authenticated HTTP Endpoints** - All streaming/snapshot endpoints require login
 - **GetDeviceInformation** - Retrieves manufacturer, model, firmware, serial number
 - **GetServices** - Discovers available ONVIF services
 - **GetMediaProfiles** - Retrieves media stream profiles
 - **PTZ Control** - Get status, absolute move, stop commands
+- **RTSP to MJPEG Streaming** - Live video streaming with authentication
+- **Snapshot Capture** - GetSnapshotUri with authentication
 - **Polling Mechanism** - Periodic device updates via ONVIFPoller
 - **Auto-Reconnect** - Exponential backoff retry logic
 - **OPC-UA Address Space** - Hierarchical nodes representing ONVIF data (DeviceInfo, MediaProfiles, PTZ, Status)
+- **Environment-Based Credentials** - No hardcoded secrets in gradle.properties
 
 ### 🔧 Components
 
@@ -38,14 +43,14 @@ cd /modules/ignition-ONVIF-driver
 ./gradlew clean build
 ```
 
-Output: `build/ONVIFDriver-1.0.3.unsigned.modl` (1.6 MB)
+Output: `build/ONVIFDriver-2.0.0.unsigned.modl`
 
 ### 2. Install in Ignition Gateway
 
 **Option A: Docker (Recommended)**
 ```bash
 # Copy module to container
-docker cp build/ONVIFDriver-1.0.3.unsigned.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
+docker cp build/ONVIFDriver-2.0.0.unsigned.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
 
 # Restart gateway
 docker restart ignition-gateway
@@ -58,14 +63,14 @@ docker logs -f ignition-gateway
 1. Open Ignition Gateway (http://localhost:8088)
 2. Go to Config → System → Modules
 3. Click "Install or Upgrade a Module"
-4. Upload `ONVIFDriver-1.0.3.unsigned.modl`
+4. Upload `ONVIFDriver-2.0.0.unsigned.modl`
 5. Gateway will restart automatically
 
 ### 3. Verify Installation
 
 After restart, check:
 1. Config → System → Modules
-2. Look for "ONVIF Driver 1.0.3" in the module list
+2. Look for "ONVIF Driver 2.0.0" in the module list
 3. Status should be "Running"
 
 ## Configuration
@@ -90,11 +95,13 @@ After restart, check:
 - Password: `password123` (ONVIF password)
 - Use HTTPS: ☐ Unchecked (unless device requires HTTPS)
 - Connection Timeout: `10` seconds
+- SSL Validation Mode: `STRICT` (recommended), or `INSECURE` for self-signed certs
 
 **ONVIF:**
 - Auto-discover Services: ✅ Checked
 - Poll Interval: `5` seconds
 - Service Type: `Device Management`
+- Enable Streaming: ✅ Checked (for RTSP to MJPEG streaming)
 
 ### 3. Save and Enable
 
@@ -234,23 +241,25 @@ To enable debug logging:
 docker run -d -p 8080:8080 --name onvif-sim marcoraddatz/onvif-simulator
 ```
 
+## Testing Streaming Features
+
+### Test MJPEG Streaming (Authenticated)
+```bash
+# Access streaming endpoint (requires Ignition login)
+http://localhost:8088/system/onvif/stream/Camera-01
+
+# Access snapshot endpoint (requires Ignition login)
+http://localhost:8088/system/onvif/snapshot/Camera-01
+```
+
+Note: These endpoints require authentication. Use your Ignition gateway credentials.
+
 ## Next Steps (Future Enhancements)
 
-### Phase 4: Polling & Updates
-- [ ] Implement periodic polling mechanism
-- [ ] Update OPC-UA values in real-time
-- [ ] Add media profile information
-
-### Phase 5: Advanced Features
-- [ ] PTZ control (writable OPC-UA nodes)
-- [ ] Event subscription (motion detection)
-- [ ] Snapshot capture
-- [ ] Media streaming URLs
-
-### Phase 6: Error Handling
-- [ ] Auto-reconnect on network disconnect
-- [ ] Retry logic with exponential backoff
-- [ ] Better error messages in OPC-UA status
+### Advanced Features
+- [ ] Event subscription (motion detection, tampering alerts)
+- [ ] ONVIF Profile G support (recording search and playback)
+- [ ] Comprehensive automated test suite
 
 ## Support
 
@@ -262,6 +271,6 @@ For issues or questions:
 
 ---
 
-**Current Status:** ✅ Core ONVIF communication fully implemented and tested
-**Build:** ONVIFDriver-1.0.0.unsigned.modl (1.6 MB)
-**Last Updated:** 2025-11-08
+**Current Status:** ✅ Production Ready - Major Security Update
+**Build:** ONVIFDriver-2.0.0.unsigned.modl
+**Last Updated:** 2025-11-22

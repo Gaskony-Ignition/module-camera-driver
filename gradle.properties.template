@@ -1,0 +1,15 @@
+# Ignition SDK version
+ignition.sdk.version=8.3.0
+
+# Module signing configuration
+# SECURITY: Copy this file to gradle.properties and set actual values
+# DO NOT commit gradle.properties with real credentials to version control
+ignition.signing.keystoreFile=onvif-driver.jks
+ignition.signing.keystorePassword=${KEYSTORE_PASSWORD}
+ignition.signing.certFile=onvif-driver.der
+ignition.signing.certPassword=${CERT_PASSWORD}
+ignition.signing.certAlias=onvif-driver
+
+# Gradle daemon settings
+org.gradle.daemon=true
+org.gradle.jvmargs=-Xmx2048M

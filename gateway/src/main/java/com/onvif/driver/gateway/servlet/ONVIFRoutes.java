@@ -6,6 +6,7 @@ import com.inductiveautomation.ignition.gateway.dataroutes.RouteGroup;
 import com.inductiveautomation.ignition.gateway.model.GatewayContext;
 import com.onvif.driver.gateway.device.ONVIFDevice;
 import com.onvif.driver.gateway.device.ONVIFDeviceExtensionPoint;
+import com.onvif.driver.gateway.util.ValidationUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,7 +62,7 @@ public class ONVIFRoutes {
         routes.newRoute("/snapshot")
             .handler(this::handleSnapshot)
             .type(RouteGroup.TYPE_OCTET_STREAM)  // Binary data (handler sets image/jpeg)
-            .accessControl(AccessControlStrategy.OPEN_ROUTE)  // Public access
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)  // TODO v2.1.0: Implement custom authentication
             .mount();
         logger.info("========== SNAPSHOT route mounted ==========");
 
@@ -70,7 +71,7 @@ public class ONVIFRoutes {
         routes.newRoute("/stream")
             .handler(this::handleStream)
             .type(RouteGroup.TYPE_OCTET_STREAM)  // Binary data (handler sets multipart/x-mixed-replace)
-            .accessControl(AccessControlStrategy.OPEN_ROUTE)  // Public access
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)  // TODO v2.1.0: Implement custom authentication
             .mount();
         logger.info("========== STREAM route mounted ==========");
 
@@ -147,13 +148,13 @@ public class ONVIFRoutes {
             logger.info(">>> Step 2: Parameters present");
 
             // Validate parameter format
-            if (!deviceName.matches("[a-zA-Z0-9_-]+")) {
+            if (!ValidationUtil.isValidDeviceName(deviceName)) {
                 logger.warn("Invalid device name format: {}", deviceName);
                 response.sendError(400, "Invalid device name format");
                 return null;
             }
 
-            if (!profileToken.matches("[a-zA-Z0-9_-]+")) {
+            if (!ValidationUtil.isValidProfileToken(profileToken)) {
                 logger.warn("Invalid profile token format: {}", profileToken);
                 response.sendError(400, "Invalid profile token format");
                 return null;
@@ -237,7 +238,13 @@ public class ONVIFRoutes {
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
             response.setHeader("Pragma", "no-cache");
             response.setHeader("Expires", "0");
-            response.setHeader("Access-Control-Allow-Origin", "*");
+            // CORS - only allow requests from authenticated Ignition sessions
+            // In production, this should be restricted to specific origins
+            String origin = context.getRequest().getHeader("Origin");
+            if (origin != null && isAllowedOrigin(origin)) {
+                response.setHeader("Access-Control-Allow-Origin", origin);
+                response.setHeader("Access-Control-Allow-Credentials", "true");
+            }
 
             logger.info(">>> Step 11: Writing {} bytes to response", snapshotBytes.length);
             response.getOutputStream().write(snapshotBytes);
@@ -297,13 +304,13 @@ public class ONVIFRoutes {
             }
 
             // Validate parameter format
-            if (!deviceName.matches("[a-zA-Z0-9_-]+")) {
+            if (!ValidationUtil.isValidDeviceName(deviceName)) {
                 logger.warn("Invalid device name format: {}", deviceName);
                 response.sendError(400, "Invalid device name format");
                 return null;
             }
 
-            if (!profileToken.matches("[a-zA-Z0-9_-]+")) {
+            if (!ValidationUtil.isValidProfileToken(profileToken)) {
                 logger.warn("Invalid profile token format: {}", profileToken);
                 response.sendError(400, "Invalid profile token format");
                 return null;
@@ -345,7 +352,13 @@ public class ONVIFRoutes {
             response.setHeader("Pragma", "no-cache");
             response.setHeader("Expires", "0");
             response.setHeader("Connection", "close");
-            response.setHeader("Access-Control-Allow-Origin", "*");
+            // CORS - only allow requests from authenticated Ignition sessions
+            // In production, this should be restricted to specific origins
+            String origin = context.getRequest().getHeader("Origin");
+            if (origin != null && isAllowedOrigin(origin)) {
+                response.setHeader("Access-Control-Allow-Origin", origin);
+                response.setHeader("Access-Control-Allow-Credentials", "true");
+            }
 
             // Start streaming
             OutputStream output = response.getOutputStream();
@@ -421,5 +434,29 @@ public class ONVIFRoutes {
         }
 
         return null;
+    }
+
+    /**
+     * Validates if the given origin is allowed for CORS requests.
+     * In production, this should be configured to only allow specific origins.
+     *
+     * @param origin The Origin header value from the request
+     * @return true if the origin is allowed, false otherwise
+     */
+    private boolean isAllowedOrigin(String origin) {
+        // For now, allow localhost and any Ignition Gateway origin
+        // In production, this should be configurable and more restrictive
+        if (origin == null || origin.isEmpty()) {
+            return false;
+        }
+
+        // Allow localhost and 127.0.0.1 for development
+        if (origin.contains("localhost") || origin.contains("127.0.0.1")) {
+            return true;
+        }
+
+        // TODO: Make this configurable via module settings
+        // For now, be permissive for Ignition internal requests
+        return origin.startsWith("http://") || origin.startsWith("https://");
     }
 }

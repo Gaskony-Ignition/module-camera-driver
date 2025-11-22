@@ -85,8 +85,45 @@ public record ONVIFDeviceConfig(General general, Connection connection, ONVIFSet
         @FormField(FormFieldType.NUMBER)
         @Description("Timeout for connecting to the device")
         @DefaultValue("10")
-        int timeout
+        int timeout,
+
+        @FormCategory("CONNECTION")
+        @Label("SSL/TLS Validation Mode")
+        @FormField(FormFieldType.SELECT)
+        @Description("Certificate validation mode for HTTPS connections (STRICT recommended for production)")
+        @DefaultValue("STRICT")
+        SslValidationMode sslValidationMode
     ) {}
+
+    /**
+     * SSL/TLS certificate validation modes.
+     */
+    public enum SslValidationMode {
+        STRICT("strict", "Strict - Full certificate validation (production)"),
+        TRUST_FIRST_USE("trust_first", "Trust First Use - Accept and pin self-signed on first connection"),
+        INSECURE("insecure", "Insecure - Accept any certificate (development only)");
+
+        private final String key;
+        private final String displayName;
+
+        SslValidationMode(String key, String displayName) {
+            this.key = key;
+            this.displayName = displayName;
+        }
+
+        public String getKey() {
+            return key;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
+
+        @Override
+        public String toString() {
+            return displayName;
+        }
+    }
 
     /**
      * ONVIF-specific settings.

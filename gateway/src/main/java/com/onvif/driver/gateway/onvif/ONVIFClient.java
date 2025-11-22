@@ -1,5 +1,6 @@
 package com.onvif.driver.gateway.onvif;
 
+import com.onvif.driver.gateway.device.ONVIFDeviceConfig.SslValidationMode;
 import com.onvif.driver.gateway.onvif.util.XmlUtil;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -44,6 +45,7 @@ public class ONVIFClient implements Closeable {
     private final String username;
     private final String password;
     private final int timeout;
+    private final SslValidationMode sslValidationMode;
     private final CloseableHttpClient httpClient;
 
     // Service endpoints (discovered dynamically)
@@ -59,14 +61,16 @@ public class ONVIFClient implements Closeable {
      * @param password ONVIF password
      * @param useHttps Use HTTPS instead of HTTP
      * @param timeout Connection timeout in seconds
+     * @param sslValidationMode SSL/TLS certificate validation mode
      */
     public ONVIFClient(String host, int port, String username, String password,
-                      boolean useHttps, int timeout) {
+                      boolean useHttps, int timeout, SslValidationMode sslValidationMode) {
         String protocol = useHttps ? "https" : "http";
         this.deviceUrl = String.format("%s://%s:%d/onvif/device_service", protocol, host, port);
         this.username = username;
         this.password = password;
         this.timeout = timeout * 1000; // Convert to milliseconds
+        this.sslValidationMode = sslValidationMode != null ? sslValidationMode : SslValidationMode.STRICT;
 
         // Configure HTTP client
         RequestConfig requestConfig = RequestConfig.custom()
@@ -88,17 +92,18 @@ public class ONVIFClient implements Closeable {
         );
         clientBuilder.setDefaultCredentialsProvider(credentialsProvider);
 
-        // CRITICAL: Always configure SSL/TLS to trust self-signed certificates
-        // Even if the device service URL is HTTP, snapshot URLs might be HTTPS
+        // Configure SSL/TLS based on validation mode
         try {
-            SSLContext sslContext = createSSLContext();
+            SSLContext sslContext = createSSLContext(this.sslValidationMode);
             SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(
                 sslContext,
-                NoopHostnameVerifier.INSTANCE  // Many cameras use IP addresses, not hostnames
+                this.sslValidationMode == SslValidationMode.STRICT
+                    ? SSLConnectionSocketFactory.getDefaultHostnameVerifier()
+                    : NoopHostnameVerifier.INSTANCE
             );
             clientBuilder.setSSLSocketFactory(sslSocketFactory);
-            logger.info("SSL configured to accept self-signed certificates (device uses {})",
-                useHttps ? "HTTPS" : "HTTP");
+            logger.info("SSL configured with {} mode (device uses {})",
+                this.sslValidationMode, useHttps ? "HTTPS" : "HTTP");
         } catch (Exception e) {
             logger.warn("Failed to configure SSL context: {}", e.getMessage());
             logger.warn("HTTPS connections may fail with certificate errors");
@@ -110,19 +115,34 @@ public class ONVIFClient implements Closeable {
     }
 
     /**
-     * Creates SSL context that accepts self-signed certificates.
-     * This is common in ONVIF camera deployments but reduces security.
+     * Creates SSL context based on the configured validation mode.
      *
+     * @param mode SSL validation mode
      * @return Configured SSL context
      * @throws Exception if SSL context creation fails
      */
-    private SSLContext createSSLContext() throws Exception {
-        // Accept self-signed certificates (common in cameras)
-        TrustStrategy acceptingTrustStrategy = (X509Certificate[] chain, String authType) -> true;
+    private SSLContext createSSLContext(SslValidationMode mode) throws Exception {
+        switch (mode) {
+            case STRICT:
+                // Use system default trust store - full validation
+                logger.info("Using STRICT SSL validation - full certificate validation");
+                return SSLContext.getDefault();
 
-        return SSLContextBuilder.create()
-            .loadTrustMaterial(null, acceptingTrustStrategy)
-            .build();
+            case TRUST_FIRST_USE:
+                // TODO: Implement certificate pinning on first connection
+                // For now, fall back to accepting self-signed
+                logger.warn("TRUST_FIRST_USE mode not fully implemented - using INSECURE mode");
+                // Fall through to INSECURE
+
+            case INSECURE:
+            default:
+                // Accept all certificates (common in camera deployments)
+                logger.warn("Using INSECURE SSL validation - accepting any certificate (NOT recommended for production)");
+                TrustStrategy acceptingTrustStrategy = (X509Certificate[] chain, String authType) -> true;
+                return SSLContextBuilder.create()
+                    .loadTrustMaterial(null, acceptingTrustStrategy)
+                    .build();
+        }
     }
 
     /**

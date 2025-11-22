@@ -181,7 +181,8 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
             config.connection().username(),
             password,
             config.connection().useHttps(),
-            config.connection().timeout()
+            config.connection().timeout(),
+            config.connection().sslValidationMode()
         );
 
         // Test connection

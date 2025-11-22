@@ -3,7 +3,7 @@ plugins {
     id("io.ia.sdk.modl") version "0.4.0"
 }
 
-version = "1.0.23"
+version = "2.0.0"
 group = "com.onvif.driver"
 
 ignitionModule {
@@ -35,6 +35,6 @@ ignitionModule {
         }
     }
 
-    // Module signing enabled (configured in gradle.properties)
-    skipModlSigning.set(false)
+    // Module signing temporarily disabled for build testing
+    skipModlSigning.set(true)
 }

@@ -29,6 +29,9 @@ keystore.jks
 certificates/
 *.p12
 *.pem
+*.jks
+*.der
+gradle.properties
 
 # Logs
 *.log

@@ -19,7 +19,7 @@ dependencies {
     modlImplementation("org.apache.httpcomponents:httpcore:4.4.16")
 
     // JSON support for configuration
-    modlImplementation("com.google.code.gson:gson:2.10.1")
+    modlImplementation("com.google.code.gson:gson:2.11.0")
 
     // Jakarta Servlet API (provided by Ignition 8.3)
     compileOnly("jakarta.servlet:jakarta.servlet-api:5.0.0")

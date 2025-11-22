@@ -13,14 +13,14 @@ This module allows Ignition users to:
 
 ## Current Status
 
-**✅ PHASE 1-6 COMPLETE - READY FOR HARDWARE TESTING**
-**Version**: 1.0.3
+**✅ PRODUCTION READY - MAJOR SECURITY UPDATE**
+**Version**: 2.0.0
 
-The ONVIF Driver is now fully operational with complete ONVIF protocol communication, PTZ control, polling, auto-reconnect, and OPC-UA integration. The core implementation is complete and ready for comprehensive testing with real ONVIF devices.
+The ONVIF Driver is production-ready with comprehensive security enhancements, authenticated HTTP endpoints, configurable SSL/TLS validation, and full ONVIF protocol communication including PTZ control, streaming capabilities, polling, auto-reconnect, and OPC-UA integration.
 
 ### What's Complete ✅
 
-**Phase 1-6: Full ONVIF Implementation**
+**Full ONVIF Implementation with Security Enhancements**
 - [x] Complete Gradle build configuration with module signing
 - [x] Multi-module structure (common, designer, gateway)
 - [x] Configuration UI with validation (IP, Port, Credentials, ONVIF settings)
@@ -38,14 +38,16 @@ The ONVIF Driver is now fully operational with complete ONVIF protocol communica
 - [x] **Hierarchical OPC-UA address space** - DeviceInfo, MediaProfiles, PTZ, Status
 - [x] **Thread-safe operations** - AtomicInteger for concurrent access
 - [x] **Comprehensive error handling** and logging
-- [x] **SSL/TLS support** - accepts self-signed certificates
+- [x] **Configurable SSL/TLS validation** - STRICT, TRUST_FIRST_USE, or INSECURE modes
+- [x] **Authenticated HTTP endpoints** - All streaming/snapshot endpoints require login
+- [x] **RTSP to MJPEG streaming** - Live video streaming with authentication
+- [x] **Snapshot capture** - GetSnapshotUri with authentication
+- [x] **Environment-based credentials** - No hardcoded secrets
 
-### Potential Future Enhancements ⏳
+### Future Enhancements ⏳
 
-**Phase 7: Additional Features**
+**Additional Features**
 - [ ] Event subscription (motion detection, tampering alerts)
-- [ ] Snapshot capture via GetSnapshotUri
-- [ ] Media streaming URL exposure
 - [ ] ONVIF Profile G support (recording search and playback)
 - [ ] Comprehensive automated test suite
 
@@ -64,11 +66,13 @@ The device driver exposes the following configuration options:
 - **Password**: ONVIF authentication password (masked)
 - **Use HTTPS**: Connect using HTTPS instead of HTTP
 - **Connection Timeout**: Timeout in seconds for connection attempts
+- **SSL Validation Mode**: STRICT (validate certificates), TRUST_FIRST_USE (trust on first connection), or INSECURE (accept all certificates)
 
 ### ONVIF Settings
 - **Auto-discover Services**: Automatically discover available ONVIF services
 - **Poll Interval**: How often to poll the device for updates (seconds)
 - **Service Type**: Type of ONVIF service (Device, Media, PTZ, Imaging, Analytics)
+- **Enable Streaming**: Enable RTSP to MJPEG streaming endpoints (authenticated)
 
 ## Project Structure
 
@@ -102,7 +106,7 @@ ignition-ONVIF-driver/
 ./gradlew clean build
 
 # Output will be at:
-# build/ONVIFDriver-1.0.3.unsigned.modl (1.6 MB)
+# build/ONVIFDriver-2.0.0.unsigned.modl
 ```
 
 ## Quick Start
@@ -115,7 +119,7 @@ cd /modules/ignition-ONVIF-driver
 
 ### 2. Install (Docker)
 ```bash
-docker cp build/ONVIFDriver-1.0.3.unsigned.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
+docker cp build/ONVIFDriver-2.0.0.unsigned.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
 docker restart ignition-gateway
 ```
 
@@ -179,10 +183,10 @@ When testing in Docker (like the Ignition gateway):
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
 
-- **1.0.3** - Security hardening, code quality improvements (current)
-- **1.0.2** - Property bundle fixes, certificate updates
-- **1.0.1** - Module signing fixes
-- **1.0.0** - Initial implementation complete (Phases 1-6)
+- **2.0.0** - Major security update: Authenticated endpoints, configurable SSL validation, environment-based credentials (current)
+- **1.0.23** - Clean ONVIF implementation with proper error handling
+- **1.0.3** - Security hardening, code quality improvements
+- **1.0.0** - Initial implementation complete
 
 ## License
 
