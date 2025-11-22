@@ -2,6 +2,7 @@
 
 **Release Date**: November 22, 2025
 **Module File**: ONVIFDriver-2.1.0.unsigned.modl (1.7 MB)
+**Module Type**: Unsigned (compatible with all Ignition installations)
 **Status**: Production Ready - Authentication & Testing Update
 **Previous Version**: v2.0.0
 
@@ -399,7 +400,9 @@ All documentation updated to reflect v2.1.0:
 ## 💾 Build Information
 
 **Module Details**:
-- Size: 1.7 MB (unsigned)
+- Filename: ONVIFDriver-2.1.0.unsigned.modl
+- Size: 1.7 MB
+- Type: Unsigned module (compatible with all Ignition installations)
 - Java: 17 (compatible with JDK 21)
 - Ignition: 8.3.0+
 - Gradle: 8.x with Kotlin DSL
