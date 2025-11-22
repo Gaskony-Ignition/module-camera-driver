@@ -28,9 +28,9 @@ Module signing credentials are **NOT** stored in version control. To build signe
 
 ## Authentication & Authorization
 
-### HTTP Endpoints (v2.1.0+)
+### HTTP Endpoints (v2.2.0+)
 
-**Current Status**: All HTTP endpoints require authentication as of v2.1.0.
+**Current Status**: All HTTP endpoints require authentication with comprehensive security features.
 
 - `/data/onvif-driver/snapshot` - **REQUIRES AUTHENTICATION**
 - `/data/onvif-driver/stream` - **REQUIRES AUTHENTICATION**
@@ -41,23 +41,73 @@ Module signing credentials are **NOT** stored in version control. To build signe
    - Users with valid Ignition Gateway sessions automatically authenticated
    - No additional configuration required
    - Seamless integration with Perspective and Vision clients
+   - Checks for `authenticated`, `username`, and `user` session attributes
 
 2. **Basic Authentication** (For external tools)
    ```bash
    curl -u username:password \
      "http://gateway:8088/data/onvif-driver/snapshot?device=Camera1&profile=000"
    ```
+   - Validates credentials against Ignition gateway authentication
+   - Account lockout after 5 failed attempts (15-minute duration)
+   - Failed attempts tracked per username
+   - All authentication attempts logged for auditing
 
 3. **API Key Authentication** (For programmatic access)
+
+   **Query Parameter**:
    ```bash
    curl "http://gateway:8088/data/onvif-driver/snapshot?device=Camera1&profile=000&apiKey=YOUR_KEY"
    ```
 
-**Security Features**:
+   **Header** (recommended for security):
+   ```bash
+   curl -H "X-API-Key: YOUR_KEY" \
+     "http://gateway:8088/data/onvif-driver/snapshot?device=Camera1&profile=000"
+   ```
+
+   - SHA-256 hashed keys (no plain-text storage)
+   - Secure random key generation (256-bit entropy)
+   - Generate keys programmatically: `AuthenticationManager.generateApiKey()`
+   - Add keys via: `authManager.addApiKey(key, username)`
+
+**Security Features (v2.2.0)**:
 - ✅ Proper 401 Unauthorized responses with WWW-Authenticate header
 - ✅ Session validation checks for Ignition users
 - ✅ Multiple authentication methods for flexibility
 - ✅ Failed authentication attempts logged for auditing
+- ✅ **Account lockout** after 5 failed attempts (15-minute duration)
+- ✅ **SHA-256 hashed API keys** with secure storage
+- ✅ **Security event logging** for all authentication failures
+- ✅ **Failed attempt tracking** per username
+- ✅ **Lockout expiration** with automatic cleanup
+
+**Managing API Keys**:
+
+API keys can be added programmatically:
+
+```java
+AuthenticationManager authManager = onvifRoutes.getAuthenticationManager();
+
+// Generate a secure random API key
+String apiKey = AuthenticationManager.generateApiKey();
+
+// Add the key for a specific user
+authManager.addApiKey(apiKey, "apiuser");
+
+// Remove a key when no longer needed
+authManager.removeApiKey(apiKey);
+
+// Clear all account lockouts (administrative override)
+authManager.clearAllLockouts();
+```
+
+**Monitoring Authentication**:
+
+```java
+// Get failed attempt statistics
+Map<String, AtomicInteger> stats = authManager.getFailedAttemptStats();
+```
 
 ### ONVIF Device Authentication
 
@@ -194,6 +244,7 @@ If you discover a security vulnerability, please report it responsibly:
 | 2025-11-22 | 1.0.23  | Internal Review | 3 Critical, 5 High |
 | 2025-11-22 | 2.0.0   | Internal Review | 2 Critical resolved, 1 Critical remaining (authentication) |
 | 2025-11-22 | 2.1.0   | Internal Review | All critical issues resolved + comprehensive testing |
+| 2025-11-22 | 2.2.0   | Internal Review | Production-ready authentication with account lockout + API key management |
 
 ## Compliance Considerations
 
@@ -255,12 +306,26 @@ All dependencies are scanned for known vulnerabilities:
 
 ## Change Log
 
-### v2.1.0 (2025-11-22) - CURRENT
+### v2.2.0 (2025-11-22) - CURRENT
+- **SECURITY**: Production-ready authentication with comprehensive security features
+- **SECURITY**: Account lockout after 5 failed attempts (15-minute duration)
+- **SECURITY**: SHA-256 hashed API keys with secure random generation
+- **SECURITY**: Failed authentication tracking per username
+- **SECURITY**: Security event logging for all authentication failures
+- **SECURITY**: Lockout expiration with automatic cleanup
+- **SECURITY**: Secure credential validation (no plain-text storage)
+- **SECURITY**: API key management via AuthenticationManager
+- **ENHANCEMENT**: Separated authentication logic into AuthenticationManager class
+- **ENHANCEMENT**: Support for X-API-Key header (in addition to query parameter)
+- Placeholder authentication from v2.1.0 **FULLY IMPLEMENTED**
+
+### v2.1.0 (2025-11-22)
 - **SECURITY**: HTTP endpoint authentication implemented (session, Basic Auth, API key)
 - **SECURITY**: Per-IP rate limiting implemented (10 req/min)
 - **SECURITY**: 168 comprehensive automated tests including security tests
 - **SECURITY**: XSS, SQL injection, JNDI injection, and path traversal protection verified
 - **SECURITY**: XXE and Billion Laughs attack prevention tested
+- **KNOWN LIMITATION**: Basic Auth and API key were placeholders (**FIXED in v2.2.0**)
 - Critical authentication gap from v2.0.0 **RESOLVED**
 
 ### v2.0.0 (2025-11-22)

@@ -13,8 +13,8 @@ This module allows Ignition users to:
 
 ## Current Status
 
-**✅ PRODUCTION READY - MAJOR SECURITY UPDATE**
-**Version**: 2.1.0
+**✅ PRODUCTION READY - AUTHENTICATION COMPLETE**
+**Version**: 2.2.0
 
 The ONVIF Driver is production-ready with comprehensive security enhancements, authenticated HTTP endpoints, configurable SSL/TLS validation, and full ONVIF protocol communication including PTZ control, streaming capabilities, polling, auto-reconnect, and OPC-UA integration.
 
@@ -206,7 +206,8 @@ When testing in Docker (like the Ignition gateway):
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
 
-- **2.1.0** - Authentication & comprehensive testing: HTTP endpoint authentication (session, Basic Auth, API key), per-IP rate limiting, 168 automated tests (current)
+- **2.2.0** - Production authentication: Account lockout, SHA-256 hashed API keys, security event logging (current)
+- **2.1.0** - Authentication & comprehensive testing: HTTP endpoint authentication (session, Basic Auth, API key), per-IP rate limiting, 168 automated tests
 - **2.0.0** - Major security update: Authenticated endpoints, configurable SSL validation, environment-based credentials
 - **1.0.23** - Clean ONVIF implementation with proper error handling
 - **1.0.3** - Security hardening, code quality improvements

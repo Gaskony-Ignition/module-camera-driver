@@ -4,6 +4,7 @@ import com.inductiveautomation.ignition.gateway.dataroutes.AccessControlStrategy
 import com.inductiveautomation.ignition.gateway.dataroutes.RequestContext;
 import com.inductiveautomation.ignition.gateway.dataroutes.RouteGroup;
 import com.inductiveautomation.ignition.gateway.model.GatewayContext;
+import com.onvif.driver.gateway.auth.AuthenticationManager;
 import com.onvif.driver.gateway.device.ONVIFDevice;
 import com.onvif.driver.gateway.device.ONVIFDeviceExtensionPoint;
 import com.onvif.driver.gateway.util.ValidationUtil;
@@ -29,23 +30,34 @@ import java.util.Map;
  * IMPORTANT: Actual URLs are /data/{alias}/* NOT /main/data/{alias}/*
  * Example: http://gateway:8088/data/onvif-driver/snapshot?device=SideCamera&profile=000
  *
- * ⚠️ SECURITY WARNING - AUTHENTICATION IS PLACEHOLDER ONLY ⚠️
+ * AUTHENTICATION (v2.2.0+):
  *
- * The current authentication implementation (v2.1.0) accepts ANY credentials
- * as a placeholder. This is NOT production-ready security:
+ * All endpoints require authentication using one of three methods:
  *
- * - Basic Authentication: Accepts any username/password combination
- * - API Key: Accepts any non-empty key value
- * - Session Authentication: Works correctly with Ignition sessions
+ * 1. Session Authentication (Primary - for Ignition users):
+ *    - Valid Ignition Gateway session automatically authenticated
+ *    - Works seamlessly with Perspective and Vision clients
  *
- * BEFORE PRODUCTION DEPLOYMENT:
- * 1. Implement actual Basic Auth validation against Ignition user source
- * 2. Implement API key management with secure storage (hashed keys)
- * 3. Add authentication failure logging and monitoring
- * 4. Add account lockout after failed attempts
+ * 2. Basic Authentication (For external tools):
+ *    - Validates against Ignition gateway authentication
+ *    - Account lockout after 5 failed attempts (15-minute duration)
+ *    - Failed attempts logged for security monitoring
+ *    - Example: curl -u username:password http://gateway:8088/data/onvif-driver/snapshot?device=X&profile=Y
  *
- * See lines 541-544 and 550-553 for placeholder authentication code.
- * See docs/SECURITY.md for security architecture details.
+ * 3. API Key Authentication (For programmatic access):
+ *    - SHA-256 hashed keys stored securely
+ *    - Configure via module settings or API
+ *    - Example: http://gateway:8088/data/onvif-driver/snapshot?device=X&profile=Y&apiKey=YOUR_KEY
+ *    - Example header: curl -H "X-API-Key: YOUR_KEY" http://gateway:8088/data/onvif-driver/snapshot?device=X&profile=Y
+ *
+ * SECURITY FEATURES:
+ * - Account lockout after repeated failures
+ * - Authentication failure logging and auditing
+ * - Secure credential handling (no plain-text storage)
+ * - Per-IP rate limiting (10 req/min)
+ *
+ * See AuthenticationManager for implementation details.
+ * See docs/SECURITY.md for security architecture and best practices.
  */
 public class ONVIFRoutes {
 
@@ -54,6 +66,7 @@ public class ONVIFRoutes {
 
     private final GatewayContext context;
     private final ONVIFDeviceExtensionPoint deviceExtensionPoint;
+    private final AuthenticationManager authManager;
 
     // ============================================================================
     // RESOURCE PROTECTION CONFIGURATION
@@ -109,14 +122,14 @@ public class ONVIFRoutes {
             return t;
         });
 
-    // Authentication configuration
+    // Authentication configuration (v2.2.0: Using AuthenticationManager)
     private static final boolean REQUIRE_AUTHENTICATION = true;  // v2.1.0: Now enforced
-    private static final String AUTH_SESSION_ATTRIBUTE = "authenticated";
-    private static final String AUTH_USERNAME_ATTRIBUTE = "username";
 
     public ONVIFRoutes(GatewayContext context, ONVIFDeviceExtensionPoint deviceExtensionPoint) {
         this.context = context;
         this.deviceExtensionPoint = deviceExtensionPoint;
+        this.authManager = new AuthenticationManager(context);
+        logger.info("AuthenticationManager initialized with account lockout and API key support");
     }
 
     /**
@@ -553,12 +566,12 @@ public class ONVIFRoutes {
     }
 
     /**
-     * Checks if the request has valid authentication (v2.1.0+).
+     * Checks if the request has valid authentication (v2.2.0+).
      *
-     * Authentication methods supported:
-     * 1. Valid HTTP session with authenticated attribute
-     * 2. Basic Authentication header
-     * 3. API key in query parameter (for programmatic access)
+     * Delegates to AuthenticationManager which supports:
+     * 1. Valid Ignition session (primary method)
+     * 2. Basic Authentication (with account lockout protection)
+     * 3. API key in query parameter or X-API-Key header
      *
      * @param request The HTTP request
      * @return true if authenticated, false otherwise
@@ -568,67 +581,16 @@ public class ONVIFRoutes {
             return true;  // Authentication disabled (backward compatibility mode)
         }
 
-        // Method 1: Check for valid HTTP session
-        HttpSession session = request.getSession(false);
-        if (session != null) {
-            Object authenticated = session.getAttribute(AUTH_SESSION_ATTRIBUTE);
-            if (Boolean.TRUE.equals(authenticated)) {
-                logger.debug("Request authenticated via session: {}", session.getId());
-                return true;
-            }
+        return authManager.isAuthenticated(request);
+    }
 
-            // Also check if there's a username attribute (Ignition sets this)
-            Object username = session.getAttribute(AUTH_USERNAME_ATTRIBUTE);
-            if (username != null && !username.toString().isEmpty()) {
-                logger.debug("Request authenticated via username attribute: {}", username);
-                return true;
-            }
-
-            // Check for Ignition's internal session attributes
-            Object ignitionUser = session.getAttribute("user");
-            if (ignitionUser != null) {
-                logger.debug("Request authenticated via Ignition user session");
-                return true;
-            }
-        }
-
-        // Method 2: Check for Basic Authentication header
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader != null && authHeader.startsWith("Basic ")) {
-            // ⚠️ SECURITY WARNING: PLACEHOLDER AUTHENTICATION - NOT PRODUCTION READY
-            // TODO: Validate credentials against Ignition user source
-            // Current implementation accepts ANY username/password combination
-            // This must be fixed before production deployment!
-            //
-            // Required implementation:
-            // 1. Decode Base64 credentials
-            // 2. Validate against Ignition's GatewayContext.getUserSourceManager()
-            // 3. Log authentication attempts (success and failure)
-            // 4. Implement account lockout after N failed attempts
-            logger.warn("⚠️ PLACEHOLDER AUTH: Accepting ANY Basic Auth credentials (NOT SECURE)");
-            return true;
-        }
-
-        // Method 3: Check for API key in query parameter (for programmatic access)
-        String apiKey = request.getParameter("apiKey");
-        if (apiKey != null && !apiKey.isEmpty()) {
-            // ⚠️ SECURITY WARNING: PLACEHOLDER AUTHENTICATION - NOT PRODUCTION READY
-            // TODO: Validate API key against configured keys
-            // Current implementation accepts ANY non-empty API key value
-            // This must be fixed before production deployment!
-            //
-            // Required implementation:
-            // 1. Create module settings for authorized API keys
-            // 2. Store hashed keys (using BCrypt or similar)
-            // 3. Validate provided key against stored hashes
-            // 4. Log API key usage for auditing
-            // 5. Support key rotation and expiration
-            logger.warn("⚠️ PLACEHOLDER AUTH: Accepting ANY non-empty API key (NOT SECURE)");
-            return true;
-        }
-
-        logger.warn("Request not authenticated - no valid session, Basic auth, or API key");
-        return false;
+    /**
+     * Gets the AuthenticationManager for programmatic access (e.g., adding API keys).
+     *
+     * @return The authentication manager
+     */
+    public AuthenticationManager getAuthenticationManager() {
+        return authManager;
     }
 
     /**
