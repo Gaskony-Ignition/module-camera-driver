@@ -7,6 +7,7 @@ import com.inductiveautomation.ignition.gateway.dataroutes.RouteGroup;
 import com.inductiveautomation.ignition.gateway.model.GatewayContext;
 import com.inductiveautomation.ignition.gateway.opcua.server.api.AbstractDeviceModuleHook;
 import com.inductiveautomation.ignition.gateway.opcua.server.api.DeviceExtensionPoint;
+import com.inductiveautomation.ignition.gateway.web.systemjs.SystemJsModule;
 import com.onvif.driver.gateway.device.ONVIFDeviceExtensionPoint;
 import com.onvif.driver.gateway.servlet.ONVIFRoutes;
 import org.slf4j.Logger;
@@ -36,6 +37,31 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
         this.deviceExtensionPoint = new ONVIFDeviceExtensionPoint();
         logger.info("ONVIF Driver module setup complete");
         logger.debug("Created device extension point: {}", deviceExtensionPoint);
+
+        // Register WebUI component for connection browser
+        try {
+            // Create SystemJsModule that points to our connection browser page
+            // The page is served via authenticated data routes, not static resources
+            SystemJsModule connectionBrowserModule = new SystemJsModule(
+                "com.onvif.driver.ConnectionBrowser",
+                "/res/onvif-driver/connectionBrowser.js"
+            );
+
+            // Add navigation menu item in the Connections section
+            context.getWebResourceManager().getNavigationModel().getConnections()
+                .addCategory("onvif-driver", cat -> cat
+                    .label("ONVIF Driver")
+                    .addPage("Connection Browser", page -> page
+                        .position(10)
+                        .mount("/onvif-connection-browser", "ConnectionBrowser", connectionBrowserModule)
+                    )
+                );
+
+            logger.info("Added 'ONVIF Driver' menu item to Gateway Config:");
+            logger.info("  - Connection Browser: /app/onvif-connection-browser");
+        } catch (Exception e) {
+            logger.error("Failed to add WebUI navigation menu item", e);
+        }
     }
 
     @Override
@@ -79,12 +105,39 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
 
     /**
      * Returns the mount path alias for this module.
-     * This determines the path at which routes are mounted: /main/data/{alias}/*
+     * This determines the path at which routes are mounted: /data/{alias}/*
+     *
+     * Public resources (from getMountedResourceFolder) at /res/onvif-driver/*:
+     * - /res/onvif-driver/connectionBrowser.js - React component for connection browser
+     *
+     * Authenticated data routes (from mountRouteHandlers) at /data/onvif-driver/*:
+     * - /data/onvif-driver/connection-browser - Connection browser page (requires login)
+     * - /data/onvif-driver/devices - List devices (requires login)
+     * - /data/onvif-driver/device/:name/status - Device status (requires login)
+     * - /data/onvif-driver/snapshot - Snapshot endpoint (requires login)
+     * - /data/onvif-driver/stream - Stream endpoint (requires login)
+     * - /data/onvif-driver/health - Health check (public)
      */
     @Override
     public Optional<String> getMountPathAlias() {
         logger.debug("getMountPathAlias() returning: onvif-driver");
         return Optional.of("onvif-driver");
+    }
+
+    /**
+     * Mount web resources from the "mounted" folder.
+     * Files in the mounted/ directory will be accessible at /res/onvif-driver/*
+     *
+     * IMPORTANT: Ignition automatically adds the /res/onvif-driver prefix based on
+     * getMountPathAlias(). Do NOT replicate this path structure in your filesystem.
+     *
+     * Example mapping:
+     *   Filesystem: gateway/src/main/resources/mounted/connectionBrowser.js
+     *   URL:        /res/onvif-driver/connectionBrowser.js
+     */
+    @Override
+    public Optional<String> getMountedResourceFolder() {
+        return Optional.of("mounted");
     }
 
     @Override

@@ -5,6 +5,68 @@ All notable changes to the Ignition ONVIF Driver module will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.2] - 2025-11-26
+
+### Changed
+- **UI Compactness**: Reduced header and card sizes by approximately 50% for more efficient screen usage
+- Smaller fonts, padding, and margins throughout the Connection Browser page
+- Simplified device selector card layout
+
+## [2.3.1] - 2025-11-26
+
+### Fixed
+- **Authentication**: Removed redundant custom authentication checks from Connection Browser routes. Now properly uses Ignition's built-in session authentication for `/data/` routes, eliminating the separate login prompt.
+- **Device Selector**: Added device dropdown selector to Connection Browser page, matching the PLC Simulator File Upload pattern. Users can now select a specific device or view all devices at once.
+
+### Changed
+- Connection Browser page now includes URL parameter support (`?device=DeviceName`) for deep linking to specific devices
+- Stats bar now updates dynamically based on selected device filter
+
+## [2.3.0] - 2025-11-26
+
+### Added - Connection Browser UI
+- **Gateway Config Menu Item**: New "ONVIF Driver > Connection Browser" menu entry in Gateway Config under Connections
+- **Connection Browser Page**: Web-based dashboard for viewing all ONVIF device connections
+  - Real-time device status display (Running, Error, Connecting)
+  - Device information (manufacturer, model, firmware, serial number)
+  - Media profiles with resolution, frame rate, and encoding details
+  - Snapshot preview capability
+  - Live MJPEG stream viewer modal
+  - RTSP URI copy functionality
+  - Auto-refresh toggle for live status updates
+- **New API Endpoints**:
+  - `/data/onvif-driver/devices` - List all devices with status and profiles
+  - `/data/onvif-driver/device/:name/status` - Detailed device status
+  - `/data/onvif-driver/connection-browser` - Connection browser HTML page
+  - `/data/onvif-driver/health` - Health check endpoint
+
+### Added - Web UI Module
+- **New web-ui subproject**: React/TypeScript component build system
+  - Webpack configuration for SystemJS module output
+  - TypeScript with strict mode
+  - ESLint and Prettier for code quality
+  - SCSS styling support
+- **ConnectionBrowser React Component**: Embeds HTML page in Gateway Config UI
+
+### Changed
+- **settings.gradle.kts**: Added `:web-ui` project
+- **gateway/build.gradle.kts**: Added `modlImplementation(projects.webUi)` dependency
+- **ONVIFModuleHook**: Added navigation menu registration and getMountedResourceFolder()
+- **ONVIFRoutes**: Added device listing and connection browser routes
+
+### Technical Details
+- Build follows same pattern as PLC Simulator project
+- Uses Node.js 18.0.0 with Yarn for frontend build
+- Webpack outputs SystemJS-compatible module for Ignition gateway
+- HTML page served via authenticated data routes
+
+## [2.2.0] - 2025-11-24
+
+### Added - Production Authentication
+- **Account Lockout**: 5 failed attempts triggers 15-minute lockout
+- **SHA-256 Hashed API Keys**: Secure storage for API key authentication
+- **Security Event Logging**: Authentication failures logged for monitoring
+
 ## [2.1.0] - 2025-11-22
 
 ### SECURITY - Authentication Implemented ✅

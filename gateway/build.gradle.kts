@@ -24,6 +24,9 @@ dependencies {
     // Jakarta Servlet API (provided by Ignition 8.3)
     compileOnly("jakarta.servlet:jakarta.servlet-api:5.0.0")
 
+    // Include web-ui component bundle
+    modlImplementation(projects.webUi)
+
     // Test dependencies (v2.1.0)
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.1")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.1")

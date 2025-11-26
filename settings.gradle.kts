@@ -25,5 +25,6 @@ dependencyResolutionManagement {
 include(
     ":common",
     ":designer",
-    ":gateway"
+    ":gateway",
+    ":web-ui"
 )

@@ -14,14 +14,20 @@ import org.slf4j.LoggerFactory;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.Map;
+import com.onvif.driver.gateway.onvif.MediaProfile;
+import com.onvif.driver.gateway.onvif.DeviceInformation;
 
 /**
  * Route handlers for ONVIF snapshot and streaming endpoints.
@@ -164,7 +170,39 @@ public class ONVIFRoutes {
             .mount();
         logger.debug("Mounted /stream route");
 
-        logger.info("ONVIF routes mounted: /test, /snapshot, /stream");
+        // Mount device list endpoint at /data/onvif-driver/devices
+        routes.newRoute("/devices")
+            .handler(this::handleListDevices)
+            .type(RouteGroup.TYPE_JSON)
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)  // Custom auth handled in handler
+            .mount();
+        logger.debug("Mounted /devices route");
+
+        // Mount device status endpoint at /data/onvif-driver/device/:name/status
+        routes.newRoute("/device/:name/status")
+            .handler(this::handleDeviceStatus)
+            .type(RouteGroup.TYPE_JSON)
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)
+            .mount();
+        logger.debug("Mounted /device/:name/status route");
+
+        // Mount connection browser page at /data/onvif-driver/connection-browser
+        routes.newRoute("/connection-browser")
+            .handler(this::handleConnectionBrowserPage)
+            .type(RouteGroup.TYPE_OCTET_STREAM)  // Will set text/html in handler
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)
+            .mount();
+        logger.debug("Mounted /connection-browser route");
+
+        // Mount health check endpoint
+        routes.newRoute("/health")
+            .handler(this::handleHealthCheck)
+            .type(RouteGroup.TYPE_JSON)
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)
+            .mount();
+        logger.debug("Mounted /health route");
+
+        logger.info("ONVIF routes mounted: /test, /snapshot, /stream, /devices, /device/:name/status, /connection-browser, /health");
     }
 
     /**
@@ -682,5 +720,227 @@ public class ONVIFRoutes {
     private void sendAuthenticationRequired(HttpServletResponse response) throws IOException {
         response.setHeader("WWW-Authenticate", "Basic realm=\"ONVIF Driver\", charset=\"UTF-8\"");
         response.sendError(401, "Authentication required. Please log in to the Ignition Gateway or provide an API key.");
+    }
+
+    /**
+     * Handles listing all ONVIF devices.
+     * URL: http://gateway:8088/data/onvif-driver/devices
+     *
+     * NOTE: Authentication is handled by Ignition's /data/ route infrastructure.
+     * Routes under /data/ require an authenticated Gateway session by default.
+     */
+    private Object handleListDevices(RequestContext context, HttpServletResponse response) throws Exception {
+        logger.debug("List devices request received");
+
+        // NOTE: No custom authentication check needed - Ignition's /data/ routes
+        // require authenticated session by default. The Gateway handles this.
+
+        try {
+            JSONObject result = new JSONObject();
+            JSONArray devices = new JSONArray();
+
+            Map<String, ONVIFDevice> allDevices = ONVIFDeviceExtensionPoint.getAllDevices();
+            for (Map.Entry<String, ONVIFDevice> entry : allDevices.entrySet()) {
+                ONVIFDevice device = entry.getValue();
+                JSONObject deviceJson = new JSONObject();
+                deviceJson.put("name", entry.getKey());
+                deviceJson.put("status", device.getStatus());
+
+                // Try to get additional info from the device's client
+                try {
+                    if (device.getClient() != null) {
+                        DeviceInformation info = device.getClient().getDeviceInformation();
+                        if (info != null) {
+                            deviceJson.put("manufacturer", info.manufacturer());
+                            deviceJson.put("model", info.model());
+                            deviceJson.put("firmwareVersion", info.firmwareVersion());
+                            deviceJson.put("serialNumber", info.serialNumber());
+                        }
+
+                        List<MediaProfile> profiles = device.getClient().getMediaProfiles();
+                        if (profiles != null) {
+                            JSONArray profilesJson = new JSONArray();
+                            for (MediaProfile profile : profiles) {
+                                JSONObject profileJson = new JSONObject();
+                                profileJson.put("token", profile.getToken());
+                                profileJson.put("name", profile.getName());
+                                profileJson.put("width", profile.getWidth());
+                                profileJson.put("height", profile.getHeight());
+                                profileJson.put("frameRate", profile.getFrameRate());
+                                profileJson.put("encoding", profile.getEncoding());
+
+                                // Get snapshot and stream URIs
+                                try {
+                                    profileJson.put("snapshotUri", device.getClient().getSnapshotUri(profile.getToken()));
+                                } catch (Exception e) {
+                                    logger.debug("Could not get snapshot URI for profile {}: {}", profile.getToken(), e.getMessage());
+                                }
+                                try {
+                                    profileJson.put("streamUri", device.getClient().getStreamUri(profile.getToken()));
+                                } catch (Exception e) {
+                                    logger.debug("Could not get stream URI for profile {}: {}", profile.getToken(), e.getMessage());
+                                }
+
+                                profilesJson.put(profileJson);
+                            }
+                            deviceJson.put("profiles", profilesJson);
+                            deviceJson.put("profileCount", profiles.size());
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.debug("Could not get additional info for device {}: {}", entry.getKey(), e.getMessage());
+                }
+
+                devices.put(deviceJson);
+            }
+
+            result.put("success", true);
+            result.put("devices", devices);
+            result.put("count", devices.length());
+            result.put("timestamp", System.currentTimeMillis());
+
+            response.setContentType("application/json");
+            response.getWriter().write(result.toString());
+
+        } catch (Exception e) {
+            logger.error("Error listing devices", e);
+            response.sendError(500, "Error listing devices: " + e.getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * Handles getting status of a specific ONVIF device.
+     * URL: http://gateway:8088/data/onvif-driver/device/:name/status
+     *
+     * NOTE: Authentication is handled by Ignition's /data/ route infrastructure.
+     */
+    private Object handleDeviceStatus(RequestContext context, HttpServletResponse response) throws Exception {
+        logger.debug("Device status request received");
+
+        // NOTE: No custom authentication check needed - Ignition's /data/ routes
+        // require authenticated session by default. The Gateway handles this.
+
+        String deviceName = context.getParameter("name");
+        if (deviceName == null || deviceName.trim().isEmpty()) {
+            response.sendError(400, "Missing required parameter: name");
+            return null;
+        }
+
+        try {
+            ONVIFDevice device = deviceExtensionPoint.getDevice(deviceName);
+            if (device == null) {
+                response.sendError(404, "Device not found: " + deviceName);
+                return null;
+            }
+
+            JSONObject result = new JSONObject();
+            result.put("success", true);
+            result.put("name", deviceName);
+            result.put("status", device.getStatus());
+            result.put("timestamp", System.currentTimeMillis());
+
+            // Add detailed info if available
+            try {
+                if (device.getClient() != null) {
+                    DeviceInformation info = device.getClient().getDeviceInformation();
+                    if (info != null) {
+                        JSONObject deviceInfo = new JSONObject();
+                        deviceInfo.put("manufacturer", info.manufacturer());
+                        deviceInfo.put("model", info.model());
+                        deviceInfo.put("firmwareVersion", info.firmwareVersion());
+                        deviceInfo.put("serialNumber", info.serialNumber());
+                        deviceInfo.put("hardwareId", info.hardwareId());
+                        result.put("deviceInfo", deviceInfo);
+                    }
+
+                    List<MediaProfile> profiles = device.getClient().getMediaProfiles();
+                    if (profiles != null) {
+                        JSONArray profilesJson = new JSONArray();
+                        for (MediaProfile profile : profiles) {
+                            JSONObject profileJson = new JSONObject();
+                            profileJson.put("token", profile.getToken());
+                            profileJson.put("name", profile.getName());
+                            profileJson.put("width", profile.getWidth());
+                            profileJson.put("height", profile.getHeight());
+                            profileJson.put("frameRate", profile.getFrameRate());
+                            profileJson.put("encoding", profile.getEncoding());
+
+                            try {
+                                profileJson.put("snapshotUri", device.getClient().getSnapshotUri(profile.getToken()));
+                            } catch (Exception e) {
+                                logger.debug("Could not get snapshot URI for profile {}: {}", profile.getToken(), e.getMessage());
+                            }
+                            try {
+                                profileJson.put("streamUri", device.getClient().getStreamUri(profile.getToken()));
+                            } catch (Exception e) {
+                                logger.debug("Could not get stream URI for profile {}: {}", profile.getToken(), e.getMessage());
+                            }
+
+                            profilesJson.put(profileJson);
+                        }
+                        result.put("profiles", profilesJson);
+                    }
+                }
+            } catch (Exception e) {
+                logger.debug("Could not get detailed info for device {}: {}", deviceName, e.getMessage());
+            }
+
+            response.setContentType("application/json");
+            response.getWriter().write(result.toString());
+
+        } catch (Exception e) {
+            logger.error("Error getting device status", e);
+            response.sendError(500, "Error getting device status: " + e.getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * Handles health check requests.
+     * URL: http://gateway:8088/data/onvif-driver/health
+     */
+    private Object handleHealthCheck(RequestContext context, HttpServletResponse response) throws Exception {
+        JSONObject result = new JSONObject();
+        result.put("status", "ok");
+        result.put("service", "onvif-driver");
+        result.put("deviceCount", ONVIFDeviceExtensionPoint.getAllDevices().size());
+        result.put("timestamp", System.currentTimeMillis());
+
+        response.setContentType("application/json");
+        response.getWriter().write(result.toString());
+        return null;
+    }
+
+    /**
+     * Handles serving the connection browser HTML page.
+     * URL: http://gateway:8088/data/onvif-driver/connection-browser
+     *
+     * NOTE: Authentication is handled by Ignition's /data/ route infrastructure.
+     */
+    private Object handleConnectionBrowserPage(RequestContext context, HttpServletResponse response) throws Exception {
+        logger.debug("Connection browser page request received");
+
+        // NOTE: No custom authentication check needed - Ignition's /data/ routes
+        // require authenticated session by default. The Gateway handles this.
+
+        try {
+            var stream = getClass().getResourceAsStream("/pages/connection-browser.html");
+            if (stream == null) {
+                logger.error("Connection browser page not found at /pages/connection-browser.html");
+                response.sendError(404, "Connection browser page not found");
+                return null;
+            }
+            String html = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+            response.setContentType("text/html; charset=UTF-8");
+            response.getWriter().write(html);
+        } catch (Exception e) {
+            logger.error("Error serving connection browser page", e);
+            response.sendError(500, "Error loading page: " + e.getMessage());
+        }
+
+        return null;
     }
 }

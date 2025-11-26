@@ -45,3 +45,4 @@ gradle.properties
 *.modl
 *.jar
 !gradle-wrapper.jar
+web-ui/node_modules/
