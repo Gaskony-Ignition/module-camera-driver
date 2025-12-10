@@ -102,7 +102,7 @@ public class ONVIFRoutes {
     //
     // FUTURE ENHANCEMENT:
     // These should be moved to module settings for runtime configuration.
-    // See GitHub issue #XXX or IMPLEMENTATION_STATUS.md for details.
+    // See IMPLEMENTATION_STATUS.md for details.
     // ============================================================================
 
     /** Maximum number of concurrent snapshot requests allowed across all IPs */
@@ -144,15 +144,6 @@ public class ONVIFRoutes {
     public void mountRoutes(RouteGroup routes) {
         logger.info("Mounting ONVIF routes...");
         logger.debug("RouteGroup: {}, class: {}", routes, routes.getClass().getName());
-
-        // DIAGNOSTIC: Test route for verifying routing works
-        // TODO: Remove or disable in production builds
-        routes.newRoute("/test")
-            .handler(this::handleTest)
-            .type(RouteGroup.TYPE_JSON)
-            .accessControl(AccessControlStrategy.OPEN_ROUTE)
-            .mount();
-        logger.debug("Mounted /test route");
 
         // Mount snapshot endpoint at /data/onvif-driver/snapshot
         routes.newRoute("/snapshot")
@@ -202,27 +193,7 @@ public class ONVIFRoutes {
             .mount();
         logger.debug("Mounted /health route");
 
-        logger.info("ONVIF routes mounted: /test, /snapshot, /stream, /devices, /device/:name/status, /connection-browser, /health");
-    }
-
-    /**
-     * DIAGNOSTIC: Simple test handler to verify routing works.
-     * URL: http://gateway:8088/data/onvif-driver/test
-     * TODO: Remove or disable in production builds
-     */
-    private Object handleTest(RequestContext context, HttpServletResponse response) throws Exception {
-        logger.debug("Test route called");
-        logger.debug("Request URL: {}", context.getRequest().getRequestURL());
-        logger.debug("Request URI: {}", context.getRequest().getRequestURI());
-        logger.debug("Query String: {}", context.getRequest().getQueryString());
-
-        response.setContentType("application/json");
-        response.setStatus(200);
-        String jsonResponse = "{\"status\":\"success\",\"message\":\"ONVIF Driver test route is working!\",\"timestamp\":" + System.currentTimeMillis() + "}";
-        response.getWriter().write(jsonResponse);
-
-        logger.debug("Test response sent successfully");
-        return null;
+        logger.info("ONVIF routes mounted: /snapshot, /stream, /devices, /device/:name/status, /connection-browser, /health");
     }
 
     /**

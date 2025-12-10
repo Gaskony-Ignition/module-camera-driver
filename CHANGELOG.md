@@ -5,6 +5,26 @@ All notable changes to the Ignition ONVIF Driver module will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2025-12-11
+
+### Security
+- **CVE-2024-43788 Fixed**: Upgraded webpack from 5.70.0 to 5.94.0 to address DOM Clobbering XSS vulnerability
+- **Security Audit**: Comprehensive security review completed with no critical issues found
+- **React 18.2.0 Verified Safe**: Confirmed not affected by CVE-2025-55182 (React Server Components vulnerability)
+
+### Removed
+- **Diagnostic Test Route**: Removed `/test` endpoint that was marked for production removal
+- Cleaned up development-only code for production release
+
+### Changed
+- Updated IMPLEMENTATION_STATUS.md to reflect v2.4.0 production status
+- Updated documentation with security audit findings
+
+### Notes
+- This is the first production-ready release after comprehensive security review
+- All dependencies verified against known CVE databases
+- React 18.2.0 retained (stable, secure, appropriate for client-side UI)
+
 ## [2.3.2] - 2025-11-26
 
 ### Changed
