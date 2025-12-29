@@ -24,14 +24,13 @@ bin/
 # macOS
 .DS_Store
 
-# Module signing (except project-specific signing files)
+# Module signing (uses shared Gaskony keystore)
 keystore.jks
 certificates/
 *.p12
 *.pem
-# Track project signing certificate for consistent vendor name
-!onvif-driver.jks
-!onvif-driver.der
+*.jks
+*.der
 
 # Logs
 *.log
