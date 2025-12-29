@@ -24,14 +24,14 @@ bin/
 # macOS
 .DS_Store
 
-# Module signing
+# Module signing (except project-specific signing files)
 keystore.jks
 certificates/
 *.p12
 *.pem
-*.jks
-*.der
-gradle.properties
+# Track project signing certificate for consistent vendor name
+!onvif-driver.jks
+!onvif-driver.der
 
 # Logs
 *.log
