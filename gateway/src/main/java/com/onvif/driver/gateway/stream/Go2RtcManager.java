@@ -239,7 +239,7 @@ public class Go2RtcManager {
         }
 
         try {
-            String url = String.format("http://127.0.0.1:%d/api/streams?dst=%s&src=%s",
+            String url = String.format("http://127.0.0.1:%d/api/streams?name=%s&src=%s",
                 port,
                 URLEncoder.encode(streamName, StandardCharsets.UTF_8),
                 URLEncoder.encode(rtspUrl, StandardCharsets.UTF_8));
@@ -274,7 +274,7 @@ public class Go2RtcManager {
         }
 
         try {
-            String url = String.format("http://127.0.0.1:%d/api/streams?src=%s",
+            String url = String.format("http://127.0.0.1:%d/api/streams?name=%s",
                 port,
                 URLEncoder.encode(streamName, StandardCharsets.UTF_8));
 
