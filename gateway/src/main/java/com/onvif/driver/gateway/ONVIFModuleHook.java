@@ -9,10 +9,13 @@ import com.inductiveautomation.ignition.gateway.opcua.server.api.AbstractDeviceM
 import com.inductiveautomation.ignition.gateway.opcua.server.api.DeviceExtensionPoint;
 import com.inductiveautomation.ignition.gateway.web.systemjs.SystemJsModule;
 import com.onvif.driver.gateway.device.ONVIFDeviceExtensionPoint;
+import com.onvif.driver.gateway.device.generic.GenericCameraExtensionPoint;
 import com.onvif.driver.gateway.servlet.ONVIFRoutes;
+import com.onvif.driver.gateway.stream.Go2RtcManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,15 +31,25 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
     private final Logger logger = LoggerFactory.getLogger(getClass());
     private GatewayContext context;
     private ONVIFDeviceExtensionPoint deviceExtensionPoint;
+    private GenericCameraExtensionPoint genericCameraExtensionPoint;
+    private Go2RtcManager go2RtcManager;
 
     @Override
     public void setup(GatewayContext context) {
         this.context = context;
-        // CRITICAL: Create device extension point in setup, NOT startup
-        // This ensures it's available when getDeviceExtensionPoints() is called
+        // CRITICAL: Create device extension points in setup, NOT startup
+        // This ensures they're available when getDeviceExtensionPoints() is called
         this.deviceExtensionPoint = new ONVIFDeviceExtensionPoint();
+
+        // Create Go2RtcManager for RTSP-to-MJPEG conversion
+        Path dataDir = context.getSystemManager().getDataDir().toPath();
+        this.go2RtcManager = new Go2RtcManager(dataDir);
+
+        // Create Generic Camera extension point with go2rtc support
+        this.genericCameraExtensionPoint = new GenericCameraExtensionPoint(go2RtcManager);
+
         logger.info("ONVIF Driver module setup complete");
-        logger.debug("Created device extension point: {}", deviceExtensionPoint);
+        logger.debug("Created device extension points: ONVIF={}, GenericCamera={}", deviceExtensionPoint, genericCameraExtensionPoint);
 
         // Register WebUI component for connection browser
         try {
@@ -68,17 +81,30 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
     public void startup(LicenseState licenseState) {
         logger.info("ONVIF Driver module starting...");
 
-        // CRITICAL: Register resource bundle for i18n support
-        // Without this, display names will show as "¿ONVIFDevice.Meta.DisplayName?"
+        // CRITICAL: Register resource bundles for i18n support
+        // Without this, display names will show as "¿key?"
         BundleUtil.get().addBundle(
             "ONVIFDevice",
             ONVIFDeviceExtensionPoint.class,
             "ONVIFDevice"
         );
-        logger.debug("Registered ONVIFDevice resource bundle");
+        BundleUtil.get().addBundle(
+            "GenericCamera",
+            GenericCameraExtensionPoint.class,
+            "GenericCamera"
+        );
+        logger.debug("Registered resource bundles: ONVIFDevice, GenericCamera");
 
-        // Device extension point already created in setup()
-        logger.debug("Device extension point ready: {}", deviceExtensionPoint);
+        // Start go2rtc process for RTSP-to-MJPEG conversion
+        try {
+            go2RtcManager.start();
+            logger.info("go2rtc manager started (available: {})", go2RtcManager.isAvailable());
+        } catch (Exception e) {
+            logger.warn("Failed to start go2rtc - RTSP streaming will use fallback modes: {}", e.getMessage());
+        }
+
+        // Device extension points already created in setup()
+        logger.debug("Device extension points ready: ONVIF={}, GenericCamera={}", deviceExtensionPoint, genericCameraExtensionPoint);
         logger.info("ONVIF Driver module started successfully");
     }
 
@@ -98,7 +124,7 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
         logger.info("Mounting ONVIF route handlers at /data/onvif-driver/*");
         logger.debug("RouteGroup: {}", routes);
 
-        new ONVIFRoutes(context, deviceExtensionPoint).mountRoutes(routes);
+        new ONVIFRoutes(context, deviceExtensionPoint, genericCameraExtensionPoint, go2RtcManager).mountRoutes(routes);
 
         logger.info("Route handlers mounted successfully");
     }
@@ -151,6 +177,15 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
             logger.error("Error shutting down ONVIF routes", e);
         }
 
+        // Stop go2rtc process
+        if (go2RtcManager != null) {
+            try {
+                go2RtcManager.stop();
+            } catch (Exception e) {
+                logger.error("Error stopping go2rtc manager", e);
+            }
+        }
+
         logger.info("ONVIF Driver module shutdown complete");
     }
 
@@ -161,14 +196,18 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
     @Override
     protected List<DeviceExtensionPoint<?>> getDeviceExtensionPoints() {
         logger.debug("getDeviceExtensionPoints() called");
-        // CRITICAL: Return the SAME instance created in setup()
-        // Do NOT create a new instance here!
+        // CRITICAL: Return the SAME instances created in setup()
+        // Do NOT create new instances here!
         if (deviceExtensionPoint == null) {
             logger.error("ERROR: deviceExtensionPoint is null - should have been created in setup()!");
             deviceExtensionPoint = new ONVIFDeviceExtensionPoint();
         }
-        logger.debug("Returning device extension point: {}", deviceExtensionPoint);
-        return List.of(deviceExtensionPoint);
+        if (genericCameraExtensionPoint == null) {
+            logger.error("ERROR: genericCameraExtensionPoint is null - should have been created in setup()!");
+            genericCameraExtensionPoint = new GenericCameraExtensionPoint(go2RtcManager);
+        }
+        logger.debug("Returning device extension points: ONVIF={}, GenericCamera={}", deviceExtensionPoint, genericCameraExtensionPoint);
+        return List.of(deviceExtensionPoint, genericCameraExtensionPoint);
     }
 
     /**

@@ -12,7 +12,7 @@ ignitionModule {
     id.set("com.onvif.driver.opcua")
     moduleVersion.set(project.version.toString())
     license.set("license.html")
-    moduleDescription.set("ONVIF network device driver for connecting to IP cameras and devices supporting ONVIF protocol")
+    moduleDescription.set("ONVIF and Generic Camera driver for connecting to IP cameras via ONVIF protocol, RTSP, MJPEG, or snapshot URLs with bundled go2rtc streaming")
     requiredIgnitionVersion.set("8.3.0")
     freeModule.set(true)
 

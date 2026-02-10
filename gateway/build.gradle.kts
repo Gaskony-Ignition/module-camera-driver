@@ -44,6 +44,63 @@ dependencies {
     testRuntimeOnly("org.slf4j:slf4j-simple:2.0.9")
 }
 
+// go2rtc binary download task
+// Downloads platform-specific go2rtc binaries into build directory for bundling.
+// If binaries are absent, go2rtc simply won't be available at runtime
+// and streaming falls back gracefully.
+//
+// Usage:
+//   ./gradlew build                   # Build without go2rtc (fallback mode)
+//   ./gradlew downloadGo2Rtc build    # Full build with go2rtc binaries
+//   -x downloadGo2Rtc                 # Explicitly skip download
+val go2rtcVersion = "1.9.4"
+val go2rtcOutputDir = layout.buildDirectory.dir("go2rtc-binaries/go2rtc")
+
+val downloadGo2Rtc by tasks.registering {
+    description = "Downloads go2rtc binaries for bundling in the module"
+    group = "build"
+
+    outputs.dir(go2rtcOutputDir)
+
+    doLast {
+        val outputDir = go2rtcOutputDir.get().asFile
+        outputDir.mkdirs()
+
+        val binaries = mapOf(
+            "go2rtc_linux_amd64" to "https://github.com/AlexxIT/go2rtc/releases/download/v${go2rtcVersion}/go2rtc_linux_amd64",
+            "go2rtc_linux_arm64" to "https://github.com/AlexxIT/go2rtc/releases/download/v${go2rtcVersion}/go2rtc_linux_arm64",
+            "go2rtc_windows_amd64.exe" to "https://github.com/AlexxIT/go2rtc/releases/download/v${go2rtcVersion}/go2rtc_win64.zip"
+        )
+
+        for ((fileName, url) in binaries) {
+            val outputFile = File(outputDir, fileName)
+            if (!outputFile.exists()) {
+                logger.lifecycle("Downloading go2rtc binary: $fileName")
+                try {
+                    ant.invokeMethod("get", mapOf("src" to url, "dest" to outputFile, "skipexisting" to "true"))
+                } catch (e: Exception) {
+                    logger.warn("Failed to download $fileName: ${e.message}. go2rtc will not be available for this platform.")
+                }
+            }
+        }
+    }
+}
+
+// Add go2rtc binaries to resources when the download task runs
+sourceSets {
+    main {
+        resources {
+            // go2rtc binaries are placed in build/go2rtc-binaries/go2rtc/ by downloadGo2Rtc
+            // They end up at classpath: go2rtc/go2rtc_linux_amd64 etc.
+            srcDir(layout.buildDirectory.dir("go2rtc-binaries"))
+        }
+    }
+}
+
+tasks.named("processResources") {
+    dependsOn(downloadGo2Rtc)
+}
+
 tasks.test {
     useJUnitPlatform()
     testLogging {

@@ -110,4 +110,34 @@ public class ValidationUtil {
     public static int getMaxProfileTokenLength() {
         return MAX_PROFILE_TOKEN_LENGTH;
     }
+
+    /**
+     * Validates an HTTP/HTTPS URL.
+     *
+     * @param url the URL to validate
+     * @return true if the URL starts with http:// or https:// and has a host
+     */
+    public static boolean isValidUrl(String url) {
+        if (url == null || url.trim().isEmpty()) {
+            return false;
+        }
+        String trimmed = url.trim().toLowerCase();
+        return (trimmed.startsWith("http://") || trimmed.startsWith("https://"))
+            && trimmed.length() > (trimmed.startsWith("https://") ? 8 : 7);
+    }
+
+    /**
+     * Validates an RTSP/RTSPS URL.
+     *
+     * @param url the URL to validate
+     * @return true if the URL starts with rtsp:// or rtsps:// and has a host
+     */
+    public static boolean isValidRtspUrl(String url) {
+        if (url == null || url.trim().isEmpty()) {
+            return false;
+        }
+        String trimmed = url.trim().toLowerCase();
+        return (trimmed.startsWith("rtsp://") || trimmed.startsWith("rtsps://"))
+            && trimmed.length() > (trimmed.startsWith("rtsps://") ? 8 : 7);
+    }
 }

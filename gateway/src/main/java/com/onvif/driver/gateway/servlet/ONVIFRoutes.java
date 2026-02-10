@@ -7,7 +7,16 @@ import com.inductiveautomation.ignition.gateway.model.GatewayContext;
 import com.onvif.driver.gateway.auth.AuthenticationManager;
 import com.onvif.driver.gateway.device.ONVIFDevice;
 import com.onvif.driver.gateway.device.ONVIFDeviceExtensionPoint;
+import com.onvif.driver.gateway.device.generic.GenericCameraConfig;
+import com.onvif.driver.gateway.device.generic.GenericCameraDevice;
+import com.onvif.driver.gateway.device.generic.GenericCameraExtensionPoint;
+import com.onvif.driver.gateway.stream.Go2RtcManager;
 import com.onvif.driver.gateway.util.ValidationUtil;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -72,6 +81,8 @@ public class ONVIFRoutes {
 
     private final GatewayContext context;
     private final ONVIFDeviceExtensionPoint deviceExtensionPoint;
+    private final GenericCameraExtensionPoint genericCameraExtensionPoint;
+    private final Go2RtcManager go2RtcManager;
     private final AuthenticationManager authManager;
 
     // ============================================================================
@@ -131,9 +142,12 @@ public class ONVIFRoutes {
     // Authentication configuration (v2.2.0: Using AuthenticationManager)
     private static final boolean REQUIRE_AUTHENTICATION = true;  // v2.1.0: Now enforced
 
-    public ONVIFRoutes(GatewayContext context, ONVIFDeviceExtensionPoint deviceExtensionPoint) {
+    public ONVIFRoutes(GatewayContext context, ONVIFDeviceExtensionPoint deviceExtensionPoint,
+                       GenericCameraExtensionPoint genericCameraExtensionPoint, Go2RtcManager go2RtcManager) {
         this.context = context;
         this.deviceExtensionPoint = deviceExtensionPoint;
+        this.genericCameraExtensionPoint = genericCameraExtensionPoint;
+        this.go2RtcManager = go2RtcManager;
         this.authManager = new AuthenticationManager(context);
         logger.info("AuthenticationManager initialized with account lockout and API key support");
     }
@@ -244,93 +258,91 @@ public class ONVIFRoutes {
                 return null;
             }
 
-            if (profileToken == null || profileToken.trim().isEmpty()) {
-                logger.warn("Missing profile parameter");
-                response.sendError(400, "Missing required parameter: profile");
-                return null;
-            }
-
-            // Validate parameter format
+            // Validate device name format
             if (!ValidationUtil.isValidDeviceName(deviceName)) {
                 logger.warn("Invalid device name format: {}", deviceName);
                 response.sendError(400, "Invalid device name format");
                 return null;
             }
 
-            if (!ValidationUtil.isValidProfileToken(profileToken)) {
-                logger.warn("Invalid profile token format: {}", profileToken);
-                response.sendError(400, "Invalid profile token format");
-                return null;
-            }
-            logger.debug("Parameters validated");
+            // Look up device in both registries (ONVIF first, then Generic Camera)
+            ONVIFDevice onvifDevice = deviceExtensionPoint.getDevice(deviceName);
+            GenericCameraDevice genericDevice = genericCameraExtensionPoint != null
+                ? genericCameraExtensionPoint.getDevice(deviceName) : null;
 
-            // Get device
-            logger.debug("Looking up device: {}", deviceName);
-            ONVIFDevice device = deviceExtensionPoint.getDevice(deviceName);
-            if (device == null) {
-                logger.warn("Device not found: {}", deviceName);
+            if (onvifDevice == null && genericDevice == null) {
+                logger.warn("Device not found in any registry: {}", deviceName);
                 response.sendError(404, "Device not found: " + deviceName);
                 return null;
             }
-            logger.debug("Device found: {}", device);
 
-            // Check device status
-            String deviceStatus = device.getStatus();
-            logger.debug("Device status: {}", deviceStatus);
-            if (!"Running".equals(deviceStatus) && !"Connected".equals(deviceStatus)) {
-                logger.warn("Device not in running state: {} - status: {}", deviceName, deviceStatus);
-                response.sendError(503, "Device is not connected: " + deviceStatus);
-                return null;
-            }
-            logger.debug("Device status OK");
-
-            // Get snapshot
-            logger.debug("Requesting snapshot from device for profile: {}", profileToken);
             byte[] snapshotBytes;
-            try {
-                snapshotBytes = device.getClient().getSnapshot(profileToken);
-                logger.debug("Snapshot received, size: {} bytes", snapshotBytes.length);
 
-                // CRITICAL: Validate that we actually received a JPEG image, not HTML or other content
-                if (snapshotBytes.length > 0) {
-                    // Check for JPEG magic bytes (FF D8 FF)
-                    boolean isJpeg = snapshotBytes.length >= 3 &&
-                                    (snapshotBytes[0] & 0xFF) == 0xFF &&
-                                    (snapshotBytes[1] & 0xFF) == 0xD8 &&
-                                    (snapshotBytes[2] & 0xFF) == 0xFF;
-
-                    // Check for HTML content
-                    String contentStart = new String(snapshotBytes, 0, Math.min(100, snapshotBytes.length));
-                    boolean isHtml = contentStart.toLowerCase().contains("<!doctype") ||
-                                    contentStart.toLowerCase().contains("<html");
-
-                    logger.debug("Content validation - isJPEG: {}, isHTML: {}", isJpeg, isHtml);
-                    logger.debug("First 100 bytes: {}", contentStart);
-
-                    if (!isJpeg || isHtml) {
-                        logger.error("CAMERA DOES NOT COMPLY WITH ONVIF SPECIFICATION");
-                        logger.error("Camera returned {} instead of JPEG image", isHtml ? "HTML login page" : "non-JPEG content");
-                        logger.error("Camera: {}, Profile: {}", deviceName, profileToken);
-                        logger.error("Snapshot URL: {}", device.getClient().getSnapshotUri(profileToken));
-                        logger.error("");
-                        logger.error("This camera does not properly implement the ONVIF GetSnapshotUri specification.");
-                        logger.error("The snapshot URL requires authentication methods not supported by ONVIF standard.");
-                        logger.error("");
-                        logger.error("RESOLUTION:");
-                        logger.error("1. Use the RTSP StreamUri from OPC-UA tags: [default]OPC UA/{}/Profiles/{}/StreamUri", deviceName, profileToken);
-                        logger.error("2. Contact camera manufacturer about ONVIF compliance");
-                        logger.error("3. Consider using a camera with better ONVIF support (Axis, Hikvision, Dahua)");
-
-                        response.sendError(500, "Camera does not properly implement ONVIF snapshot specification. " +
-                            "Use RTSP StreamUri from OPC-UA tags instead: [default]OPC UA/" + deviceName + "/Profiles/" + profileToken + "/StreamUri");
-                        return null;
-                    }
+            if (onvifDevice != null) {
+                // ONVIF device - requires profile token
+                if (profileToken == null || profileToken.trim().isEmpty()) {
+                    response.sendError(400, "Missing required parameter: profile (required for ONVIF devices)");
+                    return null;
                 }
-            } catch (IOException e) {
-                logger.error("Failed to get snapshot from device {}, profile {}: {}",
-                    deviceName, profileToken, e.getMessage());
-                logger.error("Exception details:", e);
-                response.sendError(500, "Failed to retrieve snapshot from camera");
+                if (!ValidationUtil.isValidProfileToken(profileToken)) {
+                    response.sendError(400, "Invalid profile token format");
+                    return null;
+                }
+
+                String deviceStatus = onvifDevice.getStatus();
+                if (!"Running".equals(deviceStatus) && !"Connected".equals(deviceStatus)) {
+                    response.sendError(503, "Device is not connected: " + deviceStatus);
+                    return null;
+                }
+
+                try {
+                    snapshotBytes = onvifDevice.getClient().getSnapshot(profileToken);
+                } catch (IOException e) {
+                    logger.error("Failed to get snapshot from ONVIF device {}: {}", deviceName, e.getMessage());
+                    response.sendError(500, "Failed to retrieve snapshot from camera");
+                    return null;
+                }
+            } else {
+                // Generic camera device
+                String deviceStatus = genericDevice.getStatus();
+                if (!"Running".equals(deviceStatus) && !"Connected".equals(deviceStatus)) {
+                    response.sendError(503, "Device is not connected: " + deviceStatus);
+                    return null;
+                }
+
+                if (genericDevice.getCameraClient() == null) {
+                    response.sendError(500, "Camera client not initialized");
+                    return null;
+                }
+
+                try {
+                    snapshotBytes = genericDevice.getCameraClient().fetchSnapshot();
+                } catch (IOException e) {
+                    logger.error("Failed to get snapshot from generic camera {}: {}", deviceName, e.getMessage());
+                    response.sendError(500, "Failed to retrieve snapshot from camera");
+                    return null;
+                }
+            }
+
+            // Validate snapshot content
+            if (snapshotBytes != null && snapshotBytes.length > 0) {
+                boolean isJpeg = snapshotBytes.length >= 3 &&
+                                (snapshotBytes[0] & 0xFF) == 0xFF &&
+                                (snapshotBytes[1] & 0xFF) == 0xD8 &&
+                                (snapshotBytes[2] & 0xFF) == 0xFF;
+
+                String contentStart = new String(snapshotBytes, 0, Math.min(100, snapshotBytes.length));
+                boolean isHtml = contentStart.toLowerCase().contains("<!doctype") ||
+                                contentStart.toLowerCase().contains("<html");
+
+                if (!isJpeg || isHtml) {
+                    logger.error("Camera returned {} instead of JPEG image for device: {}",
+                        isHtml ? "HTML content" : "non-JPEG content", deviceName);
+                    response.sendError(500, "Camera returned non-JPEG content instead of snapshot image");
+                    return null;
+                }
+            } else {
+                response.sendError(500, "Empty snapshot received from camera");
                 return null;
             }
 
@@ -412,21 +424,10 @@ public class ONVIFRoutes {
                 return null;
             }
 
-            if (profileToken == null || profileToken.trim().isEmpty()) {
-                response.sendError(400, "Missing required parameter: profile");
-                return null;
-            }
-
-            // Validate parameter format
+            // Validate device name format
             if (!ValidationUtil.isValidDeviceName(deviceName)) {
                 logger.warn("Invalid device name format: {}", deviceName);
                 response.sendError(400, "Invalid device name format");
-                return null;
-            }
-
-            if (!ValidationUtil.isValidProfileToken(profileToken)) {
-                logger.warn("Invalid profile token format: {}", profileToken);
-                response.sendError(400, "Invalid profile token format");
                 return null;
             }
 
@@ -442,20 +443,19 @@ public class ONVIFRoutes {
                 }
             }
 
-            logger.debug("Stream request - device: {}, profile: {}, fps: {}", deviceName, profileToken, fps);
+            // Look up device in both registries
+            ONVIFDevice onvifDevice = deviceExtensionPoint.getDevice(deviceName);
+            GenericCameraDevice genericDevice = genericCameraExtensionPoint != null
+                ? genericCameraExtensionPoint.getDevice(deviceName) : null;
 
-            // Get device
-            ONVIFDevice device = deviceExtensionPoint.getDevice(deviceName);
-            if (device == null) {
-                logger.warn("Device not found: {}", deviceName);
+            if (onvifDevice == null && genericDevice == null) {
                 response.sendError(404, "Device not found: " + deviceName);
                 return null;
             }
 
             // Check device status
-            String deviceStatus = device.getStatus();
+            String deviceStatus = onvifDevice != null ? onvifDevice.getStatus() : genericDevice.getStatus();
             if (!"Running".equals(deviceStatus) && !"Connected".equals(deviceStatus)) {
-                logger.warn("Device not in running state: {} - status: {}", deviceName, deviceStatus);
                 response.sendError(503, "Device is not connected: " + deviceStatus);
                 return null;
             }
@@ -466,76 +466,27 @@ public class ONVIFRoutes {
             response.setHeader("Pragma", "no-cache");
             response.setHeader("Expires", "0");
             response.setHeader("Connection", "close");
-            // CORS - only allow requests from authenticated Ignition sessions
-            // In production, this should be restricted to specific origins
             String origin = context.getRequest().getHeader("Origin");
             if (origin != null && isAllowedOrigin(origin)) {
                 response.setHeader("Access-Control-Allow-Origin", origin);
                 response.setHeader("Access-Control-Allow-Credentials", "true");
             }
 
-            // Start streaming
-            OutputStream output = response.getOutputStream();
-            long frameDelay = 1000 / fps;
-            int frameCount = 0;
-            int errorCount = 0;
-            int maxConsecutiveErrors = 5;
-
-            logger.info("Starting MJPEG stream - device: {}, profile: {}, fps: {}", deviceName, profileToken, fps);
-
-            while (!Thread.currentThread().isInterrupted()) {
-                long frameStart = System.currentTimeMillis();
-
-                try {
-                    byte[] frame = device.getClient().getSnapshot(profileToken);
-
-                    if (frame != null && frame.length > 0) {
-                        output.write(("--" + BOUNDARY + "\r\n").getBytes());
-                        output.write("Content-Type: image/jpeg\r\n".getBytes());
-                        output.write(("Content-Length: " + frame.length + "\r\n\r\n").getBytes());
-                        output.write(frame);
-                        output.write("\r\n".getBytes());
-                        output.flush();
-
-                        frameCount++;
-                        errorCount = 0;
-
-                        if (frameCount % 100 == 0) {
-                            logger.debug("Stream {} frames delivered - device: {}, profile: {}",
-                                frameCount, deviceName, profileToken);
-                        }
-                    } else {
-                        errorCount++;
-                        logger.warn("Empty frame received from device: {}", deviceName);
-                    }
-
-                } catch (IOException e) {
-                    errorCount++;
-                    logger.error("Error getting frame from device {} (error {} of {}): {}",
-                        deviceName, errorCount, maxConsecutiveErrors, e.getMessage());
-
-                    if (errorCount >= maxConsecutiveErrors) {
-                        logger.error("Too many consecutive errors, stopping stream for device: {}", deviceName);
-                        break;
-                    }
+            if (genericDevice != null) {
+                // Generic camera - use fallback chain
+                streamGenericCamera(genericDevice, deviceName, fps, response, startTime);
+            } else {
+                // ONVIF device - requires profile token
+                if (profileToken == null || profileToken.trim().isEmpty()) {
+                    response.sendError(400, "Missing required parameter: profile (required for ONVIF devices)");
+                    return null;
                 }
-
-                // Maintain frame rate
-                long frameTime = System.currentTimeMillis() - frameStart;
-                long sleepTime = frameDelay - frameTime;
-                if (sleepTime > 0) {
-                    try {
-                        Thread.sleep(sleepTime);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
+                if (!ValidationUtil.isValidProfileToken(profileToken)) {
+                    response.sendError(400, "Invalid profile token format");
+                    return null;
                 }
+                streamOnvifDevice(onvifDevice, deviceName, profileToken, fps, response, startTime);
             }
-
-            long duration = System.currentTimeMillis() - startTime;
-            logger.info("Stream ended - device: {}, profile: {}, frames: {}, duration: {} ms",
-                deviceName, profileToken, frameCount, duration);
 
         } catch (Exception e) {
             logger.error("Unexpected error in stream handler for device: {}, profile: {}",
@@ -572,6 +523,206 @@ public class ONVIFRoutes {
         // TODO: Make this configurable via module settings
         // For now, be permissive for Ignition internal requests
         return origin.startsWith("http://") || origin.startsWith("https://");
+    }
+
+    /**
+     * Streams MJPEG from an ONVIF device using snapshot polling.
+     */
+    private void streamOnvifDevice(ONVIFDevice device, String deviceName, String profileToken,
+                                   int fps, HttpServletResponse response, long startTime) throws IOException {
+        OutputStream output = response.getOutputStream();
+        long frameDelay = 1000 / fps;
+        int frameCount = 0;
+        int errorCount = 0;
+        int maxConsecutiveErrors = 5;
+
+        logger.info("Starting MJPEG stream - device: {}, profile: {}, fps: {}", deviceName, profileToken, fps);
+
+        while (!Thread.currentThread().isInterrupted()) {
+            long frameStart = System.currentTimeMillis();
+            try {
+                byte[] frame = device.getClient().getSnapshot(profileToken);
+                if (frame != null && frame.length > 0) {
+                    writeMjpegFrame(output, frame);
+                    frameCount++;
+                    errorCount = 0;
+                    if (frameCount % 100 == 0) {
+                        logger.debug("Stream {} frames delivered - device: {}", frameCount, deviceName);
+                    }
+                } else {
+                    errorCount++;
+                }
+            } catch (IOException e) {
+                errorCount++;
+                if (errorCount >= maxConsecutiveErrors) {
+                    logger.error("Too many consecutive errors, stopping stream for device: {}", deviceName);
+                    break;
+                }
+            }
+            sleepForFrameRate(frameStart, frameDelay);
+        }
+
+        logger.info("Stream ended - device: {}, frames: {}, duration: {} ms",
+            deviceName, frameCount, System.currentTimeMillis() - startTime);
+    }
+
+    /**
+     * Streams MJPEG for a generic camera device using the fallback chain:
+     * 1. go2rtc RTSP decode (proxy MJPEG from go2rtc)
+     * 2. Native MJPEG URL proxy
+     * 3. Snapshot-polling MJPEG
+     */
+    private void streamGenericCamera(GenericCameraDevice device, String deviceName,
+                                     int fps, HttpServletResponse response, long startTime) throws IOException {
+        GenericCameraConfig config = device.getConfig();
+        String rtspUrl = config.cameraConnection().rtspUrl();
+        String mjpegUrl = config.cameraConnection().mjpegUrl();
+        boolean hasRtsp = rtspUrl != null && !rtspUrl.trim().isEmpty();
+        boolean hasMjpeg = mjpegUrl != null && !mjpegUrl.trim().isEmpty();
+        boolean hasSnapshot = device.getCameraClient() != null
+            && config.cameraConnection().snapshotUrl() != null
+            && !config.cameraConnection().snapshotUrl().trim().isEmpty();
+
+        // Fallback 1: go2rtc RTSP -> MJPEG proxy
+        if (hasRtsp && device.isGo2RtcStreamRegistered() && go2RtcManager != null && go2RtcManager.isAvailable()) {
+            logger.info("Streaming via go2rtc for device: {}", deviceName);
+            String go2rtcMjpegUrl = go2RtcManager.getStreamMjpegUrl(deviceName);
+            if (proxyMjpegStream(go2rtcMjpegUrl, response, deviceName, startTime)) {
+                return;
+            }
+            logger.warn("go2rtc proxy failed, trying fallback for device: {}", deviceName);
+        }
+
+        // Fallback 2: Native MJPEG URL proxy
+        if (hasMjpeg) {
+            logger.info("Streaming native MJPEG for device: {}", deviceName);
+            if (proxyMjpegStream(mjpegUrl, response, deviceName, startTime)) {
+                return;
+            }
+            logger.warn("Native MJPEG proxy failed, trying snapshot polling for device: {}", deviceName);
+        }
+
+        // Fallback 3: Snapshot-polling MJPEG
+        if (hasSnapshot) {
+            logger.info("Streaming via snapshot polling for device: {}", deviceName);
+            streamSnapshotPolling(device, deviceName, fps, response, startTime);
+            return;
+        }
+
+        // No streaming method available
+        if (!response.isCommitted()) {
+            response.sendError(400, "No streaming source available. Configure RTSP, MJPEG, or snapshot URL.");
+        }
+    }
+
+    /**
+     * Proxies an MJPEG stream from a URL (go2rtc or camera native MJPEG).
+     * Returns true if successfully started proxying, false if connection failed.
+     */
+    private boolean proxyMjpegStream(String mjpegUrl, HttpServletResponse response,
+                                     String deviceName, long startTime) {
+        RequestConfig proxyConfig = RequestConfig.custom()
+            .setConnectTimeout(5000)
+            .setSocketTimeout(30000)
+            .build();
+
+        try (CloseableHttpClient proxyClient = HttpClientBuilder.create()
+                .setDefaultRequestConfig(proxyConfig).build()) {
+            HttpGet request = new HttpGet(mjpegUrl);
+            try (CloseableHttpResponse upstream = proxyClient.execute(request)) {
+                int statusCode = upstream.getStatusLine().getStatusCode();
+                if (statusCode != 200) {
+                    logger.warn("MJPEG proxy got HTTP {} from {}", statusCode, mjpegUrl);
+                    return false;
+                }
+
+                OutputStream output = response.getOutputStream();
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                long totalBytes = 0;
+
+                try (var inputStream = upstream.getEntity().getContent()) {
+                    while ((bytesRead = inputStream.read(buffer)) != -1) {
+                        output.write(buffer, 0, bytesRead);
+                        output.flush();
+                        totalBytes += bytesRead;
+                    }
+                }
+
+                logger.info("MJPEG proxy ended - device: {}, bytes: {}, duration: {} ms",
+                    deviceName, totalBytes, System.currentTimeMillis() - startTime);
+                return true;
+            }
+        } catch (IOException e) {
+            logger.debug("MJPEG proxy failed for {}: {}", deviceName, e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Streams MJPEG by polling snapshots from a generic camera.
+     */
+    private void streamSnapshotPolling(GenericCameraDevice device, String deviceName,
+                                       int fps, HttpServletResponse response, long startTime) throws IOException {
+        OutputStream output = response.getOutputStream();
+        long frameDelay = 1000 / fps;
+        int frameCount = 0;
+        int errorCount = 0;
+        int maxConsecutiveErrors = 5;
+
+        while (!Thread.currentThread().isInterrupted()) {
+            long frameStart = System.currentTimeMillis();
+            try {
+                byte[] frame = device.getCameraClient().fetchSnapshot();
+                if (frame != null && frame.length > 0) {
+                    writeMjpegFrame(output, frame);
+                    frameCount++;
+                    errorCount = 0;
+                    if (frameCount % 100 == 0) {
+                        logger.debug("Stream {} frames delivered - device: {}", frameCount, deviceName);
+                    }
+                } else {
+                    errorCount++;
+                }
+            } catch (IOException e) {
+                errorCount++;
+                if (errorCount >= maxConsecutiveErrors) {
+                    logger.error("Too many snapshot errors, stopping stream for device: {}", deviceName);
+                    break;
+                }
+            }
+            sleepForFrameRate(frameStart, frameDelay);
+        }
+
+        logger.info("Snapshot-polling stream ended - device: {}, frames: {}, duration: {} ms",
+            deviceName, frameCount, System.currentTimeMillis() - startTime);
+    }
+
+    /**
+     * Writes a single MJPEG frame to the output stream.
+     */
+    private void writeMjpegFrame(OutputStream output, byte[] frame) throws IOException {
+        output.write(("--" + BOUNDARY + "\r\n").getBytes());
+        output.write("Content-Type: image/jpeg\r\n".getBytes());
+        output.write(("Content-Length: " + frame.length + "\r\n\r\n").getBytes());
+        output.write(frame);
+        output.write("\r\n".getBytes());
+        output.flush();
+    }
+
+    /**
+     * Sleeps to maintain the target frame rate.
+     */
+    private void sleepForFrameRate(long frameStart, long frameDelay) {
+        long frameTime = System.currentTimeMillis() - frameStart;
+        long sleepTime = frameDelay - frameTime;
+        if (sleepTime > 0) {
+            try {
+                Thread.sleep(sleepTime);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 
     /**
@@ -715,6 +866,7 @@ public class ONVIFRoutes {
                 ONVIFDevice device = entry.getValue();
                 JSONObject deviceJson = new JSONObject();
                 deviceJson.put("name", entry.getKey());
+                deviceJson.put("type", "onvif");
                 deviceJson.put("status", device.getStatus());
 
                 // Try to get additional info from the device's client
@@ -765,6 +917,32 @@ public class ONVIFRoutes {
                 devices.put(deviceJson);
             }
 
+            // Include generic cameras
+            if (genericCameraExtensionPoint != null) {
+                Map<String, GenericCameraDevice> genericDevices = GenericCameraExtensionPoint.getAllDevices();
+                for (Map.Entry<String, GenericCameraDevice> entry : genericDevices.entrySet()) {
+                    GenericCameraDevice device = entry.getValue();
+                    JSONObject deviceJson = new JSONObject();
+                    deviceJson.put("name", entry.getKey());
+                    deviceJson.put("type", "generic");
+                    deviceJson.put("status", device.getStatus());
+
+                    GenericCameraConfig cfg = device.getConfig();
+                    if (cfg.cameraConnection().rtspUrl() != null) {
+                        deviceJson.put("rtspUrl", cfg.cameraConnection().rtspUrl());
+                    }
+                    if (cfg.cameraConnection().snapshotUrl() != null) {
+                        deviceJson.put("snapshotUrl", cfg.cameraConnection().snapshotUrl());
+                    }
+                    if (cfg.cameraConnection().mjpegUrl() != null) {
+                        deviceJson.put("mjpegUrl", cfg.cameraConnection().mjpegUrl());
+                    }
+                    deviceJson.put("go2rtcRegistered", device.isGo2RtcStreamRegistered());
+
+                    devices.put(deviceJson);
+                }
+            }
+
             result.put("success", true);
             result.put("devices", devices);
             result.put("count", devices.length());
@@ -782,16 +960,11 @@ public class ONVIFRoutes {
     }
 
     /**
-     * Handles getting status of a specific ONVIF device.
+     * Handles getting status of a specific device (ONVIF or Generic Camera).
      * URL: http://gateway:8088/data/onvif-driver/device/:name/status
-     *
-     * NOTE: Authentication is handled by Ignition's /data/ route infrastructure.
      */
     private Object handleDeviceStatus(RequestContext context, HttpServletResponse response) throws Exception {
         logger.debug("Device status request received");
-
-        // NOTE: No custom authentication check needed - Ignition's /data/ routes
-        // require authenticated session by default. The Gateway handles this.
 
         String deviceName = context.getParameter("name");
         if (deviceName == null || deviceName.trim().isEmpty()) {
@@ -800,11 +973,34 @@ public class ONVIFRoutes {
         }
 
         try {
-            ONVIFDevice device = deviceExtensionPoint.getDevice(deviceName);
-            if (device == null) {
+            // Check both registries
+            ONVIFDevice onvifDevice = deviceExtensionPoint.getDevice(deviceName);
+            GenericCameraDevice genericDevice = genericCameraExtensionPoint != null
+                ? genericCameraExtensionPoint.getDevice(deviceName) : null;
+
+            if (onvifDevice == null && genericDevice == null) {
                 response.sendError(404, "Device not found: " + deviceName);
                 return null;
             }
+
+            // Use whichever device was found (ONVIF device block follows for backward compatibility)
+            if (genericDevice != null && onvifDevice == null) {
+                // Return generic camera status
+                JSONObject result = new JSONObject();
+                result.put("success", true);
+                result.put("name", deviceName);
+                result.put("type", "generic");
+                result.put("status", genericDevice.getStatus());
+                result.put("go2rtcRegistered", genericDevice.isGo2RtcStreamRegistered());
+                result.put("timestamp", System.currentTimeMillis());
+
+                response.setContentType("application/json");
+                response.getWriter().write(result.toString());
+                return null;
+            }
+
+            // ONVIF device (original behavior)
+            ONVIFDevice device = onvifDevice;
 
             JSONObject result = new JSONObject();
             result.put("success", true);
@@ -877,7 +1073,11 @@ public class ONVIFRoutes {
         JSONObject result = new JSONObject();
         result.put("status", "ok");
         result.put("service", "onvif-driver");
-        result.put("deviceCount", ONVIFDeviceExtensionPoint.getAllDevices().size());
+        result.put("onvifDeviceCount", ONVIFDeviceExtensionPoint.getAllDevices().size());
+        result.put("genericCameraCount", GenericCameraExtensionPoint.getAllDevices().size());
+        result.put("deviceCount", ONVIFDeviceExtensionPoint.getAllDevices().size()
+            + GenericCameraExtensionPoint.getAllDevices().size());
+        result.put("go2rtcAvailable", go2RtcManager != null && go2RtcManager.isAvailable());
         result.put("timestamp", System.currentTimeMillis());
 
         response.setContentType("application/json");
