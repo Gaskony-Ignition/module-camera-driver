@@ -5,6 +5,32 @@ All notable changes to the Ignition Camera Driver module will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-02-10
+
+### Changed
+- **Module Rename**: "ONVIF Driver" renamed to "Camera Driver" across all user-facing strings, labels, and log messages
+- **URL Paths**: `/data/onvif-driver/*` → `/data/camera-driver/*` for all HTTP endpoints
+- **Data Directory**: `{dataDir}/onvif-driver/go2rtc/` → `{dataDir}/camera-driver/go2rtc/`
+- **Navigation**: Gateway Config menu now shows "Camera Driver > Connection Browser"
+- **Build Output**: Module file renamed from `ONVIFDriver-{version}.modl` to `CameraDriver-{version}.modl`
+- **Resource Paths**: `/res/onvif-driver/*` → `/res/camera-driver/*`
+- **WWW-Authenticate Realm**: "ONVIF Driver" → "Camera Driver"
+- **Health Check**: Service name in `/health` response changed to `camera-driver`
+- **i18n Display Name**: Device type dropdown now shows "Camera Driver"
+- **Version**: Bumped to 2.5.0
+
+### Unchanged (Backward Compatibility)
+- Java packages remain `com.onvif.driver.*`
+- Class names unchanged (ONVIFDevice, ONVIFModuleHook, ONVIFRoutes, etc.)
+- Module ID remains `com.onvif.driver.opcua`
+- Device type IDs and config records unchanged
+- Existing device configurations continue to work
+
+### Notes
+- This rename reflects the module's expanded scope: both ONVIF protocol cameras and generic RTSP/MJPEG/snapshot cameras
+- GitHub repo renamed from `ignition-module-ONVIF-driver` to `ignition-module-camera-driver`
+- 28 files updated, all 168 tests passing
+
 ## [2.4.0] - 2025-12-11
 
 ### Security
