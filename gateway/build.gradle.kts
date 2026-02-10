@@ -66,13 +66,13 @@ val downloadGo2Rtc by tasks.registering {
         val outputDir = go2rtcOutputDir.get().asFile
         outputDir.mkdirs()
 
-        val binaries = mapOf(
+        // Linux binaries are direct downloads
+        val linuxBinaries = mapOf(
             "go2rtc_linux_amd64" to "https://github.com/AlexxIT/go2rtc/releases/download/v${go2rtcVersion}/go2rtc_linux_amd64",
-            "go2rtc_linux_arm64" to "https://github.com/AlexxIT/go2rtc/releases/download/v${go2rtcVersion}/go2rtc_linux_arm64",
-            "go2rtc_windows_amd64.exe" to "https://github.com/AlexxIT/go2rtc/releases/download/v${go2rtcVersion}/go2rtc_win64.zip"
+            "go2rtc_linux_arm64" to "https://github.com/AlexxIT/go2rtc/releases/download/v${go2rtcVersion}/go2rtc_linux_arm64"
         )
 
-        for ((fileName, url) in binaries) {
+        for ((fileName, url) in linuxBinaries) {
             val outputFile = File(outputDir, fileName)
             if (!outputFile.exists()) {
                 logger.lifecycle("Downloading go2rtc binary: $fileName")
@@ -81,6 +81,26 @@ val downloadGo2Rtc by tasks.registering {
                 } catch (e: Exception) {
                     logger.warn("Failed to download $fileName: ${e.message}. go2rtc will not be available for this platform.")
                 }
+            }
+        }
+
+        // Windows binary is distributed as a ZIP archive - download and extract
+        val windowsExeFile = File(outputDir, "go2rtc_windows_amd64.exe")
+        if (!windowsExeFile.exists()) {
+            logger.lifecycle("Downloading go2rtc binary: go2rtc_windows_amd64.exe")
+            val windowsZipFile = File(outputDir, "go2rtc_win64.zip")
+            try {
+                ant.invokeMethod("get", mapOf(
+                    "src" to "https://github.com/AlexxIT/go2rtc/releases/download/v${go2rtcVersion}/go2rtc_win64.zip",
+                    "dest" to windowsZipFile,
+                    "skipexisting" to "true"
+                ))
+                ant.invokeMethod("unzip", mapOf("src" to windowsZipFile, "dest" to outputDir))
+                File(outputDir, "go2rtc.exe").renameTo(windowsExeFile)
+                windowsZipFile.delete()
+            } catch (e: Exception) {
+                logger.warn("Failed to download/extract Windows go2rtc: ${e.message}. go2rtc will not be available on Windows.")
+                windowsZipFile.delete()
             }
         }
     }

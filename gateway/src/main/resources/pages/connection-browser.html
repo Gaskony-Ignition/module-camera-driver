@@ -737,7 +737,7 @@
         function updateStats() {
             const displayedDevices = getDisplayedDevices();
             document.getElementById('totalDevices').textContent = displayedDevices.length;
-            document.getElementById('runningDevices').textContent = displayedDevices.filter(d => d.status === 'Running').length;
+            document.getElementById('runningDevices').textContent = displayedDevices.filter(d => d.status === 'Running' || d.status === 'Connected').length;
 
             let totalProfiles = 0;
             displayedDevices.forEach(d => {
@@ -847,7 +847,7 @@
                     <div class="profile-info">
                         <span class="profile-name">${escapeHtml(profile.name || profile.token)}</span>
                         <span class="profile-details">
-                            ${profile.width}x${profile.height} @ ${profile.frameRate}fps | ${escapeHtml(profile.encoding)}
+                            ${profile.width && profile.height ? `${profile.width}x${profile.height} ` : ''}${profile.frameRate ? `@ ${profile.frameRate}fps ` : ''}${profile.encoding ? (profile.width ? '| ' : '') + escapeHtml(profile.encoding) : ''}
                         </span>
                     </div>
                     <div class="profile-actions">

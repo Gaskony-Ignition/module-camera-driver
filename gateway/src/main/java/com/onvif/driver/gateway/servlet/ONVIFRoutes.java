@@ -940,6 +940,41 @@ public class ONVIFRoutes {
                     }
                     deviceJson.put("go2rtcRegistered", device.isGo2RtcStreamRegistered());
 
+                    // Generate synthetic profiles from configured URLs
+                    JSONArray genericProfiles = new JSONArray();
+                    String rtspUrl = cfg.cameraConnection().rtspUrl();
+                    if (rtspUrl != null && !rtspUrl.trim().isEmpty()) {
+                        JSONObject rtspProfile = new JSONObject();
+                        rtspProfile.put("token", "rtsp");
+                        rtspProfile.put("name", "RTSP Stream");
+                        rtspProfile.put("encoding", "H.264");
+                        rtspProfile.put("streamUri", rtspUrl);
+                        int fps = cfg.streamSettings() != null ? cfg.streamSettings().defaultFps() : 15;
+                        rtspProfile.put("frameRate", fps);
+                        genericProfiles.put(rtspProfile);
+                    }
+                    String snapshotUrl = cfg.cameraConnection().snapshotUrl();
+                    if (snapshotUrl != null && !snapshotUrl.trim().isEmpty()) {
+                        JSONObject snapshotProfile = new JSONObject();
+                        snapshotProfile.put("token", "snapshot");
+                        snapshotProfile.put("name", "HTTP Snapshot");
+                        snapshotProfile.put("encoding", "JPEG");
+                        genericProfiles.put(snapshotProfile);
+                    }
+                    String mjpegUrl = cfg.cameraConnection().mjpegUrl();
+                    if (mjpegUrl != null && !mjpegUrl.trim().isEmpty()) {
+                        JSONObject mjpegProfile = new JSONObject();
+                        mjpegProfile.put("token", "mjpeg");
+                        mjpegProfile.put("name", "MJPEG Stream");
+                        mjpegProfile.put("encoding", "MJPEG");
+                        mjpegProfile.put("streamUri", mjpegUrl);
+                        genericProfiles.put(mjpegProfile);
+                    }
+                    if (genericProfiles.length() > 0) {
+                        deviceJson.put("profiles", genericProfiles);
+                        deviceJson.put("profileCount", genericProfiles.length());
+                    }
+
                     devices.put(deviceJson);
                 }
             }
@@ -994,6 +1029,42 @@ public class ONVIFRoutes {
                 result.put("status", genericDevice.getStatus());
                 result.put("go2rtcRegistered", genericDevice.isGo2RtcStreamRegistered());
                 result.put("timestamp", System.currentTimeMillis());
+
+                // Generate synthetic profiles from configured URLs
+                GenericCameraConfig cfg = genericDevice.getConfig();
+                JSONArray genericProfiles = new JSONArray();
+                String rtspUrl = cfg.cameraConnection().rtspUrl();
+                if (rtspUrl != null && !rtspUrl.trim().isEmpty()) {
+                    JSONObject rtspProfile = new JSONObject();
+                    rtspProfile.put("token", "rtsp");
+                    rtspProfile.put("name", "RTSP Stream");
+                    rtspProfile.put("encoding", "H.264");
+                    rtspProfile.put("streamUri", rtspUrl);
+                    int fps = cfg.streamSettings() != null ? cfg.streamSettings().defaultFps() : 15;
+                    rtspProfile.put("frameRate", fps);
+                    genericProfiles.put(rtspProfile);
+                }
+                String snapshotUrl = cfg.cameraConnection().snapshotUrl();
+                if (snapshotUrl != null && !snapshotUrl.trim().isEmpty()) {
+                    JSONObject snapshotProfile = new JSONObject();
+                    snapshotProfile.put("token", "snapshot");
+                    snapshotProfile.put("name", "HTTP Snapshot");
+                    snapshotProfile.put("encoding", "JPEG");
+                    genericProfiles.put(snapshotProfile);
+                }
+                String mjpegUrl = cfg.cameraConnection().mjpegUrl();
+                if (mjpegUrl != null && !mjpegUrl.trim().isEmpty()) {
+                    JSONObject mjpegProfile = new JSONObject();
+                    mjpegProfile.put("token", "mjpeg");
+                    mjpegProfile.put("name", "MJPEG Stream");
+                    mjpegProfile.put("encoding", "MJPEG");
+                    mjpegProfile.put("streamUri", mjpegUrl);
+                    genericProfiles.put(mjpegProfile);
+                }
+                if (genericProfiles.length() > 0) {
+                    result.put("profiles", genericProfiles);
+                    result.put("profileCount", genericProfiles.length());
+                }
 
                 response.setContentType("application/json");
                 response.getWriter().write(result.toString());
