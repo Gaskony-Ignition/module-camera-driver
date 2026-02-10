@@ -117,6 +117,11 @@ jobs:
               lambda m: m.group(1) + VERSION,
               content, flags=re.DOTALL, count=1
           )
+          content = re.sub(
+              r'(\| Camera Driver\s*\| v)[\d.]+',
+              lambda m: m.group(1) + VERSION,
+              content
+          )
           with open('README.md', 'w') as f:
               f.write(content)
           "
