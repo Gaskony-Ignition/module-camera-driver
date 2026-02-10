@@ -45,6 +45,15 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
         Path dataDir = context.getSystemManager().getDataDir().toPath();
         this.go2RtcManager = new Go2RtcManager(dataDir);
 
+        // Start go2rtc process early so it's available before devices start up
+        // (devices start between setup() and startup() in the OPC-UA lifecycle)
+        try {
+            go2RtcManager.start();
+            logger.info("go2rtc manager started in setup (available: {})", go2RtcManager.isAvailable());
+        } catch (Exception e) {
+            logger.warn("Failed to start go2rtc in setup - RTSP streaming will use fallback modes: {}", e.getMessage());
+        }
+
         // Create Generic Camera extension point with go2rtc support
         this.genericCameraExtensionPoint = new GenericCameraExtensionPoint(go2RtcManager);
 
@@ -95,15 +104,7 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
         );
         logger.debug("Registered resource bundles: ONVIFDevice, GenericCamera");
 
-        // Start go2rtc process for RTSP-to-MJPEG conversion
-        try {
-            go2RtcManager.start();
-            logger.info("go2rtc manager started (available: {})", go2RtcManager.isAvailable());
-        } catch (Exception e) {
-            logger.warn("Failed to start go2rtc - RTSP streaming will use fallback modes: {}", e.getMessage());
-        }
-
-        // Device extension points already created in setup()
+        // Device extension points already created in setup(), go2rtc already started in setup()
         logger.debug("Device extension points ready: ONVIF={}, GenericCamera={}", deviceExtensionPoint, genericCameraExtensionPoint);
         logger.info("Camera Driver module started successfully");
     }

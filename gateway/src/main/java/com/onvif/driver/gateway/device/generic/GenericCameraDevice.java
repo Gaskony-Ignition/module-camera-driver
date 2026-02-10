@@ -273,6 +273,39 @@ public class GenericCameraDevice extends ManagedAddressSpaceWithLifecycle implem
         return go2RtcStreamRegistered;
     }
 
+    /**
+     * Attempts to register this device's RTSP stream with go2rtc if not already registered.
+     * This handles the case where go2rtc wasn't available during device startup.
+     *
+     * @return true if the stream is registered (either already was, or was just registered)
+     */
+    public boolean tryRegisterGo2Rtc() {
+        if (go2RtcStreamRegistered) {
+            return true;
+        }
+
+        String rtspUrl = config.cameraConnection().rtspUrl();
+        if (rtspUrl == null || rtspUrl.trim().isEmpty() || go2RtcManager == null) {
+            return false;
+        }
+
+        if (!go2RtcManager.isAvailable()) {
+            return false;
+        }
+
+        String password = resolvePassword();
+        String username = config.cameraConnection().username();
+        String effectiveRtspUrl = buildAuthenticatedRtspUrl(rtspUrl, username, password);
+        go2RtcStreamRegistered = go2RtcManager.addStream(context.getName(), effectiveRtspUrl);
+
+        if (go2RtcStreamRegistered) {
+            logger.info("Late registration of RTSP stream with go2rtc succeeded for device: {}", context.getName());
+            deviceStatus = "Running";
+        }
+
+        return go2RtcStreamRegistered;
+    }
+
     @Override
     @SuppressWarnings("rawtypes")
     public void onMonitoringModeChanged(List items) {

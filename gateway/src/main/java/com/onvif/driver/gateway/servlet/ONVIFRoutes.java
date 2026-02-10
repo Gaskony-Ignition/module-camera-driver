@@ -584,6 +584,11 @@ public class ONVIFRoutes {
             && config.cameraConnection().snapshotUrl() != null
             && !config.cameraConnection().snapshotUrl().trim().isEmpty();
 
+        // Try late go2rtc registration if it wasn't available during device startup
+        if (hasRtsp && !device.isGo2RtcStreamRegistered()) {
+            device.tryRegisterGo2Rtc();
+        }
+
         // Fallback 1: go2rtc RTSP -> MJPEG proxy
         if (hasRtsp && device.isGo2RtcStreamRegistered() && go2RtcManager != null && go2RtcManager.isAvailable()) {
             logger.info("Streaming via go2rtc for device: {}", deviceName);
