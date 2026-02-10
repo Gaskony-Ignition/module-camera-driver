@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Module hook for the ONVIF Driver.
+ * Module hook for the Camera Driver.
  * This registers the device driver with Ignition's device connection system.
  *
  * CRITICAL LEARNING: Must register resource bundle with BundleUtil.get().addBundle()
@@ -48,7 +48,7 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
         // Create Generic Camera extension point with go2rtc support
         this.genericCameraExtensionPoint = new GenericCameraExtensionPoint(go2RtcManager);
 
-        logger.info("ONVIF Driver module setup complete");
+        logger.info("Camera Driver module setup complete");
         logger.debug("Created device extension points: ONVIF={}, GenericCamera={}", deviceExtensionPoint, genericCameraExtensionPoint);
 
         // Register WebUI component for connection browser
@@ -57,21 +57,21 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
             // The page is served via authenticated data routes, not static resources
             SystemJsModule connectionBrowserModule = new SystemJsModule(
                 "com.onvif.driver.ConnectionBrowser",
-                "/res/onvif-driver/connectionBrowser.js"
+                "/res/camera-driver/connectionBrowser.js"
             );
 
             // Add navigation menu item in the Connections section
             context.getWebResourceManager().getNavigationModel().getConnections()
-                .addCategory("onvif-driver", cat -> cat
-                    .label("ONVIF Driver")
+                .addCategory("camera-driver", cat -> cat
+                    .label("Camera Driver")
                     .addPage("Connection Browser", page -> page
                         .position(10)
-                        .mount("/onvif-connection-browser", "ConnectionBrowser", connectionBrowserModule)
+                        .mount("/camera-connection-browser", "ConnectionBrowser", connectionBrowserModule)
                     )
                 );
 
-            logger.info("Added 'ONVIF Driver' menu item to Gateway Config:");
-            logger.info("  - Connection Browser: /app/onvif-connection-browser");
+            logger.info("Added 'Camera Driver' menu item to Gateway Config:");
+            logger.info("  - Connection Browser: /app/camera-connection-browser");
         } catch (Exception e) {
             logger.error("Failed to add WebUI navigation menu item", e);
         }
@@ -79,7 +79,7 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
 
     @Override
     public void startup(LicenseState licenseState) {
-        logger.info("ONVIF Driver module starting...");
+        logger.info("Camera Driver module starting...");
 
         // CRITICAL: Register resource bundles for i18n support
         // Without this, display names will show as "¿key?"
@@ -105,23 +105,23 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
 
         // Device extension points already created in setup()
         logger.debug("Device extension points ready: ONVIF={}, GenericCamera={}", deviceExtensionPoint, genericCameraExtensionPoint);
-        logger.info("ONVIF Driver module started successfully");
+        logger.info("Camera Driver module started successfully");
     }
 
     /**
      * Mounts route handlers for snapshot and stream endpoints.
-     * Routes will be available at /data/onvif-driver/*
+     * Routes will be available at /data/camera-driver/*
      *
      * IMPORTANT: URLs are /data/{alias}/* NOT /main/data/{alias}/*
      *
      * Specifically:
-     * - http://gateway:8088/data/onvif-driver/test
-     * - http://gateway:8088/data/onvif-driver/snapshot?device=X&profile=Y
-     * - http://gateway:8088/data/onvif-driver/stream?device=X&profile=Y&fps=Z
+     * - http://gateway:8088/data/camera-driver/test
+     * - http://gateway:8088/data/camera-driver/snapshot?device=X&profile=Y
+     * - http://gateway:8088/data/camera-driver/stream?device=X&profile=Y&fps=Z
      */
     @Override
     public void mountRouteHandlers(RouteGroup routes) {
-        logger.info("Mounting ONVIF route handlers at /data/onvif-driver/*");
+        logger.info("Mounting route handlers at /data/camera-driver/*");
         logger.debug("RouteGroup: {}", routes);
 
         new ONVIFRoutes(context, deviceExtensionPoint, genericCameraExtensionPoint, go2RtcManager).mountRoutes(routes);
@@ -133,33 +133,33 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
      * Returns the mount path alias for this module.
      * This determines the path at which routes are mounted: /data/{alias}/*
      *
-     * Public resources (from getMountedResourceFolder) at /res/onvif-driver/*:
-     * - /res/onvif-driver/connectionBrowser.js - React component for connection browser
+     * Public resources (from getMountedResourceFolder) at /res/camera-driver/*:
+     * - /res/camera-driver/connectionBrowser.js - React component for connection browser
      *
-     * Authenticated data routes (from mountRouteHandlers) at /data/onvif-driver/*:
-     * - /data/onvif-driver/connection-browser - Connection browser page (requires login)
-     * - /data/onvif-driver/devices - List devices (requires login)
-     * - /data/onvif-driver/device/:name/status - Device status (requires login)
-     * - /data/onvif-driver/snapshot - Snapshot endpoint (requires login)
-     * - /data/onvif-driver/stream - Stream endpoint (requires login)
-     * - /data/onvif-driver/health - Health check (public)
+     * Authenticated data routes (from mountRouteHandlers) at /data/camera-driver/*:
+     * - /data/camera-driver/connection-browser - Connection browser page (requires login)
+     * - /data/camera-driver/devices - List devices (requires login)
+     * - /data/camera-driver/device/:name/status - Device status (requires login)
+     * - /data/camera-driver/snapshot - Snapshot endpoint (requires login)
+     * - /data/camera-driver/stream - Stream endpoint (requires login)
+     * - /data/camera-driver/health - Health check (public)
      */
     @Override
     public Optional<String> getMountPathAlias() {
-        logger.debug("getMountPathAlias() returning: onvif-driver");
-        return Optional.of("onvif-driver");
+        logger.debug("getMountPathAlias() returning: camera-driver");
+        return Optional.of("camera-driver");
     }
 
     /**
      * Mount web resources from the "mounted" folder.
-     * Files in the mounted/ directory will be accessible at /res/onvif-driver/*
+     * Files in the mounted/ directory will be accessible at /res/camera-driver/*
      *
-     * IMPORTANT: Ignition automatically adds the /res/onvif-driver prefix based on
+     * IMPORTANT: Ignition automatically adds the /res/camera-driver prefix based on
      * getMountPathAlias(). Do NOT replicate this path structure in your filesystem.
      *
      * Example mapping:
      *   Filesystem: gateway/src/main/resources/mounted/connectionBrowser.js
-     *   URL:        /res/onvif-driver/connectionBrowser.js
+     *   URL:        /res/camera-driver/connectionBrowser.js
      */
     @Override
     public Optional<String> getMountedResourceFolder() {
@@ -168,7 +168,7 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
 
     @Override
     public void shutdown() {
-        logger.info("ONVIF Driver module shutting down...");
+        logger.info("Camera Driver module shutting down...");
 
         // Shutdown rate limiting executor to prevent resource leak
         try {
@@ -186,12 +186,12 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
             }
         }
 
-        logger.info("ONVIF Driver module shutdown complete");
+        logger.info("Camera Driver module shutdown complete");
     }
 
     /**
      * Returns the list of device extension points provided by this module.
-     * This makes "ONVIF Driver" appear in the device type dropdown.
+     * This makes "Camera Driver" appear in the device type dropdown.
      */
     @Override
     protected List<DeviceExtensionPoint<?>> getDeviceExtensionPoints() {

@@ -1,7 +1,7 @@
 {
     "name": "onvif_driver_webui",
-    "version": "2.4.0",
-    "description": "ONVIF Driver WebUI Component",
+    "version": "2.5.0",
+    "description": "Camera Driver WebUI Component",
     "main": "build/dist/index.js",
     "scripts": {
         "build": "yarn run build:dev",

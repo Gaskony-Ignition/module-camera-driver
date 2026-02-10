@@ -1,6 +1,6 @@
-# Ignition ONVIF Driver
+# Ignition Camera Driver
 
-An Inductive Automation Ignition module that provides device driver connectivity to ONVIF-compatible IP cameras and devices.
+An Inductive Automation Ignition module that provides device driver connectivity to IP cameras via ONVIF protocol, RTSP, MJPEG, or snapshot URLs.
 
 ## Overview
 
@@ -14,9 +14,9 @@ This module allows Ignition users to:
 ## Current Status
 
 **✅ PRODUCTION READY - CONNECTION BROWSER UI**
-**Version**: 2.3.2
+**Version**: 2.5.0
 
-The ONVIF Driver is production-ready with comprehensive security enhancements, authenticated HTTP endpoints, configurable SSL/TLS validation, and full ONVIF protocol communication including PTZ control, streaming capabilities, polling, auto-reconnect, and OPC-UA integration.
+The Camera Driver is production-ready with comprehensive security enhancements, authenticated HTTP endpoints, configurable SSL/TLS validation, and full ONVIF protocol communication including PTZ control, streaming capabilities, polling, auto-reconnect, and OPC-UA integration.
 
 ### What's Complete ✅
 
@@ -79,7 +79,7 @@ The device driver exposes the following configuration options:
 ## Project Structure
 
 ```
-ignition-ONVIF-driver/
+ignition-module-camera-driver/
 ├── README.md                     # This file
 ├── LEARNINGS.md                  # CRITICAL lessons from PLC Simulator
 ├── PLAN.md                       # Implementation roadmap
@@ -108,26 +108,26 @@ ignition-ONVIF-driver/
 ./gradlew clean build
 
 # Output will be at:
-# build/ONVIFDriver-2.1.0.modl
+# build/CameraDriver-2.5.0.modl
 ```
 
 ## Quick Start
 
 ### 1. Build
 ```bash
-cd /modules/ignition-ONVIF-driver
+cd /modules/ignition-module-camera-driver
 ./gradlew clean build
 ```
 
 ### 2. Install (Docker)
 ```bash
-docker cp build/ONVIFDriver-2.1.0.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
+docker cp build/CameraDriver-2.5.0.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
 docker restart ignition-gateway
 ```
 
 ### 3. Configure
 1. Gateway → Config → OPC UA → Device Connections
-2. Create new Device → Select "ONVIF Driver"
+2. Create new Device → Select "Camera Driver"
 3. Enter IP address, username, password
 4. Enable "Auto-discover Services"
 5. Save and view in OPC Browser
@@ -199,8 +199,8 @@ When testing in Docker (like the Ignition gateway):
 
 ## Git Repository
 
-- **Local Path**: `/modules/ignition-ONVIF-driver/`
-- **Remote**: https://github.com/nigelgwork/ignition-ONVIF-driver.git
+- **Local Path**: `/modules/ignition-module-camera-driver/`
+- **Remote**: https://github.com/Gaskony-Ignition/ignition-module-camera-driver.git
 
 ## Version History
 
@@ -228,8 +228,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Project Links
 
-- **GitHub Repository**: https://github.com/nigelgwork/ignition-ONVIF-driver
-- **Issue Tracker**: https://github.com/nigelgwork/ignition-ONVIF-driver/issues
+- **GitHub Repository**: https://github.com/Gaskony-Ignition/ignition-module-camera-driver
+- **Issue Tracker**: https://github.com/Gaskony-Ignition/ignition-module-camera-driver/issues
 - **Security Policy**: See [SECURITY.md](docs/SECURITY.md) for reporting security vulnerabilities
 
 ## Author

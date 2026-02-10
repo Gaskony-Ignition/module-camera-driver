@@ -1,4 +1,4 @@
-rootProject.name = "onvif-driver"
+rootProject.name = "camera-driver"
 
 // Enable type-safe project accessors
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")

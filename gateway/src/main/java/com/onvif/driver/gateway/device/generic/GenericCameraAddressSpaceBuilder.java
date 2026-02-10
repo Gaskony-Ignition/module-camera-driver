@@ -66,11 +66,11 @@ public class GenericCameraAddressSpaceBuilder {
         // Ignition gateway endpoints for Perspective consumption
         String deviceName = deviceContext.getName();
         String snapshotEndpoint = String.format(
-            "/main/data/onvif-driver/snapshot?device=%s",
+            "/main/data/camera-driver/snapshot?device=%s",
             urlEncode(deviceName)
         );
         String streamEndpoint = String.format(
-            "/main/data/onvif-driver/stream?device=%s&fps=%d",
+            "/main/data/camera-driver/stream?device=%s&fps=%d",
             urlEncode(deviceName),
             config.streamSettings().defaultFps()
         );

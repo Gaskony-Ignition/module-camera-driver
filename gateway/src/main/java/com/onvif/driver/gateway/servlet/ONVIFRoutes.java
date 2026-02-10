@@ -39,11 +39,11 @@ import com.onvif.driver.gateway.onvif.MediaProfile;
 import com.onvif.driver.gateway.onvif.DeviceInformation;
 
 /**
- * Route handlers for ONVIF snapshot and streaming endpoints.
- * Registers routes under /data/onvif-driver/*
+ * Route handlers for camera snapshot and streaming endpoints.
+ * Registers routes under /data/camera-driver/*
  *
  * IMPORTANT: Actual URLs are /data/{alias}/* NOT /main/data/{alias}/*
- * Example: http://gateway:8088/data/onvif-driver/snapshot?device=SideCamera&profile=000
+ * Example: http://gateway:8088/data/camera-driver/snapshot?device=SideCamera&profile=000
  *
  * AUTHENTICATION (v2.2.0+):
  *
@@ -57,13 +57,13 @@ import com.onvif.driver.gateway.onvif.DeviceInformation;
  *    - Validates against Ignition gateway authentication
  *    - Account lockout after 5 failed attempts (15-minute duration)
  *    - Failed attempts logged for security monitoring
- *    - Example: curl -u username:password http://gateway:8088/data/onvif-driver/snapshot?device=X&profile=Y
+ *    - Example: curl -u username:password http://gateway:8088/data/camera-driver/snapshot?device=X&profile=Y
  *
  * 3. API Key Authentication (For programmatic access):
  *    - SHA-256 hashed keys stored securely
  *    - Configure via module settings or API
- *    - Example: http://gateway:8088/data/onvif-driver/snapshot?device=X&profile=Y&apiKey=YOUR_KEY
- *    - Example header: curl -H "X-API-Key: YOUR_KEY" http://gateway:8088/data/onvif-driver/snapshot?device=X&profile=Y
+ *    - Example: http://gateway:8088/data/camera-driver/snapshot?device=X&profile=Y&apiKey=YOUR_KEY
+ *    - Example header: curl -H "X-API-Key: YOUR_KEY" http://gateway:8088/data/camera-driver/snapshot?device=X&profile=Y
  *
  * SECURITY FEATURES:
  * - Account lockout after repeated failures
@@ -77,7 +77,7 @@ import com.onvif.driver.gateway.onvif.DeviceInformation;
 public class ONVIFRoutes {
 
     private static final Logger logger = LoggerFactory.getLogger(ONVIFRoutes.class);
-    private static final String BOUNDARY = "onvif-stream-boundary";
+    private static final String BOUNDARY = "camera-stream-boundary";
 
     private final GatewayContext context;
     private final ONVIFDeviceExtensionPoint deviceExtensionPoint;
@@ -134,7 +134,7 @@ public class ONVIFRoutes {
     // Single-threaded executor handles all rate limit expirations
     private static final ScheduledExecutorService rateLimitExecutor =
         Executors.newScheduledThreadPool(1, r -> {
-            Thread t = new Thread(r, "ONVIF-RateLimit-Cleanup");
+            Thread t = new Thread(r, "CameraDriver-RateLimit-Cleanup");
             t.setDaemon(true);
             return t;
         });
@@ -156,10 +156,10 @@ public class ONVIFRoutes {
      * Mounts the ONVIF routes on the provided RouteGroup.
      */
     public void mountRoutes(RouteGroup routes) {
-        logger.info("Mounting ONVIF routes...");
+        logger.info("Mounting camera driver routes...");
         logger.debug("RouteGroup: {}, class: {}", routes, routes.getClass().getName());
 
-        // Mount snapshot endpoint at /data/onvif-driver/snapshot
+        // Mount snapshot endpoint at /data/camera-driver/snapshot
         routes.newRoute("/snapshot")
             .handler(this::handleSnapshot)
             .type(RouteGroup.TYPE_OCTET_STREAM)  // Binary data (handler sets image/jpeg)
@@ -167,7 +167,7 @@ public class ONVIFRoutes {
             .mount();
         logger.debug("Mounted /snapshot route");
 
-        // Mount stream endpoint at /data/onvif-driver/stream
+        // Mount stream endpoint at /data/camera-driver/stream
         routes.newRoute("/stream")
             .handler(this::handleStream)
             .type(RouteGroup.TYPE_OCTET_STREAM)  // Binary data (handler sets multipart/x-mixed-replace)
@@ -175,7 +175,7 @@ public class ONVIFRoutes {
             .mount();
         logger.debug("Mounted /stream route");
 
-        // Mount device list endpoint at /data/onvif-driver/devices
+        // Mount device list endpoint at /data/camera-driver/devices
         routes.newRoute("/devices")
             .handler(this::handleListDevices)
             .type(RouteGroup.TYPE_JSON)
@@ -183,7 +183,7 @@ public class ONVIFRoutes {
             .mount();
         logger.debug("Mounted /devices route");
 
-        // Mount device status endpoint at /data/onvif-driver/device/:name/status
+        // Mount device status endpoint at /data/camera-driver/device/:name/status
         routes.newRoute("/device/:name/status")
             .handler(this::handleDeviceStatus)
             .type(RouteGroup.TYPE_JSON)
@@ -191,7 +191,7 @@ public class ONVIFRoutes {
             .mount();
         logger.debug("Mounted /device/:name/status route");
 
-        // Mount connection browser page at /data/onvif-driver/connection-browser
+        // Mount connection browser page at /data/camera-driver/connection-browser
         routes.newRoute("/connection-browser")
             .handler(this::handleConnectionBrowserPage)
             .type(RouteGroup.TYPE_OCTET_STREAM)  // Will set text/html in handler
@@ -207,12 +207,12 @@ public class ONVIFRoutes {
             .mount();
         logger.debug("Mounted /health route");
 
-        logger.info("ONVIF routes mounted: /snapshot, /stream, /devices, /device/:name/status, /connection-browser, /health");
+        logger.info("Camera driver routes mounted: /snapshot, /stream, /devices, /device/:name/status, /connection-browser, /health");
     }
 
     /**
      * Handles snapshot requests.
-     * URL: http://gateway:8088/data/onvif-driver/snapshot?device=DeviceName&profile=ProfileToken
+     * URL: http://gateway:8088/data/camera-driver/snapshot?device=DeviceName&profile=ProfileToken
      */
     private Object handleSnapshot(RequestContext context, HttpServletResponse response) throws Exception {
         logger.debug("Snapshot request received");
@@ -377,7 +377,7 @@ public class ONVIFRoutes {
 
     /**
      * Handles MJPEG stream requests.
-     * URL: http://gateway:8088/data/onvif-driver/stream?device=DeviceName&profile=ProfileToken&fps=10
+     * URL: http://gateway:8088/data/camera-driver/stream?device=DeviceName&profile=ProfileToken&fps=10
      */
     private Object handleStream(RequestContext context, HttpServletResponse response) throws Exception {
         logger.debug("Stream request received");
@@ -840,13 +840,13 @@ public class ONVIFRoutes {
      * @throws IOException if sending error fails
      */
     private void sendAuthenticationRequired(HttpServletResponse response) throws IOException {
-        response.setHeader("WWW-Authenticate", "Basic realm=\"ONVIF Driver\", charset=\"UTF-8\"");
+        response.setHeader("WWW-Authenticate", "Basic realm=\"Camera Driver\", charset=\"UTF-8\"");
         response.sendError(401, "Authentication required. Please log in to the Ignition Gateway or provide an API key.");
     }
 
     /**
-     * Handles listing all ONVIF devices.
-     * URL: http://gateway:8088/data/onvif-driver/devices
+     * Handles listing all devices.
+     * URL: http://gateway:8088/data/camera-driver/devices
      *
      * NOTE: Authentication is handled by Ignition's /data/ route infrastructure.
      * Routes under /data/ require an authenticated Gateway session by default.
@@ -961,7 +961,7 @@ public class ONVIFRoutes {
 
     /**
      * Handles getting status of a specific device (ONVIF or Generic Camera).
-     * URL: http://gateway:8088/data/onvif-driver/device/:name/status
+     * URL: http://gateway:8088/data/camera-driver/device/:name/status
      */
     private Object handleDeviceStatus(RequestContext context, HttpServletResponse response) throws Exception {
         logger.debug("Device status request received");
@@ -1067,12 +1067,12 @@ public class ONVIFRoutes {
 
     /**
      * Handles health check requests.
-     * URL: http://gateway:8088/data/onvif-driver/health
+     * URL: http://gateway:8088/data/camera-driver/health
      */
     private Object handleHealthCheck(RequestContext context, HttpServletResponse response) throws Exception {
         JSONObject result = new JSONObject();
         result.put("status", "ok");
-        result.put("service", "onvif-driver");
+        result.put("service", "camera-driver");
         result.put("onvifDeviceCount", ONVIFDeviceExtensionPoint.getAllDevices().size());
         result.put("genericCameraCount", GenericCameraExtensionPoint.getAllDevices().size());
         result.put("deviceCount", ONVIFDeviceExtensionPoint.getAllDevices().size()
@@ -1087,7 +1087,7 @@ public class ONVIFRoutes {
 
     /**
      * Handles serving the connection browser HTML page.
-     * URL: http://gateway:8088/data/onvif-driver/connection-browser
+     * URL: http://gateway:8088/data/camera-driver/connection-browser
      *
      * NOTE: Authentication is handled by Ignition's /data/ route infrastructure.
      */

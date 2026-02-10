@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ONVIF Connection Browser</title>
+    <title>Camera Connection Browser</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -538,8 +538,8 @@
     <div class="container">
         <div class="header">
             <div>
-                <h1>ONVIF Connection Browser</h1>
-                <div class="subtitle">View and manage ONVIF camera connections</div>
+                <h1>Camera Connection Browser</h1>
+                <div class="subtitle">View and manage camera connections</div>
             </div>
             <div style="display: flex; gap: 12px; align-items: center;">
                 <span id="refreshIndicator" class="live-indicator" style="display: none;">
@@ -646,7 +646,7 @@
             const select = document.getElementById('deviceSelect');
 
             try {
-                const response = await fetch('/data/onvif-driver/devices', {
+                const response = await fetch('/data/camera-driver/devices', {
                     credentials: 'include'
                 });
 
@@ -764,7 +764,7 @@
                     content.innerHTML = `
                         <div class="no-devices">
                             <div class="no-devices-icon">&#x1F4F9;</div>
-                            <p>No ONVIF devices configured</p>
+                            <p>No camera devices configured</p>
                             <p style="margin-top: 8px; font-size: 14px;">Create device connections in Config > OPC UA > Device Connections</p>
                         </div>
                     `;
@@ -874,14 +874,14 @@
         }
 
         async function viewSnapshot(deviceName, profileToken) {
-            const url = `/data/onvif-driver/snapshot?device=${encodeURIComponent(deviceName)}&profile=${encodeURIComponent(profileToken)}&t=${Date.now()}`;
+            const url = `/data/camera-driver/snapshot?device=${encodeURIComponent(deviceName)}&profile=${encodeURIComponent(profileToken)}&t=${Date.now()}`;
 
             // Open in a new tab/window for full view
             window.open(url, '_blank');
         }
 
         function viewStream(deviceName, profileToken, profileName, rtspUri) {
-            const streamUrl = `/data/onvif-driver/stream?device=${encodeURIComponent(deviceName)}&profile=${encodeURIComponent(profileToken)}&fps=10`;
+            const streamUrl = `/data/camera-driver/stream?device=${encodeURIComponent(deviceName)}&profile=${encodeURIComponent(profileToken)}&fps=10`;
 
             document.getElementById('streamModalTitle').textContent = `${deviceName} - ${profileName}`;
             document.getElementById('streamImage').src = streamUrl;

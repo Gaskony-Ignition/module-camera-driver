@@ -1,4 +1,4 @@
-# .gitattributes for ONVIF Driver module
+# .gitattributes for Camera Driver module
 # Ensures consistent line endings and file handling across platforms
 
 # Auto detect text files and normalize line endings to LF

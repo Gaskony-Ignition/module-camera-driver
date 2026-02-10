@@ -1,8 +1,8 @@
-# Claude Context - Ignition ONVIF Driver
+# Claude Context - Ignition Camera Driver
 
 ## Project Overview
 
-**Name**: Ignition ONVIF Driver Module
+**Name**: Ignition Camera Driver Module
 **Version**: 2.1.0
 **Status**: Production Ready - Authentication & Comprehensive Testing
 **Language**: Java 17
@@ -28,7 +28,7 @@
 ```bash
 cd /modules/ignition-ONVIF-driver
 ./gradlew clean build
-# Output: build/ONVIFDriver-2.1.0.modl
+# Output: build/CameraDriver-2.1.0.modl
 ```
 
 ### Common Commands
@@ -102,8 +102,8 @@ ignition-ONVIF-driver/
 - Configurable SSL/TLS validation (STRICT/TRUST_FIRST_USE/INSECURE)
 
 #### 4. ONVIFRoutes (HTTP Endpoints)
-- `/data/onvif-driver/snapshot` - JPEG snapshots (authenticated)
-- `/data/onvif-driver/stream` - MJPEG streaming (authenticated)
+- `/data/camera-driver/snapshot` - JPEG snapshots (authenticated)
+- `/data/camera-driver/stream` - MJPEG streaming (authenticated)
 - Resource protection with concurrent request limits
 
 ## Security Architecture (v2.1.0)
@@ -268,7 +268,7 @@ See LEARNINGS.md for complete details.
 ./gradlew test
 
 # Install to Docker container
-docker cp build/ONVIFDriver-2.1.0.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
+docker cp build/CameraDriver-2.1.0.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
 docker restart ignition-gateway
 
 # Check logs
@@ -277,20 +277,20 @@ docker logs -f ignition-gateway
 
 ### Configuration
 1. Gateway → Config → OPC UA → Device Connections
-2. Create new Device → Select "ONVIF Driver"
+2. Create new Device → Select "Camera Driver"
 3. Configure IP, credentials, SSL validation mode
 4. Save and verify in OPC Browser
 
 ### Testing Endpoints (v2.1.0+)
 ```bash
 # Snapshot with Basic Auth
-curl -u username:password http://localhost:8088/data/onvif-driver/snapshot?device=Camera01&profile=Profile_1
+curl -u username:password http://localhost:8088/data/camera-driver/snapshot?device=Camera01&profile=Profile_1
 
 # Snapshot with API Key
-curl "http://localhost:8088/data/onvif-driver/snapshot?device=Camera01&profile=Profile_1&apiKey=YOUR_KEY"
+curl "http://localhost:8088/data/camera-driver/snapshot?device=Camera01&profile=Profile_1&apiKey=YOUR_KEY"
 
 # Stream with Basic Auth
-curl -u username:password http://localhost:8088/data/onvif-driver/stream?device=Camera01&profile=Profile_1&fps=10
+curl -u username:password http://localhost:8088/data/camera-driver/stream?device=Camera01&profile=Profile_1&fps=10
 
 # Run automated tests
 ./gradlew test

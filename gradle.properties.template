@@ -1,5 +1,5 @@
 # ============================================================================
-# Ignition ONVIF Driver - Gradle Properties Template
+# Ignition Camera Driver - Gradle Properties Template
 # ============================================================================
 #
 # SETUP INSTRUCTIONS:
@@ -25,11 +25,11 @@ ignition.sdk.version=8.3.0
 
 # Module signing configuration
 # These values reference environment variables for security
-ignition.signing.keystoreFile=onvif-driver.jks
+ignition.signing.keystoreFile=camera-driver.jks
 ignition.signing.keystorePassword=${KEYSTORE_PASSWORD}
-ignition.signing.certFile=onvif-driver.der
+ignition.signing.certFile=camera-driver.der
 ignition.signing.certPassword=${CERT_PASSWORD}
-ignition.signing.certAlias=onvif-driver
+ignition.signing.certAlias=camera-driver
 
 # Gradle daemon settings
 org.gradle.daemon=true

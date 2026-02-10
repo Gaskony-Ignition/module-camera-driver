@@ -97,7 +97,7 @@ rtsp://10.60.9.146:554/h264Preview_01_main
 
 4. **Test HTTP snapshot** via module:
    ```
-   http://gateway:8088/data/onvif-driver/snapshot?device=DeviceName&profile=Profile000_MainStream
+   http://gateway:8088/data/camera-driver/snapshot?device=DeviceName&profile=Profile000_MainStream
    ```
 
 ## Recommendations

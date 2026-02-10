@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the Ignition ONVIF Driver module will be documented in this file.
+All notable changes to the Ignition Camera Driver module will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -45,7 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.3.0] - 2025-11-26
 
 ### Added - Connection Browser UI
-- **Gateway Config Menu Item**: New "ONVIF Driver > Connection Browser" menu entry in Gateway Config under Connections
+- **Gateway Config Menu Item**: New "Camera Driver > Connection Browser" menu entry in Gateway Config under Connections
 - **Connection Browser Page**: Web-based dashboard for viewing all ONVIF device connections
   - Real-time device status display (Running, Error, Connecting)
   - Device information (manufacturer, model, firmware, serial number)
@@ -55,10 +55,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - RTSP URI copy functionality
   - Auto-refresh toggle for live status updates
 - **New API Endpoints**:
-  - `/data/onvif-driver/devices` - List all devices with status and profiles
-  - `/data/onvif-driver/device/:name/status` - Detailed device status
-  - `/data/onvif-driver/connection-browser` - Connection browser HTML page
-  - `/data/onvif-driver/health` - Health check endpoint
+  - `/data/camera-driver/devices` - List all devices with status and profiles
+  - `/data/camera-driver/device/:name/status` - Detailed device status
+  - `/data/camera-driver/connection-browser` - Connection browser HTML page
+  - `/data/camera-driver/health` - Health check endpoint
 
 ### Added - Web UI Module
 - **New web-ui subproject**: React/TypeScript component build system

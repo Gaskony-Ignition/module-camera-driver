@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Manages authentication for ONVIF Driver HTTP endpoints.
+ * Manages authentication for Camera Driver HTTP endpoints.
  *
  * Supports three authentication methods:
  * 1. Ignition Session Authentication (primary)

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the security architecture, practices, and configuration for the ONVIF Driver module.
+This document describes the security architecture, practices, and configuration for the Camera Driver module.
 
 ## Module Signing
 
@@ -20,9 +20,9 @@ Module signing credentials are **NOT** stored in version control. To build signe
 
 ### Certificate Management
 
-- **Keystore**: `onvif-driver.jks` (excluded from version control)
-- **Certificate**: `onvif-driver.der` (excluded from version control)
-- **Alias**: `onvif-driver`
+- **Keystore**: `camera-driver.jks` (excluded from version control)
+- **Certificate**: `camera-driver.der` (excluded from version control)
+- **Alias**: `camera-driver`
 
 **IMPORTANT**: These files contain private keys and must never be committed to version control.
 
@@ -32,8 +32,8 @@ Module signing credentials are **NOT** stored in version control. To build signe
 
 **Current Status**: All HTTP endpoints require authentication with comprehensive security features.
 
-- `/data/onvif-driver/snapshot` - **REQUIRES AUTHENTICATION**
-- `/data/onvif-driver/stream` - **REQUIRES AUTHENTICATION**
+- `/data/camera-driver/snapshot` - **REQUIRES AUTHENTICATION**
+- `/data/camera-driver/stream` - **REQUIRES AUTHENTICATION**
 
 **Supported Authentication Methods**:
 
@@ -46,7 +46,7 @@ Module signing credentials are **NOT** stored in version control. To build signe
 2. **Basic Authentication** (For external tools)
    ```bash
    curl -u username:password \
-     "http://gateway:8088/data/onvif-driver/snapshot?device=Camera1&profile=000"
+     "http://gateway:8088/data/camera-driver/snapshot?device=Camera1&profile=000"
    ```
    - Validates credentials against Ignition gateway authentication
    - Account lockout after 5 failed attempts (15-minute duration)
@@ -57,13 +57,13 @@ Module signing credentials are **NOT** stored in version control. To build signe
 
    **Query Parameter**:
    ```bash
-   curl "http://gateway:8088/data/onvif-driver/snapshot?device=Camera1&profile=000&apiKey=YOUR_KEY"
+   curl "http://gateway:8088/data/camera-driver/snapshot?device=Camera1&profile=000&apiKey=YOUR_KEY"
    ```
 
    **Header** (recommended for security):
    ```bash
    curl -H "X-API-Key: YOUR_KEY" \
-     "http://gateway:8088/data/onvif-driver/snapshot?device=Camera1&profile=000"
+     "http://gateway:8088/data/camera-driver/snapshot?device=Camera1&profile=000"
    ```
 
    - SHA-256 hashed keys (no plain-text storage)

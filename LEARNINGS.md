@@ -1,6 +1,6 @@
 # CRITICAL LEARNINGS FROM PLC SIMULATOR PROJECT
 
-This document captures critical lessons learned during the development of the Ignition PLC Simulator module. **Read this carefully before implementing the ONVIF driver to avoid the same mistakes.**
+This document captures critical lessons learned during the development of the Ignition PLC Simulator module. **Read this carefully before implementing the Camera Driver to avoid the same mistakes.**
 
 ---
 
@@ -63,7 +63,7 @@ public ONVIFDeviceExtensionPoint() {
 File: `gateway/src/main/resources/com/onvif/driver/gateway/device/ONVIFDevice.properties`
 
 ```properties
-ONVIFDevice.Meta.DisplayName=ONVIF Driver
+ONVIFDevice.Meta.DisplayName=Camera Driver
 ONVIFDevice.Meta.Description=Connect to ONVIF-compatible IP cameras and devices
 ```
 
@@ -192,7 +192,7 @@ protected void validate(ONVIFDeviceConfig config, Builder errors) {
 ### 1. Directory Structure
 
 ```
-onvif-driver/
+camera-driver/
 ├── build.gradle.kts              # Root build file with ignitionModule config
 ├── settings.gradle.kts           # Subproject includes
 ├── gradle.properties             # Module signing, versions
@@ -326,4 +326,4 @@ public record DeviceConfig(Category1 cat1, Category2 cat2) {
 
 ---
 
-**🎯 Bottom Line: Read this file BEFORE implementing the ONVIF driver. These lessons were learned the hard way.**
+**🎯 Bottom Line: Read this file BEFORE implementing the Camera Driver. These lessons were learned the hard way.**

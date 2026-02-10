@@ -1,9 +1,9 @@
-# Release Notes - ONVIF Driver v2.1.0
+# Release Notes - Camera Driver v2.1.0
 
 **Release Date**: November 22, 2025
 **Module Files**:
-- ONVIFDriver-2.1.0.modl (1.7 MB, signed)
-- ONVIFDriver-2.1.0.unsigned.modl (1.7 MB, unsigned)
+- CameraDriver-2.1.0.modl (1.7 MB, signed)
+- CameraDriver-2.1.0.unsigned.modl (1.7 MB, unsigned)
 **Status**: Production Ready - Authentication & Testing Update
 **Previous Version**: v2.0.0
 
@@ -11,7 +11,7 @@
 
 ## 🎉 What's New in v2.1.0
 
-Version 2.1.0 delivers on the promises made in v2.0.0 by implementing **HTTP endpoint authentication**, **per-IP rate limiting**, and a **comprehensive automated test suite**. This release transforms the ONVIF Driver from a security-conscious module to a **production-hardened, fully-tested** solution.
+Version 2.1.0 delivers on the promises made in v2.0.0 by implementing **HTTP endpoint authentication**, **per-IP rate limiting**, and a **comprehensive automated test suite**. This release transforms the Camera Driver from a security-conscious module to a **production-hardened, fully-tested** solution.
 
 ### 🔒 Authentication - FINALLY IMPLEMENTED!
 
@@ -27,12 +27,12 @@ The #1 requested feature from v2.0.0 is now complete. All HTTP endpoints require
 **2. Basic Authentication** (For external tools)
 ```bash
 curl -u username:password \
-  "http://gateway:8088/data/onvif-driver/snapshot?device=Camera1&profile=000"
+  "http://gateway:8088/data/camera-driver/snapshot?device=Camera1&profile=000"
 ```
 
 **3. API Key** (For programmatic access)
 ```bash
-curl "http://gateway:8088/data/onvif-driver/snapshot?device=Camera1&profile=000&apiKey=YOUR_KEY"
+curl "http://gateway:8088/data/camera-driver/snapshot?device=Camera1&profile=000&apiKey=YOUR_KEY"
 ```
 
 #### Security Features
@@ -65,7 +65,7 @@ Prevent abuse and resource exhaustion with per-IP rate limiting.
 
 ### ✅ Comprehensive Test Suite - 168 Tests
 
-Finally, the ONVIF Driver has automated testing! **100% pass rate** across all tests.
+Finally, the Camera Driver has automated testing! **100% pass rate** across all tests.
 
 #### Test Statistics
 | Component | Tests | Lines | Coverage |
@@ -123,7 +123,7 @@ All tests include security-focused scenarios:
 
 **Step 1: Download and Install**
 ```bash
-# Download ONVIFDriver-2.1.0.unsigned.modl
+# Download CameraDriver-2.1.0.unsigned.modl
 # Install via Gateway Config → System → Modules
 ```
 
@@ -137,12 +137,12 @@ Option A - Ignition User (Recommended):
 Option B - Basic Authentication:
 ```bash
 curl -u myusername:mypassword \
-  "http://gateway:8088/data/onvif-driver/snapshot?device=Camera1&profile=000"
+  "http://gateway:8088/data/camera-driver/snapshot?device=Camera1&profile=000"
 ```
 
 Option C - API Key:
 ```bash
-curl "http://gateway:8088/data/onvif-driver/snapshot?device=Camera1&profile=000&apiKey=secret"
+curl "http://gateway:8088/data/camera-driver/snapshot?device=Camera1&profile=000&apiKey=secret"
 ```
 
 **Step 3: Verify Rate Limiting**
@@ -369,17 +369,17 @@ All documentation updated to reflect v2.1.0:
 1. **Test Authentication**:
    ```bash
    # Should succeed (with valid session or credentials)
-   curl -u admin:password http://gateway:8088/data/onvif-driver/snapshot?device=Camera1&profile=000
+   curl -u admin:password http://gateway:8088/data/camera-driver/snapshot?device=Camera1&profile=000
 
    # Should fail with 401
-   curl http://gateway:8088/data/onvif-driver/snapshot?device=Camera1&profile=000
+   curl http://gateway:8088/data/camera-driver/snapshot?device=Camera1&profile=000
    ```
 
 2. **Test Rate Limiting**:
    ```bash
    # Send 11 requests quickly (11th should fail with 429)
    for i in {1..11}; do
-     curl -u admin:password http://gateway:8088/data/onvif-driver/snapshot?device=Camera1&profile=000
+     curl -u admin:password http://gateway:8088/data/camera-driver/snapshot?device=Camera1&profile=000
    done
    ```
 
@@ -401,12 +401,12 @@ All documentation updated to reflect v2.1.0:
 ## 💾 Build Information
 
 **Module Details**:
-- Primary: ONVIFDriver-2.1.0.modl (signed, 1.7 MB)
-- Alternative: ONVIFDriver-2.1.0.unsigned.modl (unsigned, 1.7 MB)
+- Primary: CameraDriver-2.1.0.modl (signed, 1.7 MB)
+- Alternative: CameraDriver-2.1.0.unsigned.modl (unsigned, 1.7 MB)
 - Java: 17 (compatible with JDK 21)
 - Ignition: 8.3.0+
 - Gradle: 8.x with Kotlin DSL
-- Signing: Self-signed certificate (onvif-driver)
+- Signing: Self-signed certificate (camera-driver)
 
 **Dependencies**:
 - Apache HttpClient 4.5.14
@@ -461,7 +461,7 @@ Special thanks to:
 
 For upgrading from v2.0.0:
 
-- [ ] Download ONVIFDriver-2.1.0.unsigned.modl
+- [ ] Download CameraDriver-2.1.0.unsigned.modl
 - [ ] Backup existing device configurations
 - [ ] Install module via Gateway Config
 - [ ] Test authentication with Ignition user account

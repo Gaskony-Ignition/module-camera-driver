@@ -1,6 +1,6 @@
 # Implementation Status
 
-**Project**: Ignition ONVIF Driver Module
+**Project**: Ignition Camera Driver Module
 **Current Version**: 2.4.0
 **Last Updated**: 2025-12-11
 **Status**: ✅ **Production Ready** - Security Hardened Release
@@ -9,7 +9,7 @@
 
 ## Overview
 
-The Ignition ONVIF driver is a production-ready module that provides secure ONVIF network device connectivity for IP cameras and ONVIF-compatible devices. Version 2.0.0 introduces major security enhancements including authenticated HTTP endpoints, configurable SSL/TLS validation, and environment-based credential management. All core features including streaming capabilities are fully implemented and operational.
+The Ignition Camera Driver is a production-ready module that provides secure ONVIF network device connectivity for IP cameras and ONVIF-compatible devices. Version 2.0.0 introduces major security enhancements including authenticated HTTP endpoints, configurable SSL/TLS validation, and environment-based credential management. All core features including streaming capabilities are fully implemented and operational.
 
 ---
 

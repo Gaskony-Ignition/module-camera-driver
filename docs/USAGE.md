@@ -1,4 +1,4 @@
-# ONVIF Driver - HTTP Endpoint Usage
+# Camera Driver - HTTP Endpoint Usage
 
 ## Important Discovery
 
@@ -9,13 +9,13 @@ This was discovered by comparing with the working PLC Simulator module logs.
 ## Available Endpoints
 
 ### 1. Test Endpoint (Diagnostic)
-**URL:** `http://gateway:8088/data/onvif-driver/test`
+**URL:** `http://gateway:8088/data/camera-driver/test`
 
 **Response:**
 ```json
 {
   "status": "success",
-  "message": "ONVIF Driver test route is working!",
+  "message": "Camera Driver test route is working!",
   "timestamp": 1763722849385
 }
 ```
@@ -25,7 +25,7 @@ This was discovered by comparing with the working PLC Simulator module logs.
 ---
 
 ### 2. Snapshot Endpoint
-**URL:** `http://gateway:8088/data/onvif-driver/snapshot?device={DeviceName}&profile={ProfileToken}`
+**URL:** `http://gateway:8088/data/camera-driver/snapshot?device={DeviceName}&profile={ProfileToken}`
 
 **Authentication:** **REQUIRED** (v2.1.0+)
 
@@ -35,18 +35,18 @@ This was discovered by comparing with the working PLC Simulator module logs.
 
 **Example with Session Auth (Perspective/Vision):**
 ```
-http://192.168.7.111:9088/data/onvif-driver/snapshot?device=SideCamera&profile=000
+http://192.168.7.111:9088/data/camera-driver/snapshot?device=SideCamera&profile=000
 ```
 
 **Example with Basic Auth:**
 ```bash
 curl -u username:password \
-  "http://192.168.7.111:9088/data/onvif-driver/snapshot?device=SideCamera&profile=000"
+  "http://192.168.7.111:9088/data/camera-driver/snapshot?device=SideCamera&profile=000"
 ```
 
 **Example with API Key:**
 ```
-http://192.168.7.111:9088/data/onvif-driver/snapshot?device=SideCamera&profile=000&apiKey=YOUR_API_KEY
+http://192.168.7.111:9088/data/camera-driver/snapshot?device=SideCamera&profile=000&apiKey=YOUR_API_KEY
 ```
 
 **Response:** JPEG image (Content-Type: image/jpeg)
@@ -62,7 +62,7 @@ http://192.168.7.111:9088/data/onvif-driver/snapshot?device=SideCamera&profile=0
 ---
 
 ### 3. Stream Endpoint (MJPEG)
-**URL:** `http://gateway:8088/data/onvif-driver/stream?device={DeviceName}&profile={ProfileToken}&fps={FrameRate}`
+**URL:** `http://gateway:8088/data/camera-driver/stream?device={DeviceName}&profile={ProfileToken}&fps={FrameRate}`
 
 **Authentication:** **REQUIRED** (v2.1.0+)
 
@@ -73,25 +73,25 @@ http://192.168.7.111:9088/data/onvif-driver/snapshot?device=SideCamera&profile=0
 
 **Example with Session Auth:**
 ```
-http://192.168.7.111:9088/data/onvif-driver/stream?device=SideCamera&profile=000&fps=15
+http://192.168.7.111:9088/data/camera-driver/stream?device=SideCamera&profile=000&fps=15
 ```
 
 **Example with Basic Auth:**
 ```bash
 curl -u username:password \
-  "http://192.168.7.111:9088/data/onvif-driver/stream?device=SideCamera&profile=000&fps=15"
+  "http://192.168.7.111:9088/data/camera-driver/stream?device=SideCamera&profile=000&fps=15"
 ```
 
 **Example with API Key:**
 ```
-http://192.168.7.111:9088/data/onvif-driver/stream?device=SideCamera&profile=000&fps=15&apiKey=YOUR_API_KEY
+http://192.168.7.111:9088/data/camera-driver/stream?device=SideCamera&profile=000&fps=15&apiKey=YOUR_API_KEY
 ```
 
 **Response:** MJPEG stream (Content-Type: multipart/x-mixed-replace; boundary=onvif-stream-boundary)
 
 **Usage in HTML (with session auth):**
 ```html
-<img src="http://192.168.7.111:9088/data/onvif-driver/stream?device=SideCamera&profile=000&fps=15" />
+<img src="http://192.168.7.111:9088/data/camera-driver/stream?device=SideCamera&profile=000&fps=15" />
 ```
 
 **Note:** For external applications without session auth, use Basic Auth or API key in the URL.
@@ -103,7 +103,7 @@ http://192.168.7.111:9088/data/onvif-driver/stream?device=SideCamera&profile=000
 ### Prerequisites
 1. Create an ONVIF device connection in Ignition:
    - Go to: Config → OPC UA → Device Connections
-   - Create New Device → ONVIF Driver
+   - Create New Device → Camera Driver
    - Configure camera IP, username, password
    - Save with a meaningful name (e.g., "SideCamera")
 
@@ -113,7 +113,7 @@ http://192.168.7.111:9088/data/onvif-driver/stream?device=SideCamera&profile=000
 
 1. **Test route mounting:**
    ```
-   http://192.168.7.111:9088/data/onvif-driver/test
+   http://192.168.7.111:9088/data/camera-driver/test
    ```
    Should return JSON with success message.
 
@@ -123,13 +123,13 @@ http://192.168.7.111:9088/data/onvif-driver/stream?device=SideCamera&profile=000
 
 3. **Get a snapshot:**
    ```
-   http://192.168.7.111:9088/data/onvif-driver/snapshot?device=SideCamera&profile=000
+   http://192.168.7.111:9088/data/camera-driver/snapshot?device=SideCamera&profile=000
    ```
    Should display a JPEG image from the camera.
 
 4. **View live stream:**
    ```
-   http://192.168.7.111:9088/data/onvif-driver/stream?device=SideCamera&profile=000&fps=10
+   http://192.168.7.111:9088/data/camera-driver/stream?device=SideCamera&profile=000&fps=10
    ```
    Should display live MJPEG stream.
 
@@ -139,8 +139,8 @@ http://192.168.7.111:9088/data/onvif-driver/stream?device=SideCamera&profile=000
 
 ### 404 Not Found
 - **Wrong URL pattern**: Ensure you're using `/data/` not `/main/data/`
-- **Module not loaded**: Check Config → System → Modules for "ONVIF Driver"
-- **Wrong alias**: The alias is `onvif-driver` (with hyphen)
+- **Module not loaded**: Check Config → System → Modules for "Camera Driver"
+- **Wrong alias**: The alias is `camera-driver` (with hyphen)
 
 ### 400 Bad Request
 - **Missing parameters**: Both `device` and `profile` are required
@@ -205,7 +205,7 @@ http://192.168.7.111:9088/data/onvif-driver/stream?device=SideCamera&profile=000
 ### Perspective View (IFRAME)
 ```python
 # In a Perspective component
-self.view.custom.snapshotUrl = f"http://gateway:8088/data/onvif-driver/snapshot?device={deviceName}&profile=000"
+self.view.custom.snapshotUrl = f"http://gateway:8088/data/camera-driver/snapshot?device={deviceName}&profile=000"
 ```
 
 ### Vision RTSP Viewer
@@ -216,7 +216,7 @@ rtspUrl = system.tag.read("[default]OPC UA/SideCamera/Profiles/000/StreamUri").v
 
 ### Web Page Embed
 ```html
-<img src="http://192.168.7.111:9088/data/onvif-driver/stream?device=SideCamera&profile=000"
+<img src="http://192.168.7.111:9088/data/camera-driver/stream?device=SideCamera&profile=000"
      alt="Camera Feed"
      style="width:100%; height:auto;" />
 ```

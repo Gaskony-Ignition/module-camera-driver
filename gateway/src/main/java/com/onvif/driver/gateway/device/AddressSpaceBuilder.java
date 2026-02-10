@@ -347,16 +347,16 @@ public class AddressSpaceBuilder {
             String deviceName = deviceContext.getName();
             String profileToken = profile.getToken();
 
-            // Snapshot route URL (GET /main/data/onvif-driver/snapshot)
+            // Snapshot route URL (GET /main/data/camera-driver/snapshot)
             String snapshotUrl = String.format(
-                "/main/data/onvif-driver/snapshot?device=%s&profile=%s",
+                "/main/data/camera-driver/snapshot?device=%s&profile=%s",
                 urlEncode(deviceName), urlEncode(profileToken)
             );
             addVariableNode(profileFolder, "IgnitionSnapshotUrl", snapshotUrl);
 
-            // MJPEG stream route URL (GET /main/data/onvif-driver/stream)
+            // MJPEG stream route URL (GET /main/data/camera-driver/stream)
             String streamUrl = String.format(
-                "/main/data/onvif-driver/stream?device=%s&profile=%s&fps=10",
+                "/main/data/camera-driver/stream?device=%s&profile=%s&fps=10",
                 urlEncode(deviceName), urlEncode(profileToken)
             );
             addVariableNode(profileFolder, "IgnitionStreamUrl", streamUrl);

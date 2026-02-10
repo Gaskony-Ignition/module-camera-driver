@@ -20,7 +20,7 @@ import java.util.HexFormat;
  *   go2rtc/go2rtc_linux_arm64
  *   go2rtc/go2rtc_windows_amd64.exe
  *
- * Extracted to: {dataDir}/onvif-driver/go2rtc/
+ * Extracted to: {dataDir}/camera-driver/go2rtc/
  */
 public class Go2RtcBinaryExtractor {
 
@@ -29,7 +29,7 @@ public class Go2RtcBinaryExtractor {
     private final Path extractDir;
 
     public Go2RtcBinaryExtractor(Path dataDir) {
-        this.extractDir = dataDir.resolve("onvif-driver").resolve("go2rtc");
+        this.extractDir = dataDir.resolve("camera-driver").resolve("go2rtc");
     }
 
     /**

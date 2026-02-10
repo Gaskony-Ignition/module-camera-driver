@@ -9,9 +9,9 @@ const ConnectionBrowserPage = () => {
   return (
     <div className="connection-browser-container">
       <iframe
-        src="/data/onvif-driver/connection-browser"
+        src="/data/camera-driver/connection-browser"
         className="connection-browser-iframe"
-        title="ONVIF Connection Browser"
+        title="Camera Connection Browser"
       />
     </div>
   );

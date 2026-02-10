@@ -15,7 +15,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Extension point for the ONVIF Driver device.
+ * Extension point for the Camera Driver device.
  * This class registers the device type with Ignition, making it appear in the
  * device connection dropdown list.
  *

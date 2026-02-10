@@ -5,7 +5,7 @@ import com.inductiveautomation.ignition.designer.model.AbstractDesignerModuleHoo
 import com.inductiveautomation.ignition.designer.model.DesignerContext;
 
 /**
- * Designer hook for the ONVIF Driver.
+ * Designer hook for the Camera Driver.
  * Currently minimal as most functionality is gateway-side.
  */
 public class DesignerHook extends AbstractDesignerModuleHook {

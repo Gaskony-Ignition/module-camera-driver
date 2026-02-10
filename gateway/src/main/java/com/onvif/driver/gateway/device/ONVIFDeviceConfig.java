@@ -10,7 +10,7 @@ import com.inductiveautomation.ignition.gateway.secrets.SecretConfig;
 import com.inductiveautomation.ignition.gateway.web.nav.FormFieldType;
 
 /**
- * Configuration for the ONVIF Driver device.
+ * Configuration for the Camera Driver device.
  * Uses modern Java records approach with form annotations for auto-generated UI.
  *
  * LEARNING: FormFieldType options:
