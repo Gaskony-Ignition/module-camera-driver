@@ -935,10 +935,21 @@
 
             const mediaSource = new MediaSource();
             activeMediaSource = mediaSource;
+
+            // Capture sourceopen BEFORE setting src (event fires immediately)
+            const sourceOpenPromise = new Promise((resolve) => {
+                if (mediaSource.readyState === 'open') {
+                    resolve();
+                } else {
+                    mediaSource.addEventListener('sourceopen', resolve, { once: true });
+                }
+            });
+
             videoElement.src = URL.createObjectURL(mediaSource);
 
             activeAbortController = new AbortController();
 
+            // Start fetch and wait for sourceopen in parallel
             let response;
             try {
                 response = await fetch(url, {
@@ -955,14 +966,14 @@
                 return;
             }
 
-            await new Promise((resolve) => {
-                mediaSource.addEventListener('sourceopen', resolve, { once: true });
-            });
+            await sourceOpenPromise;
 
             // Read codec info from response Content-Type (forwarded from go2rtc)
-            // e.g. "video/mp4; codecs="avc1.640029,mp4a.40.2""
-            const contentType = response.headers.get('Content-Type') || '';
-            let mimeCodec = contentType.trim();
+            // e.g. "video/mp4; codecs="avc1.640029,mp4a.40.2";charset=utf-8"
+            // Strip charset parameter that servlet container appends
+            const contentType = (response.headers.get('Content-Type') || '')
+                .replace(/;\s*charset=[^;]*/i, '').trim();
+            let mimeCodec = contentType;
             if (!mimeCodec || !MediaSource.isTypeSupported(mimeCodec)) {
                 // Fallback: try common codec strings
                 const fallbacks = [
