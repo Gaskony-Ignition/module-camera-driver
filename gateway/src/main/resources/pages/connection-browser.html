@@ -937,33 +937,51 @@
             activeMediaSource = mediaSource;
             videoElement.src = URL.createObjectURL(mediaSource);
 
+            activeAbortController = new AbortController();
+
+            let response;
+            try {
+                response = await fetch(url, {
+                    credentials: 'include',
+                    signal: activeAbortController.signal
+                });
+            } catch (e) {
+                if (e.name !== 'AbortError') showStreamError('Failed to connect: ' + e.message);
+                return;
+            }
+
+            if (!response.ok) {
+                showStreamError('Failed to connect: HTTP ' + response.status);
+                return;
+            }
+
             await new Promise((resolve) => {
                 mediaSource.addEventListener('sourceopen', resolve, { once: true });
             });
 
-            // H.264 High Profile Level 4.1 - compatible with most IP cameras
-            const mimeCodec = 'video/mp4; codecs="avc1.640029"';
-            if (!MediaSource.isTypeSupported(mimeCodec)) {
-                showStreamError('H.264 MP4 playback is not supported in this browser.');
-                return;
+            // Read codec info from response Content-Type (forwarded from go2rtc)
+            // e.g. "video/mp4; codecs="avc1.640029,mp4a.40.2""
+            const contentType = response.headers.get('Content-Type') || '';
+            let mimeCodec = contentType.trim();
+            if (!mimeCodec || !MediaSource.isTypeSupported(mimeCodec)) {
+                // Fallback: try common codec strings
+                const fallbacks = [
+                    'video/mp4; codecs="avc1.640029,mp4a.40.2"',
+                    'video/mp4; codecs="avc1.640029"',
+                    'video/mp4; codecs="avc1.42E01E"'
+                ];
+                mimeCodec = fallbacks.find(c => MediaSource.isTypeSupported(c));
+                if (!mimeCodec) {
+                    showStreamError('H.264 MP4 playback is not supported in this browser.');
+                    return;
+                }
             }
+            console.log('MSE using codec:', mimeCodec);
 
             const sourceBuffer = mediaSource.addSourceBuffer(mimeCodec);
             sourceBuffer.mode = 'segments';
 
-            activeAbortController = new AbortController();
-
             try {
-                const response = await fetch(url, {
-                    credentials: 'include',
-                    signal: activeAbortController.signal
-                });
-
-                if (!response.ok) {
-                    showStreamError('Failed to connect: HTTP ' + response.status);
-                    return;
-                }
-
                 const reader = response.body.getReader();
                 activeStreamReader = reader;
 

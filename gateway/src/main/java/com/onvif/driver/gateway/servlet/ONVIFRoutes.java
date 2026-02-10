@@ -589,10 +589,10 @@ public class ONVIFRoutes {
         }
 
         // Fallback 1: go2rtc RTSP -> MP4 proxy (no ffmpeg required, unlike MJPEG)
+        // Content-Type is forwarded from go2rtc (includes codec info needed for MSE)
         if (hasRtsp && device.isGo2RtcStreamRegistered() && go2RtcManager != null && go2RtcManager.isAvailable()) {
             logger.info("Streaming via go2rtc MP4 for device: {}", deviceName);
             String go2rtcMp4Url = go2RtcManager.getStreamMp4Url(deviceName);
-            response.setContentType("video/mp4");
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
             response.setHeader("Pragma", "no-cache");
             response.setHeader("Expires", "0");
@@ -660,6 +660,15 @@ public class ONVIFRoutes {
                 if (statusCode != 200) {
                     logger.warn("Stream proxy got HTTP {} from {}", statusCode, sourceUrl);
                     return false;
+                }
+
+                // Forward Content-Type from upstream (preserves codec info for MSE playback)
+                if (upstream.getEntity().getContentType() != null) {
+                    String upstreamContentType = upstream.getEntity().getContentType().getValue();
+                    if (!response.isCommitted()) {
+                        response.setContentType(upstreamContentType);
+                        logger.debug("Forwarding upstream Content-Type: {}", upstreamContentType);
+                    }
                 }
 
                 OutputStream output = response.getOutputStream();
