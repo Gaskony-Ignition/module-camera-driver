@@ -462,6 +462,35 @@
             object-fit: contain;
         }
 
+        .stream-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .stream-error {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            color: #f87171;
+            font-size: 14px;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .stream-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            color: #94a3b8;
+            font-size: 14px;
+            gap: 10px;
+        }
+
         .uri-display {
             background: #0f172a;
             padding: 12px;
@@ -612,7 +641,12 @@
             </div>
             <div class="stream-container">
                 <img id="streamImage" alt="Live Stream" style="display:none" />
-                <video id="streamVideo" autoplay muted playsinline style="display:none; max-width:100%; max-height:70vh;"></video>
+                <video id="streamVideo" autoplay muted playsinline style="display:none"></video>
+                <div id="streamLoading" class="stream-loading" style="display:none">
+                    <span class="loading-spinner"></span>
+                    Connecting to camera stream...
+                </div>
+                <div id="streamError" class="stream-error" style="display:none"></div>
             </div>
             <div id="streamUris"></div>
         </div>
@@ -623,6 +657,11 @@
         let devices = [];
         let selectedDevice = '__ALL__';
         let autoRefreshInterval = null;
+
+        // MSE streaming state
+        let activeStreamReader = null;
+        let activeMediaSource = null;
+        let activeAbortController = null;
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
@@ -881,6 +920,136 @@
             window.open(url, '_blank');
         }
 
+        /**
+         * Plays a live fMP4 stream using Media Source Extensions (MSE).
+         * go2rtc produces H.264 fMP4 which browsers can't play via simple <video src>.
+         * MSE feeds chunks into a SourceBuffer for live playback.
+         */
+        async function playMseStream(videoElement, url) {
+            stopMseStream();
+
+            if (!('MediaSource' in window)) {
+                showStreamError('Your browser does not support Media Source Extensions. Use Chrome, Edge, or Firefox.');
+                return;
+            }
+
+            const mediaSource = new MediaSource();
+            activeMediaSource = mediaSource;
+            videoElement.src = URL.createObjectURL(mediaSource);
+
+            await new Promise((resolve) => {
+                mediaSource.addEventListener('sourceopen', resolve, { once: true });
+            });
+
+            // H.264 High Profile Level 4.1 - compatible with most IP cameras
+            const mimeCodec = 'video/mp4; codecs="avc1.640029"';
+            if (!MediaSource.isTypeSupported(mimeCodec)) {
+                showStreamError('H.264 MP4 playback is not supported in this browser.');
+                return;
+            }
+
+            const sourceBuffer = mediaSource.addSourceBuffer(mimeCodec);
+            sourceBuffer.mode = 'segments';
+
+            activeAbortController = new AbortController();
+
+            try {
+                const response = await fetch(url, {
+                    credentials: 'include',
+                    signal: activeAbortController.signal
+                });
+
+                if (!response.ok) {
+                    showStreamError('Failed to connect: HTTP ' + response.status);
+                    return;
+                }
+
+                const reader = response.body.getReader();
+                activeStreamReader = reader;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    // Wait if source buffer is still processing
+                    if (sourceBuffer.updating) {
+                        await new Promise(resolve => {
+                            sourceBuffer.addEventListener('updateend', resolve, { once: true });
+                        });
+                    }
+
+                    try {
+                        sourceBuffer.appendBuffer(value);
+                        await new Promise(resolve => {
+                            sourceBuffer.addEventListener('updateend', resolve, { once: true });
+                        });
+                    } catch (e) {
+                        if (e.name === 'QuotaExceededError') {
+                            // Buffer full - trim old data and retry
+                            if (sourceBuffer.buffered.length > 0 && !sourceBuffer.updating) {
+                                const end = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
+                                sourceBuffer.remove(0, Math.max(0, end - 5));
+                                await new Promise(resolve => {
+                                    sourceBuffer.addEventListener('updateend', resolve, { once: true });
+                                });
+                                sourceBuffer.appendBuffer(value);
+                                await new Promise(resolve => {
+                                    sourceBuffer.addEventListener('updateend', resolve, { once: true });
+                                });
+                            }
+                        } else {
+                            console.error('SourceBuffer error:', e);
+                            break;
+                        }
+                    }
+
+                    // Trim buffered data to prevent memory growth (keep ~30s)
+                    try {
+                        if (!sourceBuffer.updating && sourceBuffer.buffered.length > 0) {
+                            const start = sourceBuffer.buffered.start(0);
+                            const end = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
+                            if (end - start > 30) {
+                                sourceBuffer.remove(0, end - 15);
+                                await new Promise(resolve => {
+                                    sourceBuffer.addEventListener('updateend', resolve, { once: true });
+                                });
+                            }
+                        }
+                    } catch (e) { /* ignore trim errors */ }
+                }
+            } catch (e) {
+                if (e.name !== 'AbortError') {
+                    console.error('MSE stream error:', e);
+                    showStreamError('Stream connection lost: ' + e.message);
+                }
+            }
+        }
+
+        function stopMseStream() {
+            if (activeAbortController) {
+                activeAbortController.abort();
+                activeAbortController = null;
+            }
+            if (activeStreamReader) {
+                try { activeStreamReader.cancel(); } catch (e) {}
+                activeStreamReader = null;
+            }
+            if (activeMediaSource && activeMediaSource.readyState === 'open') {
+                try { activeMediaSource.endOfStream(); } catch (e) {}
+            }
+            activeMediaSource = null;
+        }
+
+        function showStreamError(message) {
+            const errorEl = document.getElementById('streamError');
+            const loadingEl = document.getElementById('streamLoading');
+            if (loadingEl) loadingEl.style.display = 'none';
+            if (errorEl) {
+                errorEl.textContent = message;
+                errorEl.style.display = 'flex';
+            }
+        }
+
         function viewStream(deviceName, profileToken, profileName, rtspUri) {
             const streamUrl = `/data/camera-driver/stream?device=${encodeURIComponent(deviceName)}&profile=${encodeURIComponent(profileToken)}&fps=10`;
             const device = devices.find(d => d.name === deviceName);
@@ -890,18 +1059,30 @@
 
             const imgEl = document.getElementById('streamImage');
             const videoEl = document.getElementById('streamVideo');
+            const loadingEl = document.getElementById('streamLoading');
+            const errorEl = document.getElementById('streamError');
+
+            // Reset all elements
+            imgEl.style.display = 'none';
+            imgEl.src = '';
+            videoEl.style.display = 'none';
+            loadingEl.style.display = 'none';
+            errorEl.style.display = 'none';
+            stopMseStream();
 
             if (isGenericWithGo2Rtc) {
-                // Use <video> for go2rtc MP4 streams (H.264 passthrough, no ffmpeg needed)
-                imgEl.style.display = 'none';
-                imgEl.src = '';
+                // Use MSE for go2rtc fMP4 streams (H.264 passthrough, no ffmpeg needed)
                 videoEl.style.display = 'block';
-                videoEl.src = streamUrl;
-                videoEl.play().catch(e => console.log('Video autoplay blocked:', e));
+                loadingEl.style.display = 'flex';
+
+                // Hide loading indicator once video starts playing
+                videoEl.addEventListener('playing', function() {
+                    loadingEl.style.display = 'none';
+                }, { once: true });
+
+                playMseStream(videoEl, streamUrl);
             } else {
                 // Use <img> for MJPEG streams (ONVIF snapshot polling, native MJPEG)
-                videoEl.style.display = 'none';
-                videoEl.src = '';
                 imgEl.style.display = 'block';
                 imgEl.src = streamUrl;
             }
@@ -932,9 +1113,16 @@
             if (event && event.target !== event.currentTarget) return;
             document.getElementById('streamModal').classList.remove('active');
             document.getElementById('streamImage').src = '';
+            stopMseStream();
             const videoEl = document.getElementById('streamVideo');
             videoEl.pause();
+            URL.revokeObjectURL(videoEl.src);
             videoEl.src = '';
+            videoEl.style.display = 'none';
+            var loadingEl = document.getElementById('streamLoading');
+            if (loadingEl) loadingEl.style.display = 'none';
+            var errorEl = document.getElementById('streamError');
+            if (errorEl) errorEl.style.display = 'none';
         }
 
         function copyUri(uri) {
