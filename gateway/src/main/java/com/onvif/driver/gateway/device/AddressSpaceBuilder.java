@@ -30,8 +30,8 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * Builds OPC-UA address space from ONVIF data.
- * Creates hierarchical folder and variable nodes representing ONVIF device information.
+ * Builds OPC-UA address space from ONVIF camera data.
+ * Creates hierarchical folder and variable nodes representing camera device information.
  *
  * IMPORTANT: ALL nodes (folders and variables) must be added to the NodeManager AND
  * linked via references. The ManagedAddressSpaceWithLifecycle manages their lifecycle,

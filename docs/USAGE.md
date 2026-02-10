@@ -1,4 +1,4 @@
-# Camera Driver - HTTP Endpoint Usage
+# Camera Driver Module - HTTP Endpoint Usage
 
 ## Important Discovery
 
@@ -87,7 +87,7 @@ curl -u username:password \
 http://192.168.7.111:9088/data/camera-driver/stream?device=SideCamera&profile=000&fps=15&apiKey=YOUR_API_KEY
 ```
 
-**Response:** MJPEG stream (Content-Type: multipart/x-mixed-replace; boundary=onvif-stream-boundary)
+**Response:** MJPEG stream (Content-Type: multipart/x-mixed-replace; boundary=camera-stream-boundary)
 
 **Usage in HTML (with session auth):**
 ```html
@@ -101,10 +101,11 @@ http://192.168.7.111:9088/data/camera-driver/stream?device=SideCamera&profile=00
 ## Testing
 
 ### Prerequisites
-1. Create an ONVIF device connection in Ignition:
+1. Create a camera device connection in Ignition:
    - Go to: Config → OPC UA → Device Connections
-   - Create New Device → Camera Driver
-   - Configure camera IP, username, password
+   - Create New Device → Select **"ONVIF Camera"** or **"Generic Camera"**
+   - For ONVIF: Configure camera IP, username, password
+   - For Generic: Configure RTSP URL, snapshot URL, and/or MJPEG URL
    - Save with a meaningful name (e.g., "SideCamera")
 
 2. Ensure device is connected and running
@@ -158,7 +159,7 @@ http://192.168.7.111:9088/data/camera-driver/stream?device=SideCamera&profile=00
 ### 500 Internal Server Error
 - **Camera error**: Camera may have returned an error
 - **Profile not supported**: Try a different profile token
-- **Check logs**: View Status → Logs → Filter by "ONVIF"
+- **Check logs**: View Status → Logs → Filter by "camera-driver" or "onvif"
 
 ---
 

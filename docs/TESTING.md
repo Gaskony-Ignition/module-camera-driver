@@ -1,12 +1,12 @@
-# Camera Driver - Testing Guide
+# Camera Driver Module - Testing Guide
 
 ## Overview
 
-The Camera Driver module is production-ready with version 2.1.0 featuring authentication, rate limiting, and comprehensive automated testing. This guide explains both automated testing and manual testing with real ONVIF devices.
+The Camera Driver module is production-ready with comprehensive authentication, rate limiting, and automated testing. This guide explains both automated testing and manual testing with real cameras. The module supports two device types: **ONVIF Camera** (ONVIF protocol) and **Generic Camera** (RTSP/MJPEG/snapshot URLs).
 
 ## What's Been Implemented
 
-### ✅ Complete ONVIF Implementation (v2.1.0)
+### ✅ Complete Camera Driver Implementation
 - **ONVIF SOAP Client** - Full HTTP/HTTPS SOAP communication with XXE protection
 - **WS-UsernameToken Authentication** - Secure digest-based authentication
 - **Configurable SSL Validation** - STRICT, TRUST_FIRST_USE, or INSECURE modes
@@ -118,18 +118,18 @@ All tests include security-focused scenarios:
 ### 1. Build the Module
 
 ```bash
-cd /modules/ignition-ONVIF-driver
+cd /modules/ignition-module-camera-driver
 ./gradlew clean build
 ```
 
-Output: `build/CameraDriver-2.1.0.modl`
+Output: `build/CameraDriver-2.6.0.modl`
 
 ### 2. Install in Ignition Gateway
 
 **Option A: Docker (Recommended)**
 ```bash
 # Copy module to container
-docker cp build/CameraDriver-2.1.0.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
+docker cp build/CameraDriver-2.6.0.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
 
 # Restart gateway
 docker restart ignition-gateway
@@ -142,14 +142,14 @@ docker logs -f ignition-gateway
 1. Open Ignition Gateway (http://localhost:8088)
 2. Go to Config → System → Modules
 3. Click "Install or Upgrade a Module"
-4. Upload `CameraDriver-2.1.0.modl`
+4. Upload `CameraDriver-2.6.0.modl`
 5. Gateway will restart automatically
 
 ### 3. Verify Installation
 
 After restart, check:
 1. Config → System → Modules
-2. Look for "Camera Driver 2.1.0" in the module list
+2. Look for "Camera Driver" in the module list
 3. Status should be "Running"
 
 ## Configuration
@@ -158,7 +158,7 @@ After restart, check:
 
 1. Go to Config → OPC UA → Device Connections
 2. Click "Create new Device..."
-3. Select "Camera Driver" from device type dropdown
+3. Select **"ONVIF Camera"** or **"Generic Camera"** from device type dropdown
 4. Click "Next"
 
 ### 2. Configure Connection Settings
@@ -350,6 +350,6 @@ For issues or questions:
 
 ---
 
-**Current Status:** ✅ Production Ready - Major Security Update
-**Build:** CameraDriver-2.0.0.unsigned.modl
-**Last Updated:** 2025-11-22
+**Current Status:** Production Ready - Multi-Protocol Camera Driver
+**Build:** CameraDriver-2.6.0.modl
+**Last Updated:** 2026-02-10

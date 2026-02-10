@@ -39,7 +39,8 @@ import com.onvif.driver.gateway.onvif.MediaProfile;
 import com.onvif.driver.gateway.onvif.DeviceInformation;
 
 /**
- * Route handlers for camera snapshot and streaming endpoints.
+ * Route handlers for the Camera Driver module's snapshot and streaming endpoints.
+ * Supports both ONVIF Camera and Generic Camera device types.
  * Registers routes under /data/camera-driver/*
  *
  * IMPORTANT: Actual URLs are /data/{alias}/* NOT /main/data/{alias}/*
@@ -153,7 +154,7 @@ public class ONVIFRoutes {
     }
 
     /**
-     * Mounts the ONVIF routes on the provided RouteGroup.
+     * Mounts the Camera Driver routes on the provided RouteGroup.
      */
     public void mountRoutes(RouteGroup routes) {
         logger.info("Mounting camera driver routes...");

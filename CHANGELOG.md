@@ -5,6 +5,34 @@ All notable changes to the Ignition Camera Driver module will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-02-10
+
+### Changed - Multi-Protocol Camera Driver Rebranding
+- **Module Identity**: Repositioned as a multi-protocol Camera Driver module with ONVIF as one connection type (not the only one)
+- **ONVIF Device Type Rename**: Device dropdown now shows "ONVIF Camera" instead of "Camera Driver" to distinguish from Generic Camera
+- **Module Description**: Updated to "Multi-protocol camera driver supporting ONVIF, RTSP, MJPEG, and snapshot URL connections"
+- **Documentation Overhaul**: All documentation rewritten to present ONVIF and Generic Camera as equal device types
+- **CLAUDE_CONTEXT.md**: Complete rewrite with multi-protocol architecture documentation
+- **README.md**: Restructured around two device types (ONVIF Camera + Generic Camera)
+- **All docs**: Updated USAGE.md, TESTING.md, SECURITY.md, CAMERA_COMPATIBILITY.md, IMPLEMENTATION_STATUS.md
+- **i18n Properties**: Updated ONVIFDevice.properties descriptions to be camera-focused (not ONVIF-centric)
+- **Web UI Package**: Renamed from `onvif_driver_webui` to `camera_driver_webui`
+- **License Page**: Updated description to multi-protocol
+- **Version**: Bumped to 2.6.0
+
+### Unchanged (Backward Compatibility)
+- Java packages remain `com.onvif.driver.*`
+- Class names unchanged (ONVIFDevice, ONVIFModuleHook, ONVIFRoutes, etc.)
+- Module ID remains `com.onvif.driver.opcua`
+- Device type IDs and config records unchanged
+- HTTP endpoint paths unchanged (`/data/camera-driver/*`)
+- Existing device configurations continue to work
+
+### Notes
+- The module now clearly presents two device types in the dropdown: "ONVIF Camera" and "Generic Camera"
+- Future connection types can be added as additional device types within the same module
+- ONVIF-specific code (protocol layer, SOAP client, auth) retains ONVIF naming as it IS ONVIF-specific
+
 ## [2.5.0] - 2026-02-10
 
 ### Changed
@@ -428,4 +456,4 @@ If upgrading from v2.0.0:
 - [README.md](README.md) - Project overview and quick start
 - [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) - Detailed implementation status
 - [TESTING.md](TESTING.md) - Testing and installation guide
-- [GitHub Repository](https://github.com/nigelgwork/ignition-ONVIF-driver)
+- [GitHub Repository](https://github.com/Gaskony-Ignition/ignition-module-camera-driver)

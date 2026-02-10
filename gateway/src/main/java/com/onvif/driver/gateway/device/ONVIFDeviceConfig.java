@@ -10,7 +10,7 @@ import com.inductiveautomation.ignition.gateway.secrets.SecretConfig;
 import com.inductiveautomation.ignition.gateway.web.nav.FormFieldType;
 
 /**
- * Configuration for the Camera Driver device.
+ * Configuration for the ONVIF Camera device type.
  * Uses modern Java records approach with form annotations for auto-generated UI.
  *
  * LEARNING: FormFieldType options:
@@ -47,7 +47,7 @@ public record ONVIFDeviceConfig(General general, Connection connection, ONVIFSet
         @FormCategory("CONNECTION")
         @Label("IP Address")
         @FormField(FormFieldType.TEXT)
-        @Description("IP address of the ONVIF device (e.g., 192.168.1.100)")
+        @Description("IP address of the camera (e.g., 192.168.1.100)")
         @Required
         String ipAddress,
 
@@ -62,14 +62,14 @@ public record ONVIFDeviceConfig(General general, Connection connection, ONVIFSet
         @FormCategory("CONNECTION")
         @Label("Username")
         @FormField(FormFieldType.TEXT)
-        @Description("ONVIF authentication username")
+        @Description("Camera authentication username")
         @Required
         String username,
 
         @FormCategory("CONNECTION")
         @Label("Password")
         @FormField(FormFieldType.SECRET)
-        @Description("ONVIF authentication password")
+        @Description("Camera authentication password")
         @Required
         SecretConfig password,
 

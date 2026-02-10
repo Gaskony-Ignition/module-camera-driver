@@ -191,7 +191,7 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
 
     /**
      * Returns the list of device extension points provided by this module.
-     * This makes "Camera Driver" appear in the device type dropdown.
+     * This makes "ONVIF Camera" and "Generic Camera" appear in the device type dropdown.
      */
     @Override
     protected List<DeviceExtensionPoint<?>> getDeviceExtensionPoints() {

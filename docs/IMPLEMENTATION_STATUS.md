@@ -1,15 +1,20 @@
 # Implementation Status
 
 **Project**: Ignition Camera Driver Module
-**Current Version**: 2.4.0
-**Last Updated**: 2025-12-11
-**Status**: ✅ **Production Ready** - Security Hardened Release
+**Current Version**: 2.6.0
+**Last Updated**: 2026-02-10
+**Status**: ✅ **Production Ready** - Multi-Protocol Camera Driver
 
 ---
 
 ## Overview
 
-The Ignition Camera Driver is a production-ready module that provides secure ONVIF network device connectivity for IP cameras and ONVIF-compatible devices. Version 2.0.0 introduces major security enhancements including authenticated HTTP endpoints, configurable SSL/TLS validation, and environment-based credential management. All core features including streaming capabilities are fully implemented and operational.
+The Ignition Camera Driver is a production-ready multi-protocol module for connecting to IP cameras. It supports two device types:
+
+1. **ONVIF Camera** - Full ONVIF protocol support with service discovery, PTZ control, media profiles, streaming, and snapshots
+2. **Generic Camera** - Direct RTSP, MJPEG, and snapshot URL connections with bundled go2rtc for RTSP transcoding
+
+The module includes authenticated HTTP endpoints, configurable SSL/TLS validation, per-IP rate limiting, environment-based credential management, and a Connection Browser UI.
 
 ---
 
@@ -194,11 +199,11 @@ The following features are **implemented and functional** but require real ONVIF
 ## Future Enhancements (NOT YET IMPLEMENTED)
 
 ### Potential Future Features
-- [ ] **Event Subscriptions** - Motion detection, tampering alerts
-- [ ] **Profile G Support** - Recording search and playback
-- [ ] **Profile M Support** - Metadata streaming
+- [ ] **Additional Connection Types** - Future camera protocols beyond ONVIF and generic URLs
+- [ ] **Event Subscriptions** - ONVIF motion detection, tampering alerts
+- [ ] **Profile G Support** - ONVIF recording search and playback
+- [ ] **Profile M Support** - ONVIF metadata streaming
 - [ ] **Analytics** - Face detection, license plate recognition
-- [ ] **Comprehensive Unit Tests** - Automated testing infrastructure
 - [ ] **Performance Optimization** - Connection pooling, caching
 
 ---

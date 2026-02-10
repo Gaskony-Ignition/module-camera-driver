@@ -15,9 +15,9 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Extension point for the Camera Driver device.
- * This class registers the device type with Ignition, making it appear in the
- * device connection dropdown list.
+ * Extension point for the ONVIF Camera device type.
+ * This class registers the ONVIF device type with Ignition, making it appear in the
+ * device connection dropdown list as "ONVIF Camera".
  *
  * CRITICAL LEARNING: The 2nd and 3rd parameters to the super() constructor are
  * i18n resource bundle KEYS, not direct text. If you pass direct text, Ignition

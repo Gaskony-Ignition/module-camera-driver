@@ -3,7 +3,7 @@ plugins {
     id("io.ia.sdk.modl") version "0.4.0"
 }
 
-version = "2.5.0"
+version = "2.6.0"
 group = "com.onvif.driver"
 
 ignitionModule {
@@ -12,7 +12,7 @@ ignitionModule {
     id.set("com.onvif.driver.opcua")
     moduleVersion.set(project.version.toString())
     license.set("license.html")
-    moduleDescription.set("Camera driver for connecting to IP cameras via ONVIF protocol, RTSP, MJPEG, or snapshot URLs with bundled go2rtc streaming")
+    moduleDescription.set("Multi-protocol camera driver supporting ONVIF, RTSP, MJPEG, and snapshot URL connections to IP cameras with bundled go2rtc streaming")
     requiredIgnitionVersion.set("8.3.0")
     freeModule.set(true)
 

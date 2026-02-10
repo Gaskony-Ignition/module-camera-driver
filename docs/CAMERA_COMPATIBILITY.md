@@ -1,8 +1,17 @@
 # Camera Compatibility Guide
 
+## Connection Types
+
+The Camera Driver module supports two device types:
+
+1. **ONVIF Camera** - For cameras implementing the ONVIF protocol (Profile S/T)
+2. **Generic Camera** - For cameras providing direct RTSP, MJPEG, or snapshot URLs (no ONVIF required)
+
+If your camera doesn't support ONVIF or has incomplete ONVIF compliance, use the **Generic Camera** device type with direct URLs instead.
+
 ## ONVIF Compliance
 
-This module implements the **ONVIF Profile S** specification for IP cameras. It follows the standard as defined by the ONVIF Forum.
+The ONVIF Camera device type implements the **ONVIF Profile S** specification. It follows the standard as defined by the ONVIF Forum.
 
 ## What Works
 
@@ -23,11 +32,13 @@ Cameras that properly implement ONVIF Profile S:
 
 ## Known Issues
 
-### ❌ HTTP Snapshot Not Working
+### ❌ HTTP Snapshot Not Working (ONVIF Camera)
 
 **Symptom:** Snapshot endpoint returns HTTP 500 error with message about ONVIF non-compliance.
 
 **Cause:** Some camera manufacturers (notably **Reolink**) do not properly implement the ONVIF GetSnapshotUri specification. Their snapshot URLs require proprietary session-based authentication instead of standard HTTP Basic Auth.
+
+**Alternative:** Use the **Generic Camera** device type instead and provide the camera's direct snapshot URL.
 
 **Error Message:**
 ```
@@ -109,11 +120,12 @@ rtsp://10.60.9.146:554/h264Preview_01_main
 - Longer-term support
 
 ### For Existing Cameras
-If snapshots don't work:
-- ✅ Use RTSP StreamUri tags (always available)
+If ONVIF snapshots don't work:
+- ✅ Switch to the **Generic Camera** device type with direct RTSP/snapshot URLs
+- ✅ Use RTSP StreamUri tags (always available via ONVIF Camera)
 - ✅ Set up RTSP → HLS transcoding server for Perspective
 - ✅ Use Vision RTSP viewer components (if available)
-- ❌ Don't expect HTTP snapshots to work on non-compliant cameras
+- ❌ Don't expect HTTP snapshots to work on non-compliant ONVIF cameras
 
 ### For Budget Constraints
 If using consumer-grade cameras:
@@ -147,10 +159,11 @@ Potential additions (not currently planned):
 
 ## Summary
 
-- ✅ **Module correctly implements ONVIF Profile S**
+- ✅ **ONVIF Camera device type correctly implements ONVIF Profile S**
+- ✅ **Generic Camera device type works with any camera providing RTSP/MJPEG/snapshot URLs**
 - ✅ **RTSP streams work with all ONVIF cameras**
-- ❌ **HTTP snapshots may not work with non-compliant cameras**
-- 📘 **Check ONVIF certification before purchasing cameras**
-- 🔧 **Use RTSP StreamUri tags when snapshots don't work**
+- ❌ **HTTP snapshots may not work with non-compliant ONVIF cameras (use Generic Camera instead)**
+- 📘 **Check ONVIF certification before purchasing cameras for the ONVIF device type**
+- 🔧 **Use Generic Camera device type when ONVIF doesn't work**
 
-The module works as designed. Cameras that don't work have ONVIF compliance issues at the firmware level.
+The module supports multiple connection methods. If ONVIF doesn't work with your camera, the Generic Camera device type provides a reliable alternative using direct URLs.

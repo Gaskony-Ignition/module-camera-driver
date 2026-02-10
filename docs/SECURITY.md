@@ -222,12 +222,12 @@ If you discover a security vulnerability, please report it responsibly:
 ### Reporting Security Issues
 
 1. **GitHub Security Advisories** (Preferred):
-   - Visit: https://github.com/nigelgwork/ignition-ONVIF-driver/security/advisories
+   - Visit: https://github.com/nigelgwork/ignition-module-camera-driver/security/advisories
    - Click "Report a vulnerability"
    - Provide detailed description of the vulnerability
 
 2. **GitHub Issues**:
-   - Create an issue at: https://github.com/nigelgwork/ignition-ONVIF-driver/issues
+   - Create an issue at: https://github.com/nigelgwork/ignition-module-camera-driver/issues
    - Mark with "Security" label
    - Include version number, steps to reproduce, and impact assessment
 
