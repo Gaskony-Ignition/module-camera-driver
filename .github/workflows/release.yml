@@ -1,0 +1,124 @@
+name: Build, Release & Publish to Portal
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Set up module signing
+        run: |
+          SIGNING_DIR="${HOME}/.ignition-signing"
+          mkdir -p "$SIGNING_DIR"
+          echo "${{ secrets.SIGNING_KEYSTORE }}" | base64 -d > "$SIGNING_DIR/gaskony-keystore.jks"
+          echo "${{ secrets.SIGNING_CERT }}" | base64 -d > "$SIGNING_DIR/gaskony-cert.pem"
+          # Override signing paths for CI environment
+          echo "" >> gradle.properties
+          echo "ignition.signing.keystoreFile=$SIGNING_DIR/gaskony-keystore.jks" >> gradle.properties
+          echo "ignition.signing.certFile=$SIGNING_DIR/gaskony-cert.pem" >> gradle.properties
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build module
+        run: ./gradlew clean build --no-daemon
+        env:
+          GRADLE_OPTS: "-Xmx4g"
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Find .modl file
+        id: modl
+        run: |
+          MODL_FILE=$(find build -maxdepth 1 -name "CameraDriver-*.modl" ! -name "*.unsigned.modl" | head -1)
+          echo "file=$MODL_FILE" >> $GITHUB_OUTPUT
+          echo "Found: $MODL_FILE"
+
+      - name: Create source release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            "${{ steps.modl.outputs.file }}" \
+            --title "Camera Driver ${{ github.ref_name }}" \
+            --generate-notes
+
+      - name: Create portal release
+        env:
+          GH_TOKEN: ${{ secrets.PORTAL_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="camera-driver-${{ github.ref_name }}"
+
+          # Delete existing portal release if present
+          gh release delete "$TAG" --repo Gaskony-Ignition/ignition-modules-portal --yes 2>/dev/null || true
+          gh api repos/Gaskony-Ignition/ignition-modules-portal/git/refs/tags/"$TAG" -X DELETE 2>/dev/null || true
+
+          gh release create "$TAG" \
+            "${{ steps.modl.outputs.file }}" \
+            --repo Gaskony-Ignition/ignition-modules-portal \
+            --title "Camera Driver v${VERSION}" \
+            --notes "## Camera Driver v${VERSION}
+
+          Multi-protocol camera integration for Ignition 8.3+
+
+          **Protocols:** ONVIF, RTSP, MJPEG, Snapshot URL
+
+          ### Installation
+          1. Download \`CameraDriver-${VERSION}.modl\` below
+          2. Ignition Gateway: Config > System > Modules > Install or Upgrade
+          3. Upload the .modl file
+
+          **Requires:** Ignition 8.3+ | Java 17"
+
+      - name: Update portal README
+        env:
+          GH_TOKEN: ${{ secrets.PORTAL_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          git clone https://x-access-token:${GH_TOKEN}@github.com/Gaskony-Ignition/ignition-modules-portal.git /tmp/portal
+          cd /tmp/portal
+
+          export VERSION
+          python3 -c "
+          import re, os
+          VERSION = os.environ['VERSION']
+          with open('README.md', 'r') as f:
+              content = f.read()
+          content = re.sub(r'CameraDriver-[\d.]+\.modl', f'CameraDriver-{VERSION}.modl', content)
+          content = re.sub(r'camera-driver-v[\d.]+', f'camera-driver-v{VERSION}', content)
+          content = re.sub(
+              r'(### Camera Driver.*?\*\*Latest Version\*\* \| v)[\d.]+',
+              lambda m: m.group(1) + VERSION,
+              content, flags=re.DOTALL, count=1
+          )
+          with open('README.md', 'w') as f:
+              f.write(content)
+          "
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git diff --cached --quiet || git commit -m "Update Camera Driver to v${VERSION}"
+          git push
