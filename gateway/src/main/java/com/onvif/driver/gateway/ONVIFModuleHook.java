@@ -37,9 +37,6 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
     @Override
     public void setup(GatewayContext context) {
         this.context = context;
-        // CRITICAL: Create device extension points in setup, NOT startup
-        // This ensures they're available when getDeviceExtensionPoints() is called
-        this.deviceExtensionPoint = new ONVIFDeviceExtensionPoint();
 
         // Create Go2RtcManager for RTSP-to-MJPEG conversion
         Path dataDir = context.getSystemManager().getDataDir().toPath();
@@ -54,11 +51,22 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
             logger.warn("Failed to start go2rtc in setup - RTSP streaming will use fallback modes: {}", e.getMessage());
         }
 
-        // Create Generic Camera extension point with go2rtc support
-        this.genericCameraExtensionPoint = new GenericCameraExtensionPoint(go2RtcManager);
+        // Create or update extension points.
+        // NOTE: getDeviceExtensionPoints() may have been called before setup(),
+        // creating extension points with go2RtcManager=null. If so, reuse them
+        // and inject the now-initialized go2RtcManager.
+        if (this.deviceExtensionPoint == null) {
+            this.deviceExtensionPoint = new ONVIFDeviceExtensionPoint();
+        }
+        if (this.genericCameraExtensionPoint == null) {
+            this.genericCameraExtensionPoint = new GenericCameraExtensionPoint(go2RtcManager);
+        } else {
+            // Extension point was created early by getDeviceExtensionPoints() with null manager
+            this.genericCameraExtensionPoint.setGo2RtcManager(go2RtcManager);
+        }
 
         logger.info("Camera Driver module setup complete");
-        logger.debug("Created device extension points: ONVIF={}, GenericCamera={}", deviceExtensionPoint, genericCameraExtensionPoint);
+        logger.debug("Device extension points: ONVIF={}, GenericCamera={}", deviceExtensionPoint, genericCameraExtensionPoint);
 
         // Register WebUI component for connection browser
         try {

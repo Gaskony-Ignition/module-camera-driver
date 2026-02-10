@@ -29,7 +29,7 @@ public class GenericCameraExtensionPoint extends DeviceExtensionPoint<GenericCam
 
     private static final Map<String, GenericCameraDevice> deviceRegistry = new ConcurrentHashMap<>();
 
-    private final Go2RtcManager go2RtcManager;
+    private volatile Go2RtcManager go2RtcManager;
 
     public GenericCameraExtensionPoint(Go2RtcManager go2RtcManager) {
         super(
@@ -38,6 +38,14 @@ public class GenericCameraExtensionPoint extends DeviceExtensionPoint<GenericCam
             "GenericCamera.Meta.Description",
             GenericCameraConfig.class
         );
+        this.go2RtcManager = go2RtcManager;
+    }
+
+    /**
+     * Updates the go2rtc manager reference. Used when the extension point is created
+     * before setup() runs (getDeviceExtensionPoints() can be called first).
+     */
+    public void setGo2RtcManager(Go2RtcManager go2RtcManager) {
         this.go2RtcManager = go2RtcManager;
     }
 
