@@ -611,7 +611,8 @@
                 <button class="modal-close" onclick="closeStreamModal()">&times;</button>
             </div>
             <div class="stream-container">
-                <img id="streamImage" alt="Live Stream" />
+                <img id="streamImage" alt="Live Stream" style="display:none" />
+                <video id="streamVideo" autoplay muted playsinline style="display:none; max-width:100%; max-height:70vh;"></video>
             </div>
             <div id="streamUris"></div>
         </div>
@@ -882,13 +883,32 @@
 
         function viewStream(deviceName, profileToken, profileName, rtspUri) {
             const streamUrl = `/data/camera-driver/stream?device=${encodeURIComponent(deviceName)}&profile=${encodeURIComponent(profileToken)}&fps=10`;
+            const device = devices.find(d => d.name === deviceName);
+            const isGenericWithGo2Rtc = device && device.type === 'generic' && device.go2rtcRegistered;
 
             document.getElementById('streamModalTitle').textContent = `${deviceName} - ${profileName}`;
-            document.getElementById('streamImage').src = streamUrl;
+
+            const imgEl = document.getElementById('streamImage');
+            const videoEl = document.getElementById('streamVideo');
+
+            if (isGenericWithGo2Rtc) {
+                // Use <video> for go2rtc MP4 streams (H.264 passthrough, no ffmpeg needed)
+                imgEl.style.display = 'none';
+                imgEl.src = '';
+                videoEl.style.display = 'block';
+                videoEl.src = streamUrl;
+                videoEl.play().catch(e => console.log('Video autoplay blocked:', e));
+            } else {
+                // Use <img> for MJPEG streams (ONVIF snapshot polling, native MJPEG)
+                videoEl.style.display = 'none';
+                videoEl.src = '';
+                imgEl.style.display = 'block';
+                imgEl.src = streamUrl;
+            }
 
             let uriHtml = `
                 <div class="uri-display">
-                    <div class="uri-label">MJPEG Stream URL (via Gateway):</div>
+                    <div class="uri-label">Stream URL (via Gateway):</div>
                     <code>${escapeHtml(streamUrl)}</code>
                     <button class="copy-btn" onclick="copyUri('${location.origin}${escapeAttr(streamUrl)}')">Copy</button>
                 </div>
@@ -912,6 +932,9 @@
             if (event && event.target !== event.currentTarget) return;
             document.getElementById('streamModal').classList.remove('active');
             document.getElementById('streamImage').src = '';
+            const videoEl = document.getElementById('streamVideo');
+            videoEl.pause();
+            videoEl.src = '';
         }
 
         function copyUri(uri) {

@@ -461,23 +461,13 @@ public class ONVIFRoutes {
                 return null;
             }
 
-            // Set response headers for MJPEG stream
-            response.setContentType("multipart/x-mixed-replace; boundary=" + BOUNDARY);
-            response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-            response.setHeader("Pragma", "no-cache");
-            response.setHeader("Expires", "0");
-            response.setHeader("Connection", "close");
             String origin = context.getRequest().getHeader("Origin");
-            if (origin != null && isAllowedOrigin(origin)) {
-                response.setHeader("Access-Control-Allow-Origin", origin);
-                response.setHeader("Access-Control-Allow-Credentials", "true");
-            }
 
             if (genericDevice != null) {
-                // Generic camera - use fallback chain
-                streamGenericCamera(genericDevice, deviceName, fps, response, startTime);
+                // Generic camera - content type set inside method (MP4 for go2rtc, MJPEG for fallbacks)
+                streamGenericCamera(genericDevice, deviceName, fps, response, origin, startTime);
             } else {
-                // ONVIF device - requires profile token
+                // ONVIF device - always MJPEG via snapshot polling
                 if (profileToken == null || profileToken.trim().isEmpty()) {
                     response.sendError(400, "Missing required parameter: profile (required for ONVIF devices)");
                     return null;
@@ -485,6 +475,15 @@ public class ONVIFRoutes {
                 if (!ValidationUtil.isValidProfileToken(profileToken)) {
                     response.sendError(400, "Invalid profile token format");
                     return null;
+                }
+                response.setContentType("multipart/x-mixed-replace; boundary=" + BOUNDARY);
+                response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+                response.setHeader("Pragma", "no-cache");
+                response.setHeader("Expires", "0");
+                response.setHeader("Connection", "close");
+                if (origin != null && isAllowedOrigin(origin)) {
+                    response.setHeader("Access-Control-Allow-Origin", origin);
+                    response.setHeader("Access-Control-Allow-Credentials", "true");
                 }
                 streamOnvifDevice(onvifDevice, deviceName, profileToken, fps, response, startTime);
             }
@@ -574,7 +573,7 @@ public class ONVIFRoutes {
      * 3. Snapshot-polling MJPEG
      */
     private void streamGenericCamera(GenericCameraDevice device, String deviceName,
-                                     int fps, HttpServletResponse response, long startTime) throws IOException {
+                                     int fps, HttpServletResponse response, String origin, long startTime) throws IOException {
         GenericCameraConfig config = device.getConfig();
         String rtspUrl = config.cameraConnection().rtspUrl();
         String mjpegUrl = config.cameraConnection().mjpegUrl();
@@ -589,20 +588,40 @@ public class ONVIFRoutes {
             device.tryRegisterGo2Rtc();
         }
 
-        // Fallback 1: go2rtc RTSP -> MJPEG proxy
+        // Fallback 1: go2rtc RTSP -> MP4 proxy (no ffmpeg required, unlike MJPEG)
         if (hasRtsp && device.isGo2RtcStreamRegistered() && go2RtcManager != null && go2RtcManager.isAvailable()) {
-            logger.info("Streaming via go2rtc for device: {}", deviceName);
-            String go2rtcMjpegUrl = go2RtcManager.getStreamMjpegUrl(deviceName);
-            if (proxyMjpegStream(go2rtcMjpegUrl, response, deviceName, startTime)) {
+            logger.info("Streaming via go2rtc MP4 for device: {}", deviceName);
+            String go2rtcMp4Url = go2RtcManager.getStreamMp4Url(deviceName);
+            response.setContentType("video/mp4");
+            response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+            response.setHeader("Pragma", "no-cache");
+            response.setHeader("Expires", "0");
+            response.setHeader("Connection", "close");
+            if (origin != null && isAllowedOrigin(origin)) {
+                response.setHeader("Access-Control-Allow-Origin", origin);
+                response.setHeader("Access-Control-Allow-Credentials", "true");
+            }
+            if (proxyStream(go2rtcMp4Url, response, deviceName, startTime)) {
                 return;
             }
-            logger.warn("go2rtc proxy failed, trying fallback for device: {}", deviceName);
+            logger.warn("go2rtc MP4 proxy failed, trying fallback for device: {}", deviceName);
+        }
+
+        // Set MJPEG headers for fallback methods
+        response.setContentType("multipart/x-mixed-replace; boundary=" + BOUNDARY);
+        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        response.setHeader("Pragma", "no-cache");
+        response.setHeader("Expires", "0");
+        response.setHeader("Connection", "close");
+        if (origin != null && isAllowedOrigin(origin)) {
+            response.setHeader("Access-Control-Allow-Origin", origin);
+            response.setHeader("Access-Control-Allow-Credentials", "true");
         }
 
         // Fallback 2: Native MJPEG URL proxy
         if (hasMjpeg) {
             logger.info("Streaming native MJPEG for device: {}", deviceName);
-            if (proxyMjpegStream(mjpegUrl, response, deviceName, startTime)) {
+            if (proxyStream(mjpegUrl, response, deviceName, startTime)) {
                 return;
             }
             logger.warn("Native MJPEG proxy failed, trying snapshot polling for device: {}", deviceName);
@@ -622,11 +641,12 @@ public class ONVIFRoutes {
     }
 
     /**
-     * Proxies an MJPEG stream from a URL (go2rtc or camera native MJPEG).
+     * Proxies a stream from a URL to the HTTP response.
+     * Used for both go2rtc MP4 streams and camera-native MJPEG streams.
      * Returns true if successfully started proxying, false if connection failed.
      */
-    private boolean proxyMjpegStream(String mjpegUrl, HttpServletResponse response,
-                                     String deviceName, long startTime) {
+    private boolean proxyStream(String sourceUrl, HttpServletResponse response,
+                                String deviceName, long startTime) {
         RequestConfig proxyConfig = RequestConfig.custom()
             .setConnectTimeout(5000)
             .setSocketTimeout(30000)
@@ -634,11 +654,11 @@ public class ONVIFRoutes {
 
         try (CloseableHttpClient proxyClient = HttpClientBuilder.create()
                 .setDefaultRequestConfig(proxyConfig).build()) {
-            HttpGet request = new HttpGet(mjpegUrl);
+            HttpGet request = new HttpGet(sourceUrl);
             try (CloseableHttpResponse upstream = proxyClient.execute(request)) {
                 int statusCode = upstream.getStatusLine().getStatusCode();
                 if (statusCode != 200) {
-                    logger.warn("MJPEG proxy got HTTP {} from {}", statusCode, mjpegUrl);
+                    logger.warn("Stream proxy got HTTP {} from {}", statusCode, sourceUrl);
                     return false;
                 }
 
@@ -655,12 +675,12 @@ public class ONVIFRoutes {
                     }
                 }
 
-                logger.info("MJPEG proxy ended - device: {}, bytes: {}, duration: {} ms",
+                logger.info("Stream proxy ended - device: {}, bytes: {}, duration: {} ms",
                     deviceName, totalBytes, System.currentTimeMillis() - startTime);
                 return true;
             }
         } catch (IOException e) {
-            logger.debug("MJPEG proxy failed for {}: {}", deviceName, e.getMessage());
+            logger.debug("Stream proxy failed for {}: {}", deviceName, e.getMessage());
             return false;
         }
     }

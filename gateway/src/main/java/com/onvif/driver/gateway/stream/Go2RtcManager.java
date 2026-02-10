@@ -309,6 +309,19 @@ public class Go2RtcManager {
     }
 
     /**
+     * Gets the MP4 (fMP4) stream URL from go2rtc for the given stream name.
+     * This endpoint works without ffmpeg, unlike MJPEG which requires transcoding.
+     *
+     * @param streamName Stream name
+     * @return Full URL to go2rtc's MP4 stream endpoint
+     */
+    public String getStreamMp4Url(String streamName) {
+        return String.format("http://127.0.0.1:%d/api/stream.mp4?src=%s",
+            port,
+            URLEncoder.encode(streamName, StandardCharsets.UTF_8));
+    }
+
+    /**
      * Checks if go2rtc is available (process alive and API responding).
      *
      * @return true if go2rtc is running and responsive
