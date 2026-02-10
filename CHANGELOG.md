@@ -5,6 +5,66 @@ All notable changes to the Ignition Camera Driver module will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.8] - 2026-02-10
+
+### Fixed
+- **MSE sourceopen race condition**: The `sourceopen` event fired immediately when `videoElement.src` was set, but the code awaited `fetch()` first, so the event listener was added too late - causing the MSE player to hang forever. Fixed by registering the listener before setting `src`.
+- **Content-Type charset stripping**: Servlet container appended `;charset=utf-8` to the forwarded Content-Type header, making it invalid for `MediaSource.isTypeSupported()`. Now stripped before use.
+
+## [2.6.7] - 2026-02-10
+
+### Fixed
+- **MSE codec mismatch**: go2rtc sends fMP4 with both H.264 video and AAC audio (`avc1.640029,mp4a.40.2`), but the MSE SourceBuffer only declared video-only codec (`avc1.640029`), causing browsers to reject the init segment containing the unexpected audio track.
+
+### Changed
+- **Proxy Content-Type forwarding**: `proxyStream()` now forwards the upstream Content-Type header from go2rtc (including codec info) instead of hardcoding `video/mp4`
+- **Dynamic codec detection**: MSE player reads the Content-Type from the fetch response to determine the correct codec string, with fallback to common codec combinations
+
+## [2.6.6] - 2026-02-10
+
+### Added
+- **MSE (Media Source Extensions) player**: Browsers cannot play live fragmented MP4 via simple `<video src>` - they require the MSE JavaScript API. Implemented `playMseStream()` using `fetch()` ReadableStream to feed fMP4 chunks into an MSE SourceBuffer for real-time H.264 playback.
+- **Stream loading indicator**: Shows "Connecting to camera stream..." while MSE initializes
+- **Stream error display**: Error messages shown in the stream modal on failure
+- **Buffer management**: Automatic trimming of old buffered data (~30s window) to prevent memory growth, with `QuotaExceededError` handling
+
+### Changed
+- `viewStream()` now uses MSE for Generic Camera + go2rtc devices instead of `<video src>`
+- `closeStreamModal()` properly cleans up MSE resources (AbortController, ReadableStream reader, MediaSource)
+
+## [2.6.5] - 2026-02-10
+
+### Changed
+- **MP4 proxy instead of MJPEG**: Switched Generic Camera streaming from go2rtc's MJPEG endpoint (`/api/stream.mjpeg`) to MP4 endpoint (`/api/stream.mp4`). MJPEG requires ffmpeg for H.264-to-JPEG transcoding (not available in Docker), while MP4 does native H.264 passthrough.
+- Added `getStreamMp4Url()` to `Go2RtcManager`
+- Connection Browser uses `<video>` element for generic cameras, `<img>` for ONVIF MJPEG
+
+## [2.6.4] - 2026-02-10
+
+### Fixed
+- **go2rtc API parameter**: Stream naming used incorrect `dst` parameter instead of `name`, causing 404 errors on stream endpoints. Fixed in `Go2RtcManager.addStream()` and `removeStream()`.
+
+## [2.6.3] - 2026-02-10
+
+### Fixed
+- **Extension point lifecycle**: `getDeviceExtensionPoints()` was called by OPC-UA framework before `setup()`, creating `GenericCameraExtensionPoint` with null `go2RtcManager`. The framework cached these instances, so devices started without go2rtc. Fixed by making `go2RtcManager` mutable with a setter and reusing existing extension point instances in `setup()`.
+
+## [2.6.2] - 2026-02-10
+
+### Fixed
+- **go2rtc startup timing race**: go2rtc was started in `startup()` but devices initialize between `setup()` and `startup()`. Moved `go2RtcManager.start()` to `setup()` so go2rtc is available before device startup.
+- **Lazy stream registration**: Added `tryRegisterGo2Rtc()` for late registration when go2rtc wasn't available during initial device startup.
+
+## [2.6.1] - 2026-02-10
+
+### Added
+- **Synthetic media profiles for Generic Camera**: Connection Browser now generates profiles from configured URLs (RTSP Stream/H.264, HTTP Snapshot/JPEG, MJPEG Stream/MJPEG) so Generic Camera devices show profiles instead of "No media profiles available"
+- **Running counter fix**: Stats bar now counts both "Running" and "Connected" device statuses
+
+### Fixed
+- **Windows go2rtc binary**: Build script was saving the ZIP archive directly as `.exe`. Now properly downloads, extracts, and renames the binary.
+- **Profile display**: `renderProfile()` gracefully handles missing width/height/frameRate fields
+
 ## [2.6.0] - 2026-02-10
 
 ### Changed - Multi-Protocol Camera Driver Rebranding
