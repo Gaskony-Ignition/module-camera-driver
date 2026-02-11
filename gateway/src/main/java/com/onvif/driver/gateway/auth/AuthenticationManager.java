@@ -1,11 +1,12 @@
 package com.onvif.driver.gateway.auth;
 
+import com.inductiveautomation.ignition.gateway.dataroutes.RequestContext;
 import com.inductiveautomation.ignition.gateway.model.GatewayContext;
+import com.inductiveautomation.ignition.gateway.web.session.WebUiSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -34,10 +35,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class AuthenticationManager {
 
     private static final Logger logger = LoggerFactory.getLogger(AuthenticationManager.class);
-
-    private static final String AUTH_SESSION_ATTRIBUTE = "authenticated";
-    private static final String AUTH_USERNAME_ATTRIBUTE = "username";
-    private static final String IGNITION_USER_ATTRIBUTE = "user";
 
     // Account lockout configuration
     private static final int MAX_FAILED_ATTEMPTS = 5;
@@ -72,14 +69,17 @@ public class AuthenticationManager {
     /**
      * Checks if the request is authenticated using any supported method.
      *
-     * @param request The HTTP request
+     * @param requestContext The route request context
      * @return true if authenticated, false otherwise
      */
-    public boolean isAuthenticated(HttpServletRequest request) {
-        // Method 1: Check for valid Ignition session
-        if (isSessionAuthenticated(request)) {
+    public boolean isAuthenticated(RequestContext requestContext) {
+        // Method 1: Check for valid Ignition WebUiSession (primary - works for gateway-logged-in users)
+        if (WebUiSession.find(requestContext).isPresent()) {
+            logger.debug("Request authenticated via Ignition WebUiSession");
             return true;
         }
+
+        HttpServletRequest request = requestContext.getRequest();
 
         // Method 2: Check for Basic Authentication
         if (isBasicAuthValid(request)) {
@@ -92,42 +92,6 @@ public class AuthenticationManager {
         }
 
         logger.debug("Request not authenticated - no valid session, Basic auth, or API key");
-        return false;
-    }
-
-    /**
-     * Checks if the request has a valid Ignition session.
-     *
-     * @param request The HTTP request
-     * @return true if session is authenticated, false otherwise
-     */
-    private boolean isSessionAuthenticated(HttpServletRequest request) {
-        HttpSession session = request.getSession(false);
-        if (session == null) {
-            return false;
-        }
-
-        // Check for authenticated attribute
-        Object authenticated = session.getAttribute(AUTH_SESSION_ATTRIBUTE);
-        if (Boolean.TRUE.equals(authenticated)) {
-            logger.debug("Request authenticated via session: {}", session.getId());
-            return true;
-        }
-
-        // Check for username attribute (Ignition sets this)
-        Object username = session.getAttribute(AUTH_USERNAME_ATTRIBUTE);
-        if (username != null && !username.toString().isEmpty()) {
-            logger.debug("Request authenticated via username attribute: {}", username);
-            return true;
-        }
-
-        // Check for Ignition's internal session attributes
-        Object ignitionUser = session.getAttribute(IGNITION_USER_ATTRIBUTE);
-        if (ignitionUser != null) {
-            logger.debug("Request authenticated via Ignition user session");
-            return true;
-        }
-
         return false;
     }
 

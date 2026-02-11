@@ -22,7 +22,6 @@ import org.slf4j.LoggerFactory;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpSession;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.IOException;
@@ -241,7 +240,7 @@ public class ONVIFRoutes {
         logger.debug("Query String: {}", context.getRequest().getQueryString());
 
         // v2.1.0: Authentication check
-        if (!isAuthenticated(context.getRequest())) {
+        if (!isAuthenticated(context)) {
             sendAuthenticationRequired(response);
             return null;
         }
@@ -406,7 +405,7 @@ public class ONVIFRoutes {
         logger.debug("Query String: {}", context.getRequest().getQueryString());
 
         // v2.1.0: Authentication check
-        if (!isAuthenticated(context.getRequest())) {
+        if (!isAuthenticated(context)) {
             sendAuthenticationRequired(response);
             return null;
         }
@@ -813,19 +812,19 @@ public class ONVIFRoutes {
      * Checks if the request has valid authentication (v2.2.0+).
      *
      * Delegates to AuthenticationManager which supports:
-     * 1. Valid Ignition session (primary method)
+     * 1. Valid Ignition WebUiSession (primary method)
      * 2. Basic Authentication (with account lockout protection)
      * 3. API key in query parameter or X-API-Key header
      *
-     * @param request The HTTP request
+     * @param requestContext The route request context
      * @return true if authenticated, false otherwise
      */
-    private boolean isAuthenticated(HttpServletRequest request) {
+    private boolean isAuthenticated(RequestContext requestContext) {
         if (!REQUIRE_AUTHENTICATION) {
             return true;  // Authentication disabled (backward compatibility mode)
         }
 
-        return authManager.isAuthenticated(request);
+        return authManager.isAuthenticated(requestContext);
     }
 
     /**
@@ -1252,7 +1251,7 @@ public class ONVIFRoutes {
     private Object handleDiagnostics(RequestContext context, HttpServletResponse response) throws Exception {
         logger.debug("Diagnostics request received");
 
-        if (!isAuthenticated(context.getRequest())) {
+        if (!isAuthenticated(context)) {
             sendAuthenticationRequired(response);
             return null;
         }
@@ -1323,7 +1322,7 @@ public class ONVIFRoutes {
     private Object handlePlayerPage(RequestContext context, HttpServletResponse response) throws Exception {
         logger.debug("Player page request received");
 
-        if (!isAuthenticated(context.getRequest())) {
+        if (!isAuthenticated(context)) {
             sendAuthenticationRequired(response);
             return null;
         }
