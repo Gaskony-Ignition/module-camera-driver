@@ -3,7 +3,7 @@ plugins {
     id("io.ia.sdk.modl") version "0.4.0"
 }
 
-version = "2.7.2"
+version = "2.7.3"
 group = "com.onvif.driver"
 
 ignitionModule {
