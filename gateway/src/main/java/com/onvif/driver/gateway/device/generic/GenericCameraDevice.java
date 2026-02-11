@@ -2,9 +2,8 @@ package com.onvif.driver.gateway.device.generic;
 
 import com.inductiveautomation.ignition.gateway.opcua.server.api.Device;
 import com.inductiveautomation.ignition.gateway.opcua.server.api.DeviceContext;
-import com.inductiveautomation.ignition.gateway.secrets.Plaintext;
-import com.inductiveautomation.ignition.gateway.secrets.Secret;
 import com.onvif.driver.gateway.stream.Go2RtcManager;
+import com.onvif.driver.gateway.util.CredentialUtil;
 import org.eclipse.milo.opcua.sdk.core.Reference;
 import org.eclipse.milo.opcua.sdk.server.ManagedAddressSpaceWithLifecycle;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaFolderNode;
@@ -14,7 +13,6 @@ import org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
@@ -85,7 +83,7 @@ public class GenericCameraDevice extends ManagedAddressSpaceWithLifecycle implem
             deviceStatus = "Connecting";
 
             // Resolve password if configured
-            String password = resolvePassword();
+            String password = CredentialUtil.resolvePassword(context.getGatewayContext(), config.cameraConnection().password());
 
             String username = config.cameraConnection().username();
             String snapshotUrl = config.cameraConnection().snapshotUrl();
@@ -115,7 +113,7 @@ public class GenericCameraDevice extends ManagedAddressSpaceWithLifecycle implem
             boolean go2RtcAvailable = false;
             if (rtspUrl != null && !rtspUrl.trim().isEmpty() && go2RtcManager != null) {
                 // Build RTSP URL with credentials if provided
-                String effectiveRtspUrl = buildAuthenticatedRtspUrl(rtspUrl, username, password);
+                String effectiveRtspUrl = CredentialUtil.embedCredentials(rtspUrl, username, password);
 
                 if (go2RtcManager.isAvailable()) {
                     go2RtcStreamRegistered = go2RtcManager.addStream(context.getName(), effectiveRtspUrl);
@@ -175,73 +173,14 @@ public class GenericCameraDevice extends ManagedAddressSpaceWithLifecycle implem
     }
 
     /**
-     * Resolves the password from SecretConfig, returns null if not configured.
-     */
-    private String resolvePassword() {
-        if (config.cameraConnection().password() == null) {
-            return null;
-        }
-        try (Plaintext plaintext = Secret.create(context.getGatewayContext(), config.cameraConnection().password()).getPlaintext()) {
-            return plaintext.getAsString(StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            logger.warn("Failed to retrieve password from SecretConfig: {}", e.getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * Builds an RTSP URL with embedded credentials for go2rtc.
-     * e.g., rtsp://user:pass@192.168.1.50:554/stream1
-     */
-    private String buildAuthenticatedRtspUrl(String rtspUrl, String username, String password) {
-        if (username == null || username.trim().isEmpty()) {
-            return rtspUrl;
-        }
-
-        try {
-            // Parse the RTSP URL and inject credentials
-            // Expected format: rtsp://host:port/path or rtsps://host:port/path
-            String protocol;
-            String remainder;
-            if (rtspUrl.startsWith("rtsps://")) {
-                protocol = "rtsps://";
-                remainder = rtspUrl.substring(8);
-            } else if (rtspUrl.startsWith("rtsp://")) {
-                protocol = "rtsp://";
-                remainder = rtspUrl.substring(7);
-            } else {
-                return rtspUrl;
-            }
-
-            // Check if credentials are already embedded
-            if (remainder.contains("@")) {
-                return rtspUrl;
-            }
-
-            String credentials = username;
-            if (password != null && !password.isEmpty()) {
-                credentials += ":" + password;
-            }
-
-            return protocol + credentials + "@" + remainder;
-        } catch (Exception e) {
-            logger.warn("Failed to build authenticated RTSP URL, using original: {}", e.getMessage());
-            return rtspUrl;
-        }
-    }
-
-    /**
-     * Returns the RTSP URL with stored credentials embedded, for display in the UI.
-     * If no credentials are configured, returns the original URL.
+     * Returns the RTSP URL with stored credentials embedded.
+     * Delegates to shared CredentialUtil for protocol-agnostic credential embedding.
      */
     public String getAuthenticatedRtspUrl() {
         String rtspUrl = config.cameraConnection().rtspUrl();
-        if (rtspUrl == null || rtspUrl.trim().isEmpty()) {
-            return rtspUrl;
-        }
         String username = config.cameraConnection().username();
-        String password = resolvePassword();
-        return buildAuthenticatedRtspUrl(rtspUrl, username, password);
+        String password = CredentialUtil.resolvePassword(context.getGatewayContext(), config.cameraConnection().password());
+        return CredentialUtil.embedCredentials(rtspUrl, username, password);
     }
 
     private void createRootNode() {
@@ -307,9 +246,9 @@ public class GenericCameraDevice extends ManagedAddressSpaceWithLifecycle implem
             return false;
         }
 
-        String password = resolvePassword();
+        String password = CredentialUtil.resolvePassword(context.getGatewayContext(), config.cameraConnection().password());
         String username = config.cameraConnection().username();
-        String effectiveRtspUrl = buildAuthenticatedRtspUrl(rtspUrl, username, password);
+        String effectiveRtspUrl = CredentialUtil.embedCredentials(rtspUrl, username, password);
         go2RtcStreamRegistered = go2RtcManager.addStream(context.getName(), effectiveRtspUrl);
 
         if (go2RtcStreamRegistered) {

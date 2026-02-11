@@ -2,14 +2,13 @@ package com.onvif.driver.gateway.device;
 
 import com.inductiveautomation.ignition.gateway.opcua.server.api.Device;
 import com.inductiveautomation.ignition.gateway.opcua.server.api.DeviceContext;
-import com.inductiveautomation.ignition.gateway.secrets.Plaintext;
-import com.inductiveautomation.ignition.gateway.secrets.Secret;
 import com.onvif.driver.gateway.onvif.DeviceInformation;
 import com.onvif.driver.gateway.onvif.MediaProfile;
 import com.onvif.driver.gateway.onvif.ONVIFClient;
 import com.onvif.driver.gateway.onvif.ONVIFService;
 import com.onvif.driver.gateway.onvif.PTZStatus;
 import com.onvif.driver.gateway.stream.Go2RtcManager;
+import com.onvif.driver.gateway.util.CredentialUtil;
 import org.eclipse.milo.opcua.sdk.core.Reference;
 import org.eclipse.milo.opcua.sdk.server.ManagedAddressSpaceWithLifecycle;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaFolderNode;
@@ -20,7 +19,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -163,18 +161,11 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
         deviceStatus = "Connecting";
 
         // Retrieve password from SecretConfig
-        String password;
-        if (config.connection().password() != null) {
-            try (Plaintext plaintext = Secret.create(context.getGatewayContext(), config.connection().password()).getPlaintext()) {
-                password = plaintext.getAsString(StandardCharsets.UTF_8);
-                logger.info("Password retrieved successfully from SecretConfig");
-            } catch (Exception e) {
-                logger.error("Failed to retrieve password from SecretConfig", e);
-                throw new RuntimeException("Failed to retrieve password", e);
-            }
-        } else {
+        String password = CredentialUtil.resolvePassword(context.getGatewayContext(), config.connection().password());
+        if (password == null) {
             throw new IllegalArgumentException("Password is required");
         }
+        logger.info("Password retrieved successfully from SecretConfig");
 
         // Create ONVIF client
         logger.info("Creating ONVIF client with endpoint: {}://{}:{}",
@@ -629,69 +620,12 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
     }
 
     /**
-     * Resolves the password from SecretConfig, returns null if not configured.
-     */
-    private String resolvePassword() {
-        if (config.connection().password() == null) {
-            return null;
-        }
-        try (Plaintext plaintext = Secret.create(context.getGatewayContext(), config.connection().password()).getPlaintext()) {
-            return plaintext.getAsString(StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            logger.warn("Failed to retrieve password from SecretConfig: {}", e.getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * Returns the given URL with stored credentials embedded.
-     * Supports rtsp://, rtsps://, http://, and https:// protocols.
-     * If credentials are already present or no username is configured, returns the original URL.
+     * Returns the given URL with this camera's stored credentials embedded.
+     * Delegates to shared CredentialUtil for protocol-agnostic credential embedding.
      */
     public String getAuthenticatedUrl(String rawUrl) {
-        if (rawUrl == null || rawUrl.trim().isEmpty()) {
-            return rawUrl;
-        }
-
         String username = config.connection().username();
-        if (username == null || username.trim().isEmpty()) {
-            return rawUrl;
-        }
-
-        try {
-            String protocol;
-            String remainder;
-            if (rawUrl.startsWith("rtsps://")) {
-                protocol = "rtsps://";
-                remainder = rawUrl.substring(8);
-            } else if (rawUrl.startsWith("rtsp://")) {
-                protocol = "rtsp://";
-                remainder = rawUrl.substring(7);
-            } else if (rawUrl.startsWith("https://")) {
-                protocol = "https://";
-                remainder = rawUrl.substring(8);
-            } else if (rawUrl.startsWith("http://")) {
-                protocol = "http://";
-                remainder = rawUrl.substring(7);
-            } else {
-                return rawUrl;
-            }
-
-            // Skip if credentials are already embedded
-            if (remainder.contains("@")) {
-                return rawUrl;
-            }
-
-            String password = resolvePassword();
-            String credentials = username;
-            if (password != null && !password.isEmpty()) {
-                credentials += ":" + password;
-            }
-
-            return protocol + credentials + "@" + remainder;
-        } catch (Exception e) {
-            logger.warn("Failed to embed credentials in URL, using original: {}", e.getMessage());
-            return rawUrl;
-        }
+        String password = CredentialUtil.resolvePassword(context.getGatewayContext(), config.connection().password());
+        return CredentialUtil.embedCredentials(rawUrl, username, password);
     }
 }
