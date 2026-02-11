@@ -5,44 +5,61 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Camera Connection Browser</title>
     <style>
+        :root {
+            --bg-primary: #242428;
+            --bg-secondary: #2c2c32;
+            --bg-tertiary: #1c1c22;
+            --bg-hover: #38383f;
+            --text-primary: #e0e0e8;
+            --text-secondary: #8b8fa0;
+            --text-muted: #6b6e80;
+            --text-link: #6b9fd4;
+            --accent: #229ad6;
+            --accent-hover: #1a7fb3;
+            --success: #0aa648;
+            --warning: #cf7911;
+            --error: #e05555;
+            --border: #3c3c44;
+            --border-subtle: #33333b;
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         html, body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
-            padding: 10px;
-            line-height: 1.5;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            padding: 16px;
+            line-height: 1.6;
             min-height: 100%;
         }
 
-        .container { max-width: 1400px; margin: 0 auto; }
+        .container { width: 100%; }
 
         .header {
-            background: linear-gradient(135deg, #059669 0%, #10b981 100%);
-            padding: 10px 16px;
-            border-radius: 6px;
+            background: var(--bg-tertiary);
+            padding: 10px 24px;
             margin-bottom: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
         h1 { font-size: 18px; margin-bottom: 2px; }
-        .subtitle { color: #d1fae5; font-size: 12px; }
+        .subtitle { color: var(--text-secondary); font-size: 12px; }
 
         .card {
-            background: #1e293b;
-            border-radius: 6px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
             padding: 12px 16px;
-            margin-bottom: 12px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            margin-bottom: 10px;
+            border: 1px solid var(--border-subtle);
         }
 
         .device-selector-card {
-            border: 1px solid #10b981;
-            background: linear-gradient(135deg, #1e293b 0%, #064e3b 100%);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--accent);
         }
 
         .device-selector {
@@ -53,37 +70,36 @@
 
         .device-dropdown {
             flex: 1;
-            background: #0f172a;
-            color: #e2e8f0;
-            border: 1px solid #475569;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
             border-radius: 4px;
-            padding: 6px 10px;
-            font-size: 13px;
+            padding: 10px 14px;
+            font-size: 14px;
             font-family: inherit;
             cursor: pointer;
             transition: all 0.2s;
         }
 
         .device-dropdown:hover {
-            border-color: #10b981;
-            background: #1e293b;
+            border-color: var(--accent);
         }
 
         .device-dropdown:focus {
             outline: none;
-            border-color: #10b981;
-            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(34, 154, 214, 0.15);
         }
 
         .btn-refresh {
-            padding: 6px 10px;
-            background: #475569;
+            padding: 10px 20px;
+            background: var(--bg-hover);
             min-width: auto;
-            font-size: 12px;
+            font-size: 14px;
         }
 
         .btn-refresh:hover {
-            background: #64748b;
+            background: #48484f;
         }
 
         .device-info-banner {
@@ -92,8 +108,9 @@
             align-items: center;
             margin-top: 8px;
             padding: 8px 12px;
-            background: #065f46;
-            border: 1px solid #10b981;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--accent);
             border-radius: 4px;
         }
 
@@ -107,13 +124,13 @@
         }
 
         .info-content strong {
-            color: #d1fae5;
+            color: var(--text-primary);
             display: block;
             font-size: 13px;
         }
 
         .info-content p {
-            color: #a7f3d0;
+            color: var(--text-secondary);
             font-size: 12px;
             margin-top: 2px;
             margin-bottom: 0;
@@ -125,7 +142,7 @@
             height: 20px;
             line-height: 20px;
             text-align: center;
-            background: #10b981;
+            background: var(--accent);
             border-radius: 50%;
             font-size: 12px;
             font-weight: 600;
@@ -144,7 +161,7 @@
             gap: 16px;
             margin-bottom: 0;
             padding: 8px 12px;
-            background: #0f172a;
+            background: var(--bg-tertiary);
             border-radius: 4px;
             flex-wrap: wrap;
         }
@@ -155,44 +172,44 @@
             gap: 8px;
         }
 
-        .stat-label { color: #94a3b8; font-size: 12px; }
-        .stat-value { color: #10b981; font-weight: 600; font-size: 13px; }
+        .stat-label { color: var(--text-secondary); font-size: 13px; }
+        .stat-value { color: var(--text-link); font-weight: 600; font-size: 16px; }
 
         .btn {
             display: inline-block;
-            background: #10b981;
+            background: var(--accent);
             color: white;
-            padding: 6px 12px;
+            padding: 10px 20px;
             border-radius: 4px;
             border: none;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 500;
             cursor: pointer;
             transition: all 0.2s;
         }
 
-        .btn:hover { background: #059669; }
-        .btn-secondary { background: #475569; }
-        .btn-secondary:hover { background: #64748b; }
+        .btn:hover { background: var(--accent-hover); }
+        .btn-secondary { background: var(--bg-hover); }
+        .btn-secondary:hover { background: #48484f; }
         .btn-small { padding: 6px 12px; font-size: 12px; }
 
         .device-card {
-            background: #1e293b;
+            background: var(--bg-secondary);
             border-radius: 8px;
             overflow: hidden;
-            border: 1px solid #334155;
+            border: 1px solid var(--border-subtle);
             transition: all 0.2s;
         }
 
         .device-card:hover {
-            border-color: #10b981;
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.1);
+            border-color: var(--accent);
+            box-shadow: 0 4px 12px rgba(34, 154, 214, 0.1);
         }
 
         .device-header {
             padding: 16px;
-            background: #0f172a;
-            border-bottom: 1px solid #334155;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -201,7 +218,7 @@
         .device-name {
             font-size: 18px;
             font-weight: 600;
-            color: #f1f5f9;
+            color: var(--text-primary);
         }
 
         .device-status {
@@ -212,18 +229,18 @@
         }
 
         .status-running {
-            background: #065f46;
-            color: #a7f3d0;
+            background: rgba(10, 166, 72, 0.15);
+            color: var(--success);
         }
 
         .status-error {
-            background: #7f1d1d;
-            color: #fecaca;
+            background: rgba(224, 85, 85, 0.15);
+            color: var(--error);
         }
 
         .status-connecting {
-            background: #78350f;
-            color: #fef3c7;
+            background: rgba(207, 121, 17, 0.15);
+            color: var(--warning);
         }
 
         .device-body {
@@ -244,21 +261,21 @@
         }
 
         .info-label {
-            color: #64748b;
+            color: var(--text-muted);
             font-size: 11px;
             text-transform: uppercase;
             letter-spacing: 0.05em;
         }
 
         .info-value {
-            color: #e2e8f0;
+            color: var(--text-primary);
             font-size: 13px;
             font-family: 'Consolas', 'Monaco', monospace;
         }
 
         .profiles-section {
             margin-top: 16px;
-            border-top: 1px solid #334155;
+            border-top: 1px solid var(--border);
             padding-top: 16px;
         }
 
@@ -272,7 +289,7 @@
         .profiles-title {
             font-size: 14px;
             font-weight: 600;
-            color: #94a3b8;
+            color: var(--text-secondary);
         }
 
         .profile-list {
@@ -282,7 +299,7 @@
         }
 
         .profile-item {
-            background: #0f172a;
+            background: var(--bg-tertiary);
             border-radius: 6px;
             padding: 12px;
             display: flex;
@@ -300,12 +317,12 @@
 
         .profile-name {
             font-weight: 500;
-            color: #e2e8f0;
+            color: var(--text-primary);
             font-size: 14px;
         }
 
         .profile-details {
-            color: #64748b;
+            color: var(--text-muted);
             font-size: 12px;
             font-family: 'Consolas', 'Monaco', monospace;
         }
@@ -319,7 +336,7 @@
         .no-devices {
             text-align: center;
             padding: 60px 20px;
-            color: #64748b;
+            color: var(--text-muted);
         }
 
         .no-devices-icon {
@@ -330,16 +347,16 @@
         .loading-indicator {
             padding: 40px;
             text-align: center;
-            color: #64748b;
+            color: var(--text-muted);
         }
 
         .loading-spinner {
             display: inline-block;
             width: 24px;
             height: 24px;
-            border: 3px solid #475569;
+            border: 3px solid var(--border);
             border-radius: 50%;
-            border-top-color: #10b981;
+            border-top-color: var(--accent);
             animation: spin 1s linear infinite;
             margin-right: 10px;
         }
@@ -351,16 +368,16 @@
             align-items: center;
             gap: 6px;
             padding: 4px 10px;
-            background: #065f46;
+            background: rgba(10, 166, 72, 0.15);
             border-radius: 12px;
             font-size: 11px;
-            color: #a7f3d0;
+            color: var(--success);
         }
 
         .live-dot {
             width: 8px;
             height: 8px;
-            background: #10b981;
+            background: var(--success);
             border-radius: 50%;
             animation: pulse 1.5s ease-in-out infinite;
         }
@@ -371,11 +388,11 @@
         }
 
         .error-message {
-            background: #7f1d1d;
-            border: 1px solid #dc2626;
-            border-radius: 6px;
+            background: rgba(224, 85, 85, 0.15);
+            border: 1px solid var(--error);
+            border-radius: 4px;
             padding: 16px;
-            color: #fecaca;
+            color: #f0a0a0;
         }
 
         .toast {
@@ -383,10 +400,10 @@
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            background: #10b981;
+            background: var(--success);
             color: white;
             padding: 12px 24px;
-            border-radius: 8px;
+            border-radius: 4px;
             font-size: 14px;
             z-index: 9999;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
@@ -406,7 +423,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.7);
+            background: rgba(0,0,0,0.6);
             z-index: 1000;
             justify-content: center;
             align-items: center;
@@ -415,14 +432,15 @@
         .modal.active { display: flex; }
 
         .modal-content {
-            background: #1e293b;
-            border-radius: 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
             padding: 24px;
             max-width: 800px;
             width: 90%;
             max-height: 90vh;
             overflow-y: auto;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
         }
 
         .modal-header {
@@ -433,25 +451,26 @@
         }
 
         .modal-title {
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 600;
         }
 
         .modal-close {
             background: none;
             border: none;
-            color: #94a3b8;
+            color: var(--text-secondary);
             font-size: 24px;
             cursor: pointer;
             padding: 4px;
         }
 
-        .modal-close:hover { color: #e2e8f0; }
+        .modal-close:hover { color: var(--text-primary); }
 
         .stream-container {
             width: 100%;
-            background: #0f172a;
-            border-radius: 8px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
             overflow: hidden;
             aspect-ratio: 16 / 9;
         }
@@ -474,7 +493,7 @@
             justify-content: center;
             width: 100%;
             height: 100%;
-            color: #f87171;
+            color: var(--error);
             font-size: 14px;
             text-align: center;
             padding: 20px;
@@ -486,15 +505,16 @@
             justify-content: center;
             width: 100%;
             height: 100%;
-            color: #94a3b8;
+            color: var(--text-secondary);
             font-size: 14px;
             gap: 10px;
         }
 
         .uri-display {
-            background: #0f172a;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
             padding: 12px;
-            border-radius: 6px;
+            border-radius: 4px;
             font-family: 'Consolas', 'Monaco', monospace;
             font-size: 12px;
             word-break: break-all;
@@ -502,13 +522,13 @@
         }
 
         .uri-label {
-            color: #64748b;
+            color: var(--text-muted);
             font-size: 11px;
             margin-bottom: 4px;
         }
 
         .copy-btn {
-            background: #475569;
+            background: var(--bg-hover);
             color: white;
             border: none;
             padding: 4px 8px;
@@ -518,7 +538,7 @@
             margin-left: 8px;
         }
 
-        .copy-btn:hover { background: #64748b; }
+        .copy-btn:hover { background: #48484f; }
 
         .toolbar {
             display: flex;
@@ -538,13 +558,13 @@
             position: relative;
             width: 40px;
             height: 20px;
-            background: #475569;
+            background: var(--border);
             border-radius: 10px;
             cursor: pointer;
             transition: background 0.2s;
         }
 
-        .toggle-switch.active { background: #10b981; }
+        .toggle-switch.active { background: var(--success); }
 
         .toggle-switch::after {
             content: '';
@@ -561,6 +581,109 @@
         .toggle-switch.active::after { left: 22px; }
 
         .hidden { display: none !important; }
+
+        /* Diagnostics panel */
+        .diag-toggle {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .diag-toggle-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .diag-arrow {
+            color: var(--text-muted);
+            font-size: 12px;
+            transition: transform 0.2s;
+        }
+
+        .diag-arrow.open { transform: rotate(180deg); }
+
+        .diag-body {
+            display: none;
+            margin-top: 12px;
+        }
+
+        .diag-body.open { display: block; }
+
+        .diag-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+        }
+
+        .diag-section {
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            padding: 12px;
+            border: 1px solid var(--border);
+        }
+
+        .diag-section-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+        }
+
+        .diag-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 3px 0;
+        }
+
+        .diag-label {
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .diag-value {
+            color: var(--text-primary);
+            font-size: 12px;
+            font-weight: 500;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+
+        .diag-bar-track {
+            width: 80px;
+            height: 6px;
+            background: var(--border);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-left: 8px;
+        }
+
+        .diag-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.3s;
+        }
+
+        .diag-bar-fill.green { background: var(--success); }
+        .diag-bar-fill.yellow { background: var(--warning); }
+        .diag-bar-fill.red { background: var(--error); }
+
+        .diag-status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .diag-status-dot.alive { background: var(--success); }
+        .diag-status-dot.dead { background: var(--error); }
     </style>
 </head>
 <body>
@@ -582,7 +705,7 @@
         <!-- Device Selector Card -->
         <div class="card device-selector-card">
             <div class="device-selector">
-                <span style="color: #94a3b8; font-size: 12px; white-space: nowrap;">Device:</span>
+                <span style="color: var(--text-secondary); font-size: 12px; white-space: nowrap;">Device:</span>
                 <select id="deviceSelect" class="device-dropdown" aria-label="Select device to view">
                     <option value="__ALL__">Show All Devices</option>
                 </select>
@@ -618,8 +741,96 @@
                     </div>
                 </div>
                 <div class="auto-refresh-toggle">
-                    <span style="color: #94a3b8; font-size: 13px;">Auto-refresh</span>
+                    <span style="color: var(--text-secondary); font-size: 13px;">Auto-refresh</span>
                     <div id="autoRefreshToggle" class="toggle-switch" onclick="toggleAutoRefresh()"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resource Diagnostics Panel -->
+        <div class="card" id="diagCard">
+            <div class="diag-toggle" onclick="toggleDiagnostics()">
+                <span class="diag-toggle-title">Resource Diagnostics</span>
+                <span class="diag-arrow" id="diagArrow">&#9660;</span>
+            </div>
+            <div class="diag-body" id="diagBody">
+                <div class="diag-grid">
+                    <div class="diag-section">
+                        <div class="diag-section-title">Streaming Activity</div>
+                        <div class="diag-row">
+                            <span class="diag-label">Snapshots</span>
+                            <span style="display:flex;align-items:center;">
+                                <span class="diag-value" id="diagSnapshots">0 / 50</span>
+                                <span class="diag-bar-track"><span class="diag-bar-fill green" id="diagSnapshotsBar" style="width:0%"></span></span>
+                            </span>
+                        </div>
+                        <div class="diag-row">
+                            <span class="diag-label">Streams</span>
+                            <span style="display:flex;align-items:center;">
+                                <span class="diag-value" id="diagStreams">0 / 20</span>
+                                <span class="diag-bar-track"><span class="diag-bar-fill green" id="diagStreamsBar" style="width:0%"></span></span>
+                            </span>
+                        </div>
+                        <div class="diag-row">
+                            <span class="diag-label">Connected IPs</span>
+                            <span class="diag-value" id="diagClients">0</span>
+                        </div>
+                    </div>
+
+                    <div class="diag-section">
+                        <div class="diag-section-title">go2rtc Process</div>
+                        <div class="diag-row">
+                            <span class="diag-label">Status</span>
+                            <span class="diag-value" id="diagGo2rtcStatus"><span class="diag-status-dot dead"></span>Stopped</span>
+                        </div>
+                        <div class="diag-row">
+                            <span class="diag-label">PID</span>
+                            <span class="diag-value" id="diagGo2rtcPid">-</span>
+                        </div>
+                        <div class="diag-row">
+                            <span class="diag-label">Memory (RSS)</span>
+                            <span class="diag-value" id="diagGo2rtcMem">-</span>
+                        </div>
+                        <div class="diag-row">
+                            <span class="diag-label">Uptime</span>
+                            <span class="diag-value" id="diagGo2rtcUptime">-</span>
+                        </div>
+                        <div class="diag-row">
+                            <span class="diag-label">Restarts</span>
+                            <span class="diag-value" id="diagGo2rtcRestarts">0</span>
+                        </div>
+                    </div>
+
+                    <div class="diag-section">
+                        <div class="diag-section-title">go2rtc Streams</div>
+                        <div class="diag-row">
+                            <span class="diag-label">Registered</span>
+                            <span class="diag-value" id="diagStreamsRegistered">0</span>
+                        </div>
+                        <div class="diag-row">
+                            <span class="diag-label">Active Producers</span>
+                            <span class="diag-value" id="diagProducers">0</span>
+                        </div>
+                        <div class="diag-row">
+                            <span class="diag-label">Active Consumers</span>
+                            <span class="diag-value" id="diagConsumers">0</span>
+                        </div>
+                    </div>
+
+                    <div class="diag-section">
+                        <div class="diag-section-title">Gateway JVM</div>
+                        <div class="diag-row">
+                            <span class="diag-label">Heap</span>
+                            <span style="display:flex;align-items:center;">
+                                <span class="diag-value" id="diagHeap">- / -</span>
+                                <span class="diag-bar-track"><span class="diag-bar-fill green" id="diagHeapBar" style="width:0%"></span></span>
+                            </span>
+                        </div>
+                        <div class="diag-row">
+                            <span class="diag-label">Threads</span>
+                            <span class="diag-value" id="diagThreads">-</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -657,6 +868,9 @@
         let devices = [];
         let selectedDevice = '__ALL__';
         let autoRefreshInterval = null;
+
+        let diagOpen = false;
+        let diagRefreshInterval = null;
 
         // MSE streaming state
         let activeStreamReader = null;
@@ -870,7 +1084,7 @@
                                 </div>
                             ` : `
                                 <div class="profiles-section">
-                                    <div style="color: #64748b; font-size: 13px;">No media profiles available</div>
+                                    <div style="color: var(--text-muted); font-size: 13px;">No media profiles available</div>
                                 </div>
                             `}
                         </div>
@@ -1170,6 +1384,10 @@
             if (autoRefreshInterval) {
                 clearInterval(autoRefreshInterval);
                 autoRefreshInterval = null;
+                if (diagRefreshInterval) {
+                    clearInterval(diagRefreshInterval);
+                    diagRefreshInterval = null;
+                }
                 toggle.classList.remove('active');
                 indicator.style.display = 'none';
             } else {
@@ -1177,6 +1395,11 @@
                 indicator.style.display = 'inline-flex';
                 loadDeviceList(); // Immediate refresh
                 autoRefreshInterval = setInterval(loadDeviceList, 5000);
+                // Also refresh diagnostics if panel is open
+                if (diagOpen) fetchDiagnostics();
+                diagRefreshInterval = setInterval(function() {
+                    if (diagOpen) fetchDiagnostics();
+                }, 5000);
             }
         }
 
@@ -1193,10 +1416,87 @@
             toast.className = 'toast';
             toast.textContent = message;
             if (isError) {
-                toast.style.background = '#ef4444';
+                toast.style.background = 'var(--error)';
             }
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 2000);
+        }
+
+        // Diagnostics panel
+        function toggleDiagnostics() {
+            diagOpen = !diagOpen;
+            document.getElementById('diagBody').classList.toggle('open', diagOpen);
+            document.getElementById('diagArrow').classList.toggle('open', diagOpen);
+            if (diagOpen) {
+                fetchDiagnostics();
+            }
+        }
+
+        async function fetchDiagnostics() {
+            try {
+                const resp = await fetch('/data/camera-driver/diagnostics', { credentials: 'include' });
+                if (!resp.ok) return;
+                const d = await resp.json();
+
+                // Streaming activity
+                const sSnap = d.streaming || {};
+                const snapPct = sSnap.maxSnapshots > 0 ? (sSnap.activeSnapshots / sSnap.maxSnapshots * 100) : 0;
+                document.getElementById('diagSnapshots').textContent = `${sSnap.activeSnapshots || 0} / ${sSnap.maxSnapshots || 50}`;
+                setBar('diagSnapshotsBar', snapPct);
+
+                const strmPct = sSnap.maxStreams > 0 ? (sSnap.activeStreams / sSnap.maxStreams * 100) : 0;
+                document.getElementById('diagStreams').textContent = `${sSnap.activeStreams || 0} / ${sSnap.maxStreams || 20}`;
+                setBar('diagStreamsBar', strmPct);
+
+                document.getElementById('diagClients').textContent = sSnap.connectedClients || 0;
+
+                // go2rtc process
+                const g = d.go2rtc || {};
+                const alive = g.alive;
+                document.getElementById('diagGo2rtcStatus').innerHTML = alive
+                    ? '<span class="diag-status-dot alive"></span>Running'
+                    : '<span class="diag-status-dot dead"></span>Stopped';
+                document.getElementById('diagGo2rtcPid').textContent = g.pid || '-';
+                document.getElementById('diagGo2rtcMem').textContent = g.vmRssKb
+                    ? (g.vmRssKb / 1024).toFixed(1) + ' MB' : '-';
+                document.getElementById('diagGo2rtcUptime').textContent = g.uptimeMs > 0
+                    ? formatUptime(g.uptimeMs) : '-';
+                document.getElementById('diagGo2rtcRestarts').textContent = g.restartCount || 0;
+
+                // go2rtc streams
+                const gs = d.go2rtcStreams || {};
+                document.getElementById('diagStreamsRegistered').textContent = gs.registeredStreams || 0;
+                document.getElementById('diagProducers').textContent = gs.activeProducers || 0;
+                document.getElementById('diagConsumers').textContent = gs.activeConsumers || 0;
+
+                // Gateway JVM
+                const gw = d.gateway || {};
+                const heapPct = gw.heapPercent >= 0 ? gw.heapPercent : 0;
+                document.getElementById('diagHeap').textContent = gw.heapMaxMb > 0
+                    ? `${gw.heapUsedMb} / ${gw.heapMaxMb} MB` : '-';
+                setBar('diagHeapBar', heapPct);
+                document.getElementById('diagThreads').textContent = gw.threadCount || '-';
+
+            } catch (e) {
+                console.debug('Diagnostics fetch error:', e);
+            }
+        }
+
+        function setBar(id, percent) {
+            const el = document.getElementById(id);
+            el.style.width = Math.min(100, percent) + '%';
+            el.className = 'diag-bar-fill ' + (percent > 80 ? 'red' : percent > 50 ? 'yellow' : 'green');
+        }
+
+        function formatUptime(ms) {
+            const s = Math.floor(ms / 1000);
+            if (s < 60) return s + 's';
+            const m = Math.floor(s / 60);
+            if (m < 60) return m + 'm ' + (s % 60) + 's';
+            const h = Math.floor(m / 60);
+            if (h < 24) return h + 'h ' + (m % 60) + 'm';
+            const days = Math.floor(h / 24);
+            return days + 'd ' + (h % 24) + 'h';
         }
 
         // Helper functions

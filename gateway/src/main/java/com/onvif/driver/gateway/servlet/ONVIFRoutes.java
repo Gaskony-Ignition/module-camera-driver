@@ -26,7 +26,11 @@ import jakarta.servlet.http.HttpSession;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
+import java.lang.management.ThreadMXBean;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -208,7 +212,23 @@ public class ONVIFRoutes {
             .mount();
         logger.debug("Mounted /health route");
 
-        logger.info("Camera driver routes mounted: /snapshot, /stream, /devices, /device/:name/status, /connection-browser, /health");
+        // Mount diagnostics endpoint at /data/camera-driver/diagnostics
+        routes.newRoute("/diagnostics")
+            .handler(this::handleDiagnostics)
+            .type(RouteGroup.TYPE_JSON)
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)
+            .mount();
+        logger.debug("Mounted /diagnostics route");
+
+        // Mount embeddable player page at /data/camera-driver/player
+        routes.newRoute("/player")
+            .handler(this::handlePlayerPage)
+            .type(RouteGroup.TYPE_OCTET_STREAM)
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)
+            .mount();
+        logger.debug("Mounted /player route");
+
+        logger.info("Camera driver routes mounted: /snapshot, /stream, /devices, /device/:name/status, /connection-browser, /health, /diagnostics, /player");
     }
 
     /**
@@ -1188,6 +1208,107 @@ public class ONVIFRoutes {
 
         response.setContentType("application/json");
         response.getWriter().write(result.toString());
+        return null;
+    }
+
+    /**
+     * Handles diagnostics requests - returns JSON with resource usage metrics.
+     * URL: http://gateway:8088/data/camera-driver/diagnostics
+     */
+    private Object handleDiagnostics(RequestContext context, HttpServletResponse response) throws Exception {
+        logger.debug("Diagnostics request received");
+
+        if (!isAuthenticated(context.getRequest())) {
+            sendAuthenticationRequired(response);
+            return null;
+        }
+
+        try {
+            JSONObject result = new JSONObject();
+
+            // Streaming activity
+            JSONObject streaming = new JSONObject();
+            streaming.put("activeSnapshots", activeSnapshots.get());
+            streaming.put("maxSnapshots", MAX_CONCURRENT_SNAPSHOTS);
+            streaming.put("activeStreams", activeStreams.get());
+            streaming.put("maxStreams", MAX_CONCURRENT_STREAMS);
+            streaming.put("connectedClients", requestsPerIP.size());
+            result.put("streaming", streaming);
+
+            // go2rtc process info
+            if (go2RtcManager != null) {
+                result.put("go2rtc", go2RtcManager.getProcessInfo());
+                result.put("go2rtcStreams", go2RtcManager.getStreamInfo());
+            } else {
+                JSONObject noGo2Rtc = new JSONObject();
+                noGo2Rtc.put("alive", false);
+                noGo2Rtc.put("port", 0);
+                result.put("go2rtc", noGo2Rtc);
+            }
+
+            // Gateway JVM metrics
+            JSONObject gateway = new JSONObject();
+            MemoryMXBean memBean = ManagementFactory.getMemoryMXBean();
+            long heapUsed = memBean.getHeapMemoryUsage().getUsed();
+            long heapMax = memBean.getHeapMemoryUsage().getMax();
+            gateway.put("heapUsedMb", heapUsed / (1024 * 1024));
+            gateway.put("heapMaxMb", heapMax > 0 ? heapMax / (1024 * 1024) : -1);
+            gateway.put("heapPercent", heapMax > 0 ? Math.round((double) heapUsed / heapMax * 100) : -1);
+
+            ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
+            gateway.put("threadCount", threadBean.getThreadCount());
+            result.put("gateway", gateway);
+
+            // Device counts
+            JSONObject deviceCounts = new JSONObject();
+            deviceCounts.put("onvif", ONVIFDeviceExtensionPoint.getAllDevices().size());
+            deviceCounts.put("generic", GenericCameraExtensionPoint.getAllDevices().size());
+            deviceCounts.put("total", ONVIFDeviceExtensionPoint.getAllDevices().size()
+                + GenericCameraExtensionPoint.getAllDevices().size());
+            result.put("devices", deviceCounts);
+
+            result.put("timestamp", System.currentTimeMillis());
+
+            response.setContentType("application/json");
+            response.getWriter().write(result.toString());
+
+        } catch (Exception e) {
+            logger.error("Error generating diagnostics", e);
+            response.sendError(500, "Error generating diagnostics: " + e.getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * Handles serving the embeddable video player page.
+     * URL: http://gateway:8088/data/camera-driver/player?device=DeviceName
+     *
+     * Designed to be embedded in Perspective Inline Frame component.
+     */
+    private Object handlePlayerPage(RequestContext context, HttpServletResponse response) throws Exception {
+        logger.debug("Player page request received");
+
+        if (!isAuthenticated(context.getRequest())) {
+            sendAuthenticationRequired(response);
+            return null;
+        }
+
+        try {
+            InputStream stream = getClass().getResourceAsStream("/pages/player.html");
+            if (stream == null) {
+                logger.error("Player page not found at /pages/player.html");
+                response.sendError(404, "Player page not found");
+                return null;
+            }
+            String html = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+            response.setContentType("text/html; charset=UTF-8");
+            response.getWriter().write(html);
+        } catch (Exception e) {
+            logger.error("Error serving player page", e);
+            response.sendError(500, "Error loading page: " + e.getMessage());
+        }
+
         return null;
     }
 

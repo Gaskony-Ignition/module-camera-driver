@@ -11,6 +11,11 @@ import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.http.util.EntityUtils;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URLEncoder;
@@ -55,6 +60,7 @@ public class Go2RtcManager {
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
     private final AtomicInteger restartCount = new AtomicInteger(0);
+    private volatile long processStartTime;
 
     public Go2RtcManager(Path dataDir) {
         this(dataDir, DEFAULT_PORT);
@@ -120,6 +126,7 @@ public class Go2RtcManager {
 
             process = pb.start();
             running.set(true);
+            processStartTime = System.currentTimeMillis();
             restartCount.set(0);
 
             // Start log reader thread
@@ -350,6 +357,118 @@ public class Go2RtcManager {
      */
     public int getPort() {
         return port;
+    }
+
+    /**
+     * Returns diagnostic info about the go2rtc process.
+     */
+    public JSONObject getProcessInfo() {
+        JSONObject info = new JSONObject();
+        try {
+            boolean alive = process != null && process.isAlive();
+            info.put("alive", alive);
+            info.put("port", port);
+            info.put("restartCount", restartCount.get());
+
+            if (alive) {
+                info.put("pid", process.pid());
+                info.put("uptimeMs", System.currentTimeMillis() - processStartTime);
+
+                // On Linux, read /proc/{pid}/status for memory info
+                try {
+                    Path statusPath = Path.of("/proc/" + process.pid() + "/status");
+                    if (Files.exists(statusPath)) {
+                        for (String line : Files.readAllLines(statusPath, StandardCharsets.UTF_8)) {
+                            if (line.startsWith("VmRSS:")) {
+                                String val = line.substring(6).trim().replaceAll("[^0-9]", "");
+                                info.put("vmRssKb", Long.parseLong(val));
+                                break;
+                            }
+                        }
+                    }
+                } catch (IOException e) {
+                    logger.debug("Could not read process memory info: {}", e.getMessage());
+                }
+            } else {
+                info.put("pid", JSONObject.NULL);
+                info.put("uptimeMs", 0);
+            }
+        } catch (JSONException e) {
+            logger.debug("Error building process info JSON: {}", e.getMessage());
+        }
+        return info;
+    }
+
+    /**
+     * Returns stream statistics from the go2rtc API.
+     */
+    public JSONObject getStreamInfo() {
+        JSONObject info = new JSONObject();
+        try {
+            info.put("registeredStreams", 0);
+            info.put("activeProducers", 0);
+            info.put("activeConsumers", 0);
+        } catch (JSONException e) {
+            return info;
+        }
+
+        if (!isAvailable()) {
+            return info;
+        }
+
+        try {
+            String url = String.format("http://127.0.0.1:%d/api/streams", port);
+            HttpGet request = new HttpGet(url);
+            try (CloseableHttpResponse response = httpClient.execute(request)) {
+                int statusCode = response.getStatusLine().getStatusCode();
+                if (statusCode == 200 && response.getEntity() != null) {
+                    String body = EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+                    JSONObject streams = new JSONObject(body);
+
+                    int registered = 0;
+                    int producers = 0;
+                    int consumers = 0;
+                    JSONArray streamDetails = new JSONArray();
+
+                    java.util.Iterator<String> keys = streams.keys();
+                    while (keys.hasNext()) {
+                        String name = keys.next();
+                        registered++;
+                        Object val = streams.get(name);
+                        JSONObject detail = new JSONObject();
+                        detail.put("name", name);
+
+                        if (val instanceof JSONObject) {
+                            JSONObject streamObj = (JSONObject) val;
+                            if (streamObj.has("producers")) {
+                                Object p = streamObj.get("producers");
+                                int pCount = (p instanceof JSONArray) ? ((JSONArray) p).length() : 0;
+                                producers += pCount;
+                                detail.put("producers", pCount);
+                            }
+                            if (streamObj.has("consumers")) {
+                                Object c = streamObj.get("consumers");
+                                int cCount = (c instanceof JSONArray) ? ((JSONArray) c).length() : 0;
+                                consumers += cCount;
+                                detail.put("consumers", cCount);
+                            }
+                        }
+                        streamDetails.put(detail);
+                    }
+
+                    info.put("registeredStreams", registered);
+                    info.put("activeProducers", producers);
+                    info.put("activeConsumers", consumers);
+                    info.put("streams", streamDetails);
+                } else {
+                    EntityUtils.consumeQuietly(response.getEntity());
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Could not fetch go2rtc stream info: {}", e.getMessage());
+        }
+
+        return info;
     }
 
     /**
