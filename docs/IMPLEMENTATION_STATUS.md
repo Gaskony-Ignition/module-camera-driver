@@ -1,8 +1,8 @@
 # Implementation Status
 
 **Project**: Ignition Camera Driver Module
-**Current Version**: 2.6.0
-**Last Updated**: 2026-02-10
+**Current Version**: 2.7.6
+**Last Updated**: 2026-02-11
 **Status**: ✅ **Production Ready** - Multi-Protocol Camera Driver
 
 ---
@@ -191,10 +191,14 @@ The following features are **implemented and functional** but require real ONVIF
 ## Streaming Features (IMPLEMENTED) ✅
 
 ### Live Streaming Capabilities
-- [x] **RTSP to MJPEG Streaming** - Convert RTSP streams to MJPEG format
-- [x] **Snapshot Capture** - Retrieve JPEG snapshots via GetSnapshotUri
+- [x] **MSE fMP4 Streaming** (v2.6.6+) - Live video via Media Source Extensions with go2rtc
+- [x] **RTSP Stream Proxy** - go2rtc transcodes RTSP to browser-playable formats
+- [x] **Snapshot Capture** - JPEG snapshots from ONVIF GetSnapshotUri or direct URLs
 - [x] **Authenticated Endpoints** - All streaming endpoints require login
-- [x] **HTTP Routes** - /onvif/stream/{deviceName} and /onvif/snapshot/{deviceName}
+- [x] **Credential Embedding** (v2.7.5) - Stored credentials embedded in RTSP URLs
+- [x] **HTTP Routes** - /data/camera-driver/snapshot, /data/camera-driver/stream, /data/camera-driver/devices
+- [x] **Embeddable Player** (v2.7.0) - Perspective-embeddable player endpoint
+- [x] **Resource Diagnostics** (v2.7.0) - Diagnostic panel for troubleshooting
 
 ## Future Enhancements (NOT YET IMPLEMENTED)
 
@@ -257,6 +261,23 @@ The following features are **implemented and functional** but require real ONVIF
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.7.6 | 2026-02-11 | Version bump (development) |
+| 2.7.5 | 2026-02-11 | Embed stored credentials in RTSP stream URLs for seamless browser playback |
+| 2.7.3 | 2026-02-11 | Fix webpack entry export name for CameraConnectionBrowser |
+| 2.7.2 | 2026-02-11 | Fix cross-module page collision - unique export name CameraConnectionBrowser |
+| 2.7.1 | 2026-02-11 | Fix React iframe key prop for proper DOM destroy/recreate on navigation |
+| 2.7.0 | 2026-02-11 | Resource diagnostics panel + embeddable Perspective player |
+| 2.6.9 | 2026-02-11 | Restyle Connection Browser to match Ignition v8.3 gateway theme |
+| 2.6.8 | 2026-02-11 | Fix MSE sourceopen race condition, strip charset from Content-Type |
+| 2.6.7 | 2026-02-11 | Fix MSE codec mismatch - forward go2rtc Content-Type |
+| 2.6.6 | 2026-02-11 | Implement MSE player for live fMP4 video streaming |
+| 2.6.5 | 2026-02-11 | Switch to MP4 proxy from go2rtc |
+| 2.6.4 | 2026-02-11 | Fix go2rtc API parameter (dst to name) for stream naming |
+| 2.6.3 | 2026-02-11 | Fix getDeviceExtensionPoints() called before setup() |
+| 2.6.2 | 2026-02-11 | Fix go2rtc startup timing race |
+| 2.6.1 | 2026-02-11 | Fix Generic Camera profiles in Connection Browser, go2rtc Windows binary |
+| 2.6.0 | 2026-02-10 | Multi-protocol rebranding (ONVIF Camera + Generic Camera) |
+| 2.5.0 | 2026-02-10 | Module rename from "ONVIF Driver" to "Camera Driver" |
 | 2.4.0 | 2025-12-11 | Production release: Security audit, webpack CVE fix, removed diagnostic routes, documentation updates |
 | 2.3.2 | 2025-11-26 | Connection Browser UI with device selector |
 | 2.2.0 | 2025-11-24 | Production authentication with account lockout and SHA-256 API keys |
@@ -272,11 +293,10 @@ The following features are **implemented and functional** but require real ONVIF
 
 ## Next Steps
 
-1. **Deployment**: Deploy v2.1.0 to production environments
-2. **Testing**: Systematic validation with Hardware Testing Checklist
-3. **Monitoring**: Monitor authentication and rate limiting in production
-4. **Documentation**: Gather feedback from production deployments
-5. **Future**: Plan v2.2.0 with event subscription support and TRUST_FIRST_USE implementation
+1. **Testing**: Hardware validation with real ONVIF cameras (see checklist below)
+2. **Event Subscriptions**: ONVIF motion detection, tampering alerts
+3. **Profile G/M Support**: Recording search/playback and metadata streaming
+4. **Performance**: Connection pooling, caching optimizations
 
 ---
 
@@ -289,6 +309,6 @@ For issues, questions, or contributions:
 
 ---
 
-**Last Review**: 2025-12-11
-**Reviewed By**: Claude Code Security & Quality Review
-**Confidence Level**: High - Production ready, security audited, all CVEs addressed
+**Last Review**: 2026-02-11
+**Reviewed By**: Claude Code
+**Confidence Level**: High - Production ready, security audited, MSE streaming, multi-protocol support
