@@ -996,7 +996,7 @@ public class ONVIFRoutes {
 
                     // Generate synthetic profiles from configured URLs
                     JSONArray genericProfiles = new JSONArray();
-                    String rtspUrl = cfg.cameraConnection().rtspUrl();
+                    String rtspUrl = device.getAuthenticatedRtspUrl();
                     if (rtspUrl != null && !rtspUrl.trim().isEmpty()) {
                         JSONObject rtspProfile = new JSONObject();
                         rtspProfile.put("token", "rtsp");
@@ -1087,7 +1087,7 @@ public class ONVIFRoutes {
                 // Generate synthetic profiles from configured URLs
                 GenericCameraConfig cfg = genericDevice.getConfig();
                 JSONArray genericProfiles = new JSONArray();
-                String rtspUrl = cfg.cameraConnection().rtspUrl();
+                String rtspUrl = genericDevice.getAuthenticatedRtspUrl();
                 if (rtspUrl != null && !rtspUrl.trim().isEmpty()) {
                     JSONObject rtspProfile = new JSONObject();
                     rtspProfile.put("token", "rtsp");

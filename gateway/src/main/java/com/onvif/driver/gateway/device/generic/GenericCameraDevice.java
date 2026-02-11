@@ -230,6 +230,20 @@ public class GenericCameraDevice extends ManagedAddressSpaceWithLifecycle implem
         }
     }
 
+    /**
+     * Returns the RTSP URL with stored credentials embedded, for display in the UI.
+     * If no credentials are configured, returns the original URL.
+     */
+    public String getAuthenticatedRtspUrl() {
+        String rtspUrl = config.cameraConnection().rtspUrl();
+        if (rtspUrl == null || rtspUrl.trim().isEmpty()) {
+            return rtspUrl;
+        }
+        String username = config.cameraConnection().username();
+        String password = resolvePassword();
+        return buildAuthenticatedRtspUrl(rtspUrl, username, password);
+    }
+
     private void createRootNode() {
         String deviceName = context.getName();
 
