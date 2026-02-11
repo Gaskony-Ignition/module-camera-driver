@@ -83,7 +83,7 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
                     .label("Camera Driver")
                     .addPage("Connection Browser", page -> page
                         .position(10)
-                        .mount("/camera-connection-browser", "ConnectionBrowser", connectionBrowserModule)
+                        .mount("/camera-connection-browser", "CameraConnectionBrowser", connectionBrowserModule)
                     )
                 );
 

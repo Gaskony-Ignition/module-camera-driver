@@ -1,1 +1,1 @@
-export { default as ConnectionBrowser } from "./pages/ConnectionBrowser";
+export { default as CameraConnectionBrowser } from "./pages/ConnectionBrowser";
