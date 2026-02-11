@@ -487,25 +487,13 @@ public class ONVIFRoutes {
                 // Generic camera - content type set inside method (MP4 for go2rtc, MJPEG for fallbacks)
                 streamGenericCamera(genericDevice, deviceName, fps, response, origin, startTime);
             } else {
-                // ONVIF device - always MJPEG via snapshot polling
-                if (profileToken == null || profileToken.trim().isEmpty()) {
-                    response.sendError(400, "Missing required parameter: profile (required for ONVIF devices)");
-                    return null;
-                }
-                if (!ValidationUtil.isValidProfileToken(profileToken)) {
+                // ONVIF device - try go2rtc MP4 first, fall back to snapshot polling
+                if (profileToken != null && !profileToken.trim().isEmpty()
+                        && !ValidationUtil.isValidProfileToken(profileToken)) {
                     response.sendError(400, "Invalid profile token format");
                     return null;
                 }
-                response.setContentType("multipart/x-mixed-replace; boundary=" + BOUNDARY);
-                response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-                response.setHeader("Pragma", "no-cache");
-                response.setHeader("Expires", "0");
-                response.setHeader("Connection", "close");
-                if (origin != null && isAllowedOrigin(origin)) {
-                    response.setHeader("Access-Control-Allow-Origin", origin);
-                    response.setHeader("Access-Control-Allow-Credentials", "true");
-                }
-                streamOnvifDevice(onvifDevice, deviceName, profileToken, fps, response, startTime);
+                streamOnvifDevice(onvifDevice, deviceName, profileToken, fps, response, origin, startTime);
             }
 
         } catch (Exception e) {
@@ -546,17 +534,58 @@ public class ONVIFRoutes {
     }
 
     /**
-     * Streams MJPEG from an ONVIF device using snapshot polling.
+     * Streams video from an ONVIF device.
+     * Prefers go2rtc MP4 proxy (if RTSP stream is registered), falls back to MJPEG snapshot polling.
      */
     private void streamOnvifDevice(ONVIFDevice device, String deviceName, String profileToken,
-                                   int fps, HttpServletResponse response, long startTime) throws IOException {
+                                   int fps, HttpServletResponse response, String origin, long startTime) throws IOException {
+
+        // Try late go2rtc registration if it wasn't available during device startup
+        if (!device.isGo2RtcStreamRegistered()) {
+            device.tryRegisterGo2Rtc();
+        }
+
+        // Prefer go2rtc MP4 proxy for proper RTSP streaming
+        if (device.isGo2RtcStreamRegistered() && go2RtcManager != null && go2RtcManager.isAvailable()) {
+            logger.info("Streaming via go2rtc MP4 for ONVIF device: {}", deviceName);
+            String go2rtcMp4Url = go2RtcManager.getStreamMp4Url(deviceName);
+            response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+            response.setHeader("Pragma", "no-cache");
+            response.setHeader("Expires", "0");
+            response.setHeader("Connection", "close");
+            if (origin != null && isAllowedOrigin(origin)) {
+                response.setHeader("Access-Control-Allow-Origin", origin);
+                response.setHeader("Access-Control-Allow-Credentials", "true");
+            }
+            if (proxyStream(go2rtcMp4Url, response, deviceName, startTime)) {
+                return;
+            }
+            logger.warn("go2rtc MP4 proxy failed for ONVIF device {}, falling back to snapshot polling", deviceName);
+        }
+
+        // Fallback: MJPEG via snapshot polling (requires profile token)
+        if (profileToken == null || profileToken.trim().isEmpty()) {
+            response.sendError(400, "Missing required parameter: profile (required for ONVIF snapshot fallback)");
+            return;
+        }
+
+        response.setContentType("multipart/x-mixed-replace; boundary=" + BOUNDARY);
+        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        response.setHeader("Pragma", "no-cache");
+        response.setHeader("Expires", "0");
+        response.setHeader("Connection", "close");
+        if (origin != null && isAllowedOrigin(origin)) {
+            response.setHeader("Access-Control-Allow-Origin", origin);
+            response.setHeader("Access-Control-Allow-Credentials", "true");
+        }
+
         OutputStream output = response.getOutputStream();
         long frameDelay = 1000 / fps;
         int frameCount = 0;
         int errorCount = 0;
         int maxConsecutiveErrors = 5;
 
-        logger.info("Starting MJPEG stream - device: {}, profile: {}, fps: {}", deviceName, profileToken, fps);
+        logger.info("Starting MJPEG snapshot stream - device: {}, profile: {}, fps: {}", deviceName, profileToken, fps);
 
         while (!Thread.currentThread().isInterrupted()) {
             long frameStart = System.currentTimeMillis();
@@ -947,14 +976,16 @@ public class ONVIFRoutes {
                                 profileJson.put("frameRate", profile.getFrameRate());
                                 profileJson.put("encoding", profile.getEncoding());
 
-                                // Get snapshot and stream URIs
+                                // Get snapshot and stream URIs (with credentials embedded)
                                 try {
-                                    profileJson.put("snapshotUri", device.getClient().getSnapshotUri(profile.getToken()));
+                                    String snapshotUri = device.getClient().getSnapshotUri(profile.getToken());
+                                    profileJson.put("snapshotUri", device.getAuthenticatedUrl(snapshotUri));
                                 } catch (Exception e) {
                                     logger.debug("Could not get snapshot URI for profile {}: {}", profile.getToken(), e.getMessage());
                                 }
                                 try {
-                                    profileJson.put("streamUri", device.getClient().getStreamUri(profile.getToken()));
+                                    String streamUri = device.getClient().getStreamUri(profile.getToken());
+                                    profileJson.put("streamUri", device.getAuthenticatedUrl(streamUri));
                                 } catch (Exception e) {
                                     logger.debug("Could not get stream URI for profile {}: {}", profile.getToken(), e.getMessage());
                                 }
@@ -965,6 +996,7 @@ public class ONVIFRoutes {
                             deviceJson.put("profileCount", profiles.size());
                         }
                     }
+                    deviceJson.put("go2rtcRegistered", device.isGo2RtcStreamRegistered());
                 } catch (Exception e) {
                     logger.debug("Could not get additional info for device {}: {}", entry.getKey(), e.getMessage());
                 }
@@ -1161,12 +1193,14 @@ public class ONVIFRoutes {
                             profileJson.put("encoding", profile.getEncoding());
 
                             try {
-                                profileJson.put("snapshotUri", device.getClient().getSnapshotUri(profile.getToken()));
+                                String snapshotUri = device.getClient().getSnapshotUri(profile.getToken());
+                                profileJson.put("snapshotUri", device.getAuthenticatedUrl(snapshotUri));
                             } catch (Exception e) {
                                 logger.debug("Could not get snapshot URI for profile {}: {}", profile.getToken(), e.getMessage());
                             }
                             try {
-                                profileJson.put("streamUri", device.getClient().getStreamUri(profile.getToken()));
+                                String streamUri = device.getClient().getStreamUri(profile.getToken());
+                                profileJson.put("streamUri", device.getAuthenticatedUrl(streamUri));
                             } catch (Exception e) {
                                 logger.debug("Could not get stream URI for profile {}: {}", profile.getToken(), e.getMessage());
                             }

@@ -9,6 +9,7 @@ import com.onvif.driver.gateway.onvif.MediaProfile;
 import com.onvif.driver.gateway.onvif.ONVIFClient;
 import com.onvif.driver.gateway.onvif.ONVIFService;
 import com.onvif.driver.gateway.onvif.PTZStatus;
+import com.onvif.driver.gateway.stream.Go2RtcManager;
 import org.eclipse.milo.opcua.sdk.core.Reference;
 import org.eclipse.milo.opcua.sdk.server.ManagedAddressSpaceWithLifecycle;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaFolderNode;
@@ -48,6 +49,7 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
 
     private final DeviceContext context;
     private final ONVIFDeviceConfig config;
+    private final Go2RtcManager go2RtcManager;
     private final SubscriptionModel subscriptionModel;
 
     private UaFolderNode rootNode;
@@ -55,6 +57,7 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
     private ONVIFClient onvifClient;
     private ONVIFPoller poller;
     private AddressSpaceBuilder addressSpaceBuilder;
+    private boolean go2RtcStreamRegistered = false;
 
     // Auto-reconnect state
     private int reconnectAttempts = 0;
@@ -66,12 +69,14 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
      *
      * @param context Device context provided by Ignition
      * @param config Device configuration from user
+     * @param go2RtcManager go2rtc manager for RTSP stream registration (may be null)
      */
-    public ONVIFDevice(DeviceContext context, ONVIFDeviceConfig config) {
+    public ONVIFDevice(DeviceContext context, ONVIFDeviceConfig config, Go2RtcManager go2RtcManager) {
         super(context.getServer());
 
         this.context = context;
         this.config = config;
+        this.go2RtcManager = go2RtcManager;
 
         subscriptionModel = new SubscriptionModel(context.getServer(), this);
 
@@ -265,6 +270,11 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
             logger.info("Auto-discover disabled, skipping service discovery");
         }
 
+        // Register first RTSP stream with go2rtc (with embedded credentials)
+        if (mediaProfiles != null && !mediaProfiles.isEmpty() && go2RtcManager != null) {
+            registerGo2RtcStream(mediaProfiles);
+        }
+
         // Create OPC-UA address space
         deviceStatus = "Building Address Space";
         logger.info("Creating OPC UA address space...");
@@ -297,6 +307,7 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
         logger.info("Services: {} discovered", services != null ? services.size() : 0);
         logger.info("Media Profiles: {} available", mediaProfiles != null ? mediaProfiles.size() : 0);
         logger.info("PTZ Support: {}", hasPTZ ? "YES" : "NO");
+        logger.info("go2rtc Stream: {}", go2RtcStreamRegistered ? "REGISTERED" : "NOT REGISTERED");
         logger.info("Tags should now be visible in Tag Browser");
         logger.info("Navigate to: OPC UA > [{}]", context.getName());
         logger.info("===========================================");
@@ -315,6 +326,12 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
      */
     private void onShutdown() {
         logger.info("Shutting down ONVIF device: {}", context.getName());
+
+        // Remove stream from go2rtc
+        if (go2RtcStreamRegistered && go2RtcManager != null) {
+            go2RtcManager.removeStream(context.getName());
+            go2RtcStreamRegistered = false;
+        }
 
         // Stop polling
         if (poller != null) {
@@ -552,5 +569,129 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
      */
     public ONVIFClient getClient() {
         return onvifClient;
+    }
+
+    /**
+     * Registers the first available RTSP stream URI with go2rtc (with embedded credentials).
+     */
+    private void registerGo2RtcStream(List<MediaProfile> profiles) {
+        for (MediaProfile profile : profiles) {
+            try {
+                String streamUri = onvifClient.getStreamUri(profile.getToken());
+                if (streamUri != null && !streamUri.trim().isEmpty()) {
+                    String authenticatedUri = getAuthenticatedUrl(streamUri);
+                    if (go2RtcManager.isAvailable()) {
+                        go2RtcStreamRegistered = go2RtcManager.addStream(context.getName(), authenticatedUri);
+                        if (go2RtcStreamRegistered) {
+                            logger.info("RTSP stream registered with go2rtc for profile '{}': {}",
+                                profile.getName(), context.getName());
+                            return;
+                        }
+                    } else {
+                        logger.info("go2rtc not available - ONVIF RTSP stream will use snapshot fallback");
+                    }
+                }
+            } catch (Exception e) {
+                logger.debug("Could not get stream URI for profile {}: {}", profile.getToken(), e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Returns whether this device has a stream registered with go2rtc.
+     */
+    public boolean isGo2RtcStreamRegistered() {
+        return go2RtcStreamRegistered;
+    }
+
+    /**
+     * Attempts to register this device's RTSP stream with go2rtc if not already registered.
+     * Handles the case where go2rtc wasn't available during device startup.
+     *
+     * @return true if the stream is registered
+     */
+    public boolean tryRegisterGo2Rtc() {
+        if (go2RtcStreamRegistered) {
+            return true;
+        }
+        if (go2RtcManager == null || !go2RtcManager.isAvailable() || onvifClient == null) {
+            return false;
+        }
+        try {
+            List<MediaProfile> profiles = onvifClient.getMediaProfiles();
+            if (profiles != null && !profiles.isEmpty()) {
+                registerGo2RtcStream(profiles);
+            }
+        } catch (Exception e) {
+            logger.debug("Could not get media profiles for late go2rtc registration: {}", e.getMessage());
+        }
+        return go2RtcStreamRegistered;
+    }
+
+    /**
+     * Resolves the password from SecretConfig, returns null if not configured.
+     */
+    private String resolvePassword() {
+        if (config.connection().password() == null) {
+            return null;
+        }
+        try (Plaintext plaintext = Secret.create(context.getGatewayContext(), config.connection().password()).getPlaintext()) {
+            return plaintext.getAsString(StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            logger.warn("Failed to retrieve password from SecretConfig: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Returns the given URL with stored credentials embedded.
+     * Supports rtsp://, rtsps://, http://, and https:// protocols.
+     * If credentials are already present or no username is configured, returns the original URL.
+     */
+    public String getAuthenticatedUrl(String rawUrl) {
+        if (rawUrl == null || rawUrl.trim().isEmpty()) {
+            return rawUrl;
+        }
+
+        String username = config.connection().username();
+        if (username == null || username.trim().isEmpty()) {
+            return rawUrl;
+        }
+
+        try {
+            String protocol;
+            String remainder;
+            if (rawUrl.startsWith("rtsps://")) {
+                protocol = "rtsps://";
+                remainder = rawUrl.substring(8);
+            } else if (rawUrl.startsWith("rtsp://")) {
+                protocol = "rtsp://";
+                remainder = rawUrl.substring(7);
+            } else if (rawUrl.startsWith("https://")) {
+                protocol = "https://";
+                remainder = rawUrl.substring(8);
+            } else if (rawUrl.startsWith("http://")) {
+                protocol = "http://";
+                remainder = rawUrl.substring(7);
+            } else {
+                return rawUrl;
+            }
+
+            // Skip if credentials are already embedded
+            if (remainder.contains("@")) {
+                return rawUrl;
+            }
+
+            String password = resolvePassword();
+            String credentials = username;
+            if (password != null && !password.isEmpty()) {
+                credentials += ":" + password;
+            }
+
+            return protocol + credentials + "@" + remainder;
+        } catch (Exception e) {
+            logger.warn("Failed to embed credentials in URL, using original: {}", e.getMessage());
+            return rawUrl;
+        }
     }
 }

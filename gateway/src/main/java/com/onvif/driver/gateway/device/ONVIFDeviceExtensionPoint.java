@@ -9,6 +9,8 @@ import com.inductiveautomation.ignition.gateway.opcua.server.api.DeviceProfileCo
 import com.inductiveautomation.ignition.gateway.web.nav.ExtensionPointResourceForm;
 import com.inductiveautomation.ignition.gateway.web.nav.WebUiComponent;
 
+import com.onvif.driver.gateway.stream.Go2RtcManager;
+
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -40,6 +42,8 @@ public class ONVIFDeviceExtensionPoint extends DeviceExtensionPoint<ONVIFDeviceC
      */
     private static final Map<String, ONVIFDevice> deviceRegistry = new ConcurrentHashMap<>();
 
+    private volatile Go2RtcManager go2RtcManager;
+
     /**
      * Constructor registers this device type with Ignition.
      *
@@ -57,6 +61,14 @@ public class ONVIFDeviceExtensionPoint extends DeviceExtensionPoint<ONVIFDeviceC
     }
 
     /**
+     * Updates the go2rtc manager reference. Used when the extension point is created
+     * before setup() runs (getDeviceExtensionPoints() can be called first).
+     */
+    public void setGo2RtcManager(Go2RtcManager go2RtcManager) {
+        this.go2RtcManager = go2RtcManager;
+    }
+
+    /**
      * Creates a new device instance when user creates a device connection.
      *
      * @param context Device context provided by Ignition
@@ -70,7 +82,7 @@ public class ONVIFDeviceExtensionPoint extends DeviceExtensionPoint<ONVIFDeviceC
         DeviceProfileConfig profileConfig,
         ONVIFDeviceConfig deviceConfig) {
 
-        return new ONVIFDevice(context, deviceConfig);
+        return new ONVIFDevice(context, deviceConfig, go2RtcManager);
     }
 
     /**

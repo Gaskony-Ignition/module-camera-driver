@@ -58,6 +58,9 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
         if (this.deviceExtensionPoint == null) {
             this.deviceExtensionPoint = new ONVIFDeviceExtensionPoint();
         }
+        // Inject go2rtc manager (may have been created before setup() with null manager)
+        this.deviceExtensionPoint.setGo2RtcManager(go2RtcManager);
+
         if (this.genericCameraExtensionPoint == null) {
             this.genericCameraExtensionPoint = new GenericCameraExtensionPoint(go2RtcManager);
         } else {
