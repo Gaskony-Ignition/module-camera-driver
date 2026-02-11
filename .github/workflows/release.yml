@@ -31,14 +31,14 @@ jobs:
           mkdir -p "$SIGNING_DIR"
           echo "${{ secrets.SIGNING_KEYSTORE }}" | base64 -d > "$SIGNING_DIR/gaskony-keystore.jks"
           echo "${{ secrets.SIGNING_CERT }}" | base64 -d > "$SIGNING_DIR/gaskony-cert.pem"
-          # Override signing config for CI environment (all from secrets)
-          cat > gradle.properties << EOF
-          ignition.signing.keystoreFile=$SIGNING_DIR/gaskony-keystore.jks
-          ignition.signing.keystorePassword=${{ secrets.SIGNING_PASSWORD }}
-          ignition.signing.certAlias=gaskony-module
-          ignition.signing.certPassword=${{ secrets.SIGNING_PASSWORD }}
-          ignition.signing.certFile=$SIGNING_DIR/gaskony-cert.pem
-          EOF
+          # Create gradle.properties with CI signing secrets
+          cat > gradle.properties <<EOF
+ignition.signing.keystoreFile=$SIGNING_DIR/gaskony-keystore.jks
+ignition.signing.keystorePassword=${{ secrets.SIGNING_PASSWORD }}
+ignition.signing.certAlias=gaskony-module
+ignition.signing.certPassword=${{ secrets.SIGNING_PASSWORD }}
+ignition.signing.certFile=$SIGNING_DIR/gaskony-cert.pem
+EOF
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -63,6 +63,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Delete existing release if present (e.g. created manually)
+          gh release delete "${{ github.ref_name }}" --yes 2>/dev/null || true
           gh release create "${{ github.ref_name }}" \
             "${{ steps.modl.outputs.file }}" \
             --title "Camera Driver ${{ github.ref_name }}" \
