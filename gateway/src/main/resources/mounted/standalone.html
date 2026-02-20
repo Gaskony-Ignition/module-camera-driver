@@ -8,193 +8,20 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         html, body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-            font-size: 14px;
-            line-height: 1.5;
             height: 100%;
             overflow: hidden;
-            background-color: #0a0e14;
-            color: #e6e8eb;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
         }
 
-        .app-container {
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-            height: 100%;
-            background-color: #0a0e14;
-            color: #e6e8eb;
-        }
-
-        /* Auth required overlay */
-        .auth-required-overlay {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 100%;
-            height: 100%;
-            background-color: #0a0e14;
-        }
-
-        .auth-required-card {
-            text-align: center;
-            padding: 48px 56px;
-            border-radius: 12px;
-            background-color: #14181f;
-            border: 1px solid #20252e;
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
-            max-width: 440px;
-        }
-
-        .auth-required-card .auth-module-identity {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            color: #e6e8eb;
-            font-size: 18px;
-            font-weight: 600;
-        }
-
-        .auth-required-card .auth-module-identity svg {
-            color: #61afef;
-            flex-shrink: 0;
-        }
-
-        .auth-required-card .auth-divider {
-            width: 48px;
-            height: 1px;
-            background: #20252e;
-            margin: 20px auto;
-        }
-
-        .auth-required-card .auth-icon {
-            font-size: 40px;
-            margin-bottom: 12px;
-            opacity: 0.8;
-        }
-
-        .auth-required-card h2 {
-            margin: 0 0 8px;
-            font-size: 18px;
-            font-weight: 600;
-            color: #e6e8eb;
-        }
-
-        .auth-required-card p {
-            margin: 4px 0;
-            font-size: 14px;
-            color: #b3b8c4;
-            line-height: 1.6;
-        }
-
-        .auth-required-card .auth-login-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            margin-top: 20px;
-            padding: 10px 24px;
-            background: #61afef;
-            color: #0a0e14;
-            border: none;
-            border-radius: 6px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            text-decoration: none;
-            transition: background 0.15s ease;
-        }
-
-        .auth-required-card .auth-login-btn:hover {
-            background: #7bc4ff;
-        }
-
-        /* Content iframe */
         .content-frame {
             width: 100%;
             height: 100%;
             border: none;
         }
-
-        .hidden { display: none !important; }
     </style>
 </head>
 <body>
-    <!-- Auth required state -->
-    <div id="authView" class="app-container hidden">
-        <div class="auth-required-overlay">
-            <div class="auth-required-card">
-                <div class="auth-module-identity">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                        <circle cx="12" cy="13" r="4"/>
-                    </svg>
-                    <span>Camera Driver</span>
-                </div>
-                <div class="auth-divider"></div>
-                <div class="auth-icon">&#128274;</div>
-                <h2>Authentication Required</h2>
-                <p>You must be logged in to the Ignition Gateway to use this module.</p>
-                <a href="/web/login" target="_top" class="auth-login-btn">
-                    Log In to Gateway
-                </a>
-            </div>
-        </div>
-    </div>
-
-    <!-- Authenticated content -->
-    <iframe id="contentFrame" class="content-frame hidden"
+    <iframe class="content-frame"
             src="/data/camera-driver/connection-browser"
             title="Camera Connection Browser"></iframe>
-
-    <script>
-        function showView(viewId) {
-            ['authView', 'contentFrame'].forEach(function(id) {
-                document.getElementById(id).classList.add('hidden');
-            });
-            document.getElementById(viewId).classList.remove('hidden');
-        }
-
-        async function checkAuth() {
-            try {
-                var res = await fetch('/data/camera-driver/devices', {
-                    signal: AbortSignal.timeout(5000),
-                    credentials: 'same-origin'
-                });
-
-                var contentType = res.headers.get('content-type') || '';
-
-                // Ignition redirects to login page (HTML) when not authenticated
-                if (contentType.includes('text/html') || res.status === 401 || res.status === 403) {
-                    showView('authView');
-                    return;
-                }
-
-                if (res.ok) {
-                    showView('contentFrame');
-                    return;
-                }
-
-                // Unexpected status - treat as auth required
-                showView('authView');
-
-            } catch (e) {
-                // Connection error - treat as auth required
-                showView('authView');
-            }
-        }
-
-        // Check auth on load
-        checkAuth();
-
-        // Re-check periodically if auth is required (user may log in via another tab)
-        setInterval(function() {
-            if (!document.getElementById('authView').classList.contains('hidden')) {
-                checkAuth();
-            }
-        }, 10000);
-    </script>
 </body>
 </html>
