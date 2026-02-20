@@ -88,6 +88,7 @@ public class ONVIFRoutes {
     private final GenericCameraExtensionPoint genericCameraExtensionPoint;
     private final Go2RtcManager go2RtcManager;
     private final AuthenticationManager authManager;
+    private final String moduleVersion;
 
     // ============================================================================
     // RESOURCE PROTECTION CONFIGURATION
@@ -147,11 +148,13 @@ public class ONVIFRoutes {
     private static final boolean REQUIRE_AUTHENTICATION = true;  // v2.1.0: Now enforced
 
     public ONVIFRoutes(GatewayContext context, ONVIFDeviceExtensionPoint deviceExtensionPoint,
-                       GenericCameraExtensionPoint genericCameraExtensionPoint, Go2RtcManager go2RtcManager) {
+                       GenericCameraExtensionPoint genericCameraExtensionPoint, Go2RtcManager go2RtcManager,
+                       String moduleVersion) {
         this.context = context;
         this.deviceExtensionPoint = deviceExtensionPoint;
         this.genericCameraExtensionPoint = genericCameraExtensionPoint;
         this.go2RtcManager = go2RtcManager;
+        this.moduleVersion = moduleVersion;
         this.authManager = new AuthenticationManager(context);
         logger.info("AuthenticationManager initialized with account lockout and API key support");
     }
@@ -1232,10 +1235,29 @@ public class ONVIFRoutes {
         JSONObject result = new JSONObject();
         result.put("status", "ok");
         result.put("service", "camera-driver");
+        result.put("version", moduleVersion);
         result.put("onvifDeviceCount", ONVIFDeviceExtensionPoint.getAllDevices().size());
         result.put("genericCameraCount", GenericCameraExtensionPoint.getAllDevices().size());
-        result.put("deviceCount", ONVIFDeviceExtensionPoint.getAllDevices().size()
-            + GenericCameraExtensionPoint.getAllDevices().size());
+        int totalDevices = ONVIFDeviceExtensionPoint.getAllDevices().size()
+            + GenericCameraExtensionPoint.getAllDevices().size();
+        result.put("deviceCount", totalDevices);
+
+        // Count running devices
+        int runningCount = 0;
+        for (ONVIFDevice d : ONVIFDeviceExtensionPoint.getAllDevices().values()) {
+            String s = d.getStatus();
+            if ("Running".equals(s) || "Connected".equals(s)) runningCount++;
+        }
+        for (GenericCameraDevice d : GenericCameraExtensionPoint.getAllDevices().values()) {
+            String s = d.getStatus();
+            if ("Running".equals(s) || "Connected".equals(s)) runningCount++;
+        }
+        result.put("runningCount", runningCount);
+
+        result.put("activeSnapshots", activeSnapshots.get());
+        result.put("maxSnapshots", MAX_CONCURRENT_SNAPSHOTS);
+        result.put("activeStreams", activeStreams.get());
+        result.put("maxStreams", MAX_CONCURRENT_STREAMS);
         result.put("go2rtcAvailable", go2RtcManager != null && go2RtcManager.isAvailable());
         result.put("timestamp", System.currentTimeMillis());
 

@@ -136,7 +136,8 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
         logger.info("Mounting route handlers at /data/camera-driver/*");
         logger.debug("RouteGroup: {}", routes);
 
-        new ONVIFRoutes(context, deviceExtensionPoint, genericCameraExtensionPoint, go2RtcManager).mountRoutes(routes);
+        String moduleVersion = "2.9.0";
+        new ONVIFRoutes(context, deviceExtensionPoint, genericCameraExtensionPoint, go2RtcManager, moduleVersion).mountRoutes(routes);
 
         logger.info("Route handlers mounted successfully");
     }
