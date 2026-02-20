@@ -24,6 +24,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -31,7 +32,20 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.ThreadMXBean;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -230,7 +244,15 @@ public class ONVIFRoutes {
             .mount();
         logger.debug("Mounted /player route");
 
-        logger.info("Camera driver routes mounted: /snapshot, /stream, /devices, /device/:name/status, /connection-browser, /health, /diagnostics, /player");
+        // Mount gateway logs endpoint at /data/camera-driver/logs/gateway
+        routes.newRoute("/logs/gateway")
+            .handler(this::handleGatewayLogs)
+            .type(RouteGroup.TYPE_JSON)
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)
+            .mount();
+        logger.debug("Mounted /logs/gateway route");
+
+        logger.info("Camera driver routes mounted: /snapshot, /stream, /devices, /device/:name/status, /connection-browser, /health, /diagnostics, /player, /logs/gateway");
     }
 
     /**
@@ -1259,6 +1281,25 @@ public class ONVIFRoutes {
         result.put("activeStreams", activeStreams.get());
         result.put("maxStreams", MAX_CONCURRENT_STREAMS);
         result.put("go2rtcAvailable", go2RtcManager != null && go2RtcManager.isAvailable());
+
+        // CPU and RAM system stats
+        try {
+            java.lang.management.OperatingSystemMXBean osBean = ManagementFactory.getOperatingSystemMXBean();
+            if (osBean instanceof com.sun.management.OperatingSystemMXBean) {
+                com.sun.management.OperatingSystemMXBean sunBean = (com.sun.management.OperatingSystemMXBean) osBean;
+                double cpuLoad = sunBean.getCpuLoad();
+                result.put("cpuPercent", cpuLoad >= 0 ? Math.round(cpuLoad * 100) : -1);
+                long totalMem = sunBean.getTotalMemorySize();
+                long freeMem = sunBean.getFreeMemorySize();
+                long usedMem = totalMem - freeMem;
+                result.put("ramUsedMb", usedMem / (1024 * 1024));
+                result.put("ramTotalMb", totalMem / (1024 * 1024));
+                result.put("ramPercent", totalMem > 0 ? Math.round((double) usedMem / totalMem * 100) : -1);
+            }
+        } catch (Exception e) {
+            logger.debug("Could not read CPU/RAM stats: {}", e.getMessage());
+        }
+
         result.put("timestamp", System.currentTimeMillis());
 
         response.setContentType("application/json");
@@ -1395,5 +1436,220 @@ public class ONVIFRoutes {
         }
 
         return null;
+    }
+
+    // ============================================================================
+    // Gateway Logs Endpoint
+    // ============================================================================
+
+    private static final int DEFAULT_LOG_LINES = 100;
+    private static final int MAX_LOG_LINES = 500;
+    private static final String CAMERA_DRIVER_LOGGER_PREFIX = "com.onvif.driver";
+    private final SimpleDateFormat logDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
+    /**
+     * Handles gateway log requests by reading from Ignition's system_logs.idb SQLite database.
+     * URL: http://gateway:8088/data/camera-driver/logs/gateway
+     *
+     * Query params:
+     *   - lines: Number of entries (default 100, max 500)
+     *   - moduleOnly: If "true", filter by com.onvif.driver logger prefix (default true)
+     *   - after: Only return entries after this event ID (for polling)
+     *   - level: Comma-separated log levels (ERROR,WARN,INFO)
+     */
+    private Object handleGatewayLogs(RequestContext context, HttpServletResponse response) throws Exception {
+        logger.debug("Gateway logs request received");
+
+        if (!isAuthenticated(context)) {
+            sendAuthenticationRequired(response);
+            return null;
+        }
+
+        try {
+            JSONObject result = new JSONObject();
+
+            // Parse parameters
+            int maxLines = parseLogLines(context.getRequest().getParameter("lines"));
+            String moduleOnlyParam = context.getRequest().getParameter("moduleOnly");
+            boolean moduleOnly = moduleOnlyParam == null || !"false".equalsIgnoreCase(moduleOnlyParam);
+            long afterEventId = parseAfterEventId(context.getRequest().getParameter("after"));
+            Set<String> levelFilter = parseLevelFilter(context.getRequest().getParameter("level"));
+
+            // Find system_logs.idb
+            File logDb = findSystemLogsDb();
+            if (logDb == null || !logDb.exists() || !logDb.canRead()) {
+                result.put("success", false);
+                result.put("error", "system_logs.idb not found");
+                response.setContentType("application/json");
+                response.setStatus(404);
+                response.getWriter().write(result.toString());
+                return null;
+            }
+
+            // Read entries from SQLite
+            JSONArray entries = readGatewayLogEntries(logDb, maxLines, moduleOnly, afterEventId, levelFilter);
+
+            result.put("success", true);
+            result.put("entries", entries);
+            result.put("hasMore", entries.length() >= maxLines);
+
+            response.setContentType("application/json");
+            response.getWriter().write(result.toString());
+
+        } catch (Exception e) {
+            logger.error("Error retrieving gateway logs", e);
+            response.sendError(500, "Error retrieving gateway logs: " + e.getMessage());
+        }
+
+        return null;
+    }
+
+    private JSONArray readGatewayLogEntries(File logDb, int maxLines, boolean moduleOnly,
+                                             long afterEventId, Set<String> levelFilter) {
+        JSONArray entries = new JSONArray();
+        String url = "jdbc:sqlite:" + logDb.getAbsolutePath();
+
+        StringBuilder sql = new StringBuilder();
+        sql.append("SELECT event_id, timestmp, formatted_message, logger_name, level_string ");
+        sql.append("FROM logging_event WHERE 1=1 ");
+
+        List<Object> params = new ArrayList<>();
+
+        if (afterEventId > 0) {
+            sql.append("AND event_id > ? ");
+            params.add(afterEventId);
+        }
+
+        if (!levelFilter.isEmpty()) {
+            sql.append("AND level_string IN (");
+            sql.append(String.join(",", Collections.nCopies(levelFilter.size(), "?")));
+            sql.append(") ");
+            params.addAll(levelFilter);
+        }
+
+        if (moduleOnly) {
+            sql.append("AND logger_name LIKE ? ");
+            params.add(CAMERA_DRIVER_LOGGER_PREFIX + "%");
+        }
+
+        sql.append("ORDER BY event_id DESC LIMIT ?");
+        params.add(maxLines);
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement stmt = conn.prepareStatement(sql.toString())) {
+
+            for (int i = 0; i < params.size(); i++) {
+                Object param = params.get(i);
+                if (param instanceof Long) {
+                    stmt.setLong(i + 1, (Long) param);
+                } else if (param instanceof Integer) {
+                    stmt.setInt(i + 1, (Integer) param);
+                } else {
+                    stmt.setString(i + 1, param.toString());
+                }
+            }
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                // Collect in reverse order (DESC query gives newest first)
+                List<JSONObject> tempList = new ArrayList<>();
+                while (rs.next()) {
+                    try {
+                        JSONObject entry = new JSONObject();
+                        long eventId = rs.getLong("event_id");
+                        long timestmp = rs.getLong("timestmp");
+                        String message = rs.getString("formatted_message");
+                        String loggerName = rs.getString("logger_name");
+                        String level = rs.getString("level_string");
+
+                        String formattedTime;
+                        synchronized (logDateFormat) {
+                            formattedTime = logDateFormat.format(new Date(timestmp));
+                        }
+
+                        // Shorten logger name for display (last segment)
+                        String source = loggerName;
+                        if (loggerName != null && loggerName.contains(".")) {
+                            source = loggerName.substring(loggerName.lastIndexOf('.') + 1);
+                        }
+
+                        entry.put("id", eventId);
+                        entry.put("timestamp", formattedTime);
+                        entry.put("level", level);
+                        entry.put("source", source);
+                        entry.put("logger", loggerName);
+                        entry.put("message", message);
+                        tempList.add(entry);
+                    } catch (Exception e) {
+                        logger.debug("Error parsing log entry: {}", e.getMessage());
+                    }
+                }
+
+                // Reverse to chronological order (oldest first)
+                Collections.reverse(tempList);
+                for (JSONObject entry : tempList) {
+                    entries.put(entry);
+                }
+            }
+        } catch (SQLException e) {
+            logger.error("Error reading from system_logs.idb: {}", e.getMessage());
+        }
+
+        return entries;
+    }
+
+    private File findSystemLogsDb() {
+        List<File> candidates = new ArrayList<>();
+
+        // Primary: from GatewayContext
+        try {
+            File logsDir = this.context.getSystemManager().getLogsDir();
+            if (logsDir != null) {
+                candidates.add(new File(logsDir, "system_logs.idb"));
+            }
+        } catch (Exception e) {
+            logger.debug("Could not get logsDir from GatewayContext: {}", e.getMessage());
+        }
+
+        // Common Ignition installation paths
+        candidates.add(new File("/usr/local/bin/ignition/logs/system_logs.idb"));
+        candidates.add(new File("/var/lib/ignition/logs/system_logs.idb"));
+        candidates.add(new File("C:/Program Files/Inductive Automation/Ignition/logs/system_logs.idb"));
+
+        for (File candidate : candidates) {
+            if (candidate.exists() && candidate.canRead()) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private int parseLogLines(String linesParam) {
+        if (linesParam == null || linesParam.isEmpty()) return DEFAULT_LOG_LINES;
+        try {
+            int lines = Integer.parseInt(linesParam);
+            return Math.max(1, Math.min(lines, MAX_LOG_LINES));
+        } catch (NumberFormatException e) {
+            return DEFAULT_LOG_LINES;
+        }
+    }
+
+    private long parseAfterEventId(String afterParam) {
+        if (afterParam == null || afterParam.isEmpty()) return 0;
+        try {
+            return Long.parseLong(afterParam);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private Set<String> parseLevelFilter(String levelParam) {
+        Set<String> filter = new HashSet<>();
+        if (levelParam != null && !levelParam.isEmpty()) {
+            for (String level : levelParam.split(",")) {
+                String trimmed = level.trim().toUpperCase();
+                if (!trimmed.isEmpty()) filter.add(trimmed);
+            }
+        }
+        return filter;
     }
 }

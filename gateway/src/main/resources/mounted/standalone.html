@@ -28,13 +28,33 @@
             color: #e6e8eb;
         }
 
+        /* Heading bar */
+        .dedicated-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 14px;
+            height: 32px;
+            min-height: 32px;
+            background: #14181f;
+            border-bottom: 1px solid #20252e;
+            font-size: 13px;
+            font-weight: 500;
+            color: #e6e8eb;
+        }
+
+        .dedicated-header svg {
+            color: #61afef;
+            flex-shrink: 0;
+        }
+
         /* Auth required overlay */
         .auth-required-overlay {
             display: flex;
             align-items: center;
             justify-content: center;
             width: 100%;
-            height: 100%;
+            flex: 1;
             background-color: #0a0e14;
         }
 
@@ -114,7 +134,7 @@
         /* Content iframe */
         .content-frame {
             width: 100%;
-            height: 100%;
+            flex: 1;
             border: none;
         }
 
@@ -122,9 +142,18 @@
     </style>
 </head>
 <body>
-    <!-- Auth required state -->
-    <div id="authView" class="app-container hidden">
-        <div class="auth-required-overlay">
+    <div class="app-container">
+        <!-- Heading Bar -->
+        <div class="dedicated-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+            </svg>
+            <span>Camera Driver</span>
+        </div>
+
+        <!-- Auth required state -->
+        <div id="authView" class="auth-required-overlay hidden">
             <div class="auth-required-card">
                 <div class="auth-module-identity">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -142,26 +171,36 @@
                 </a>
             </div>
         </div>
+
+        <!-- Authenticated content -->
+        <iframe id="contentFrame" class="content-frame hidden"
+                src="/data/camera-driver/connection-browser"
+                title="Camera Connection Browser"></iframe>
     </div>
 
-    <!-- Authenticated content -->
-    <iframe id="contentFrame" class="content-frame hidden"
-            src="/data/camera-driver/connection-browser"
-            title="Camera Connection Browser"></iframe>
-
     <script>
-        function showView(viewId) {
-            ['authView', 'contentFrame'].forEach(function(id) {
-                document.getElementById(id).classList.add('hidden');
-            });
-            document.getElementById(viewId).classList.remove('hidden');
+        var currentState = null; // 'auth' or 'content'
+
+        function showState(state) {
+            if (state === currentState) return;
+            currentState = state;
+
+            var authView = document.getElementById('authView');
+            var contentFrame = document.getElementById('contentFrame');
+
+            if (state === 'auth') {
+                authView.classList.remove('hidden');
+                contentFrame.classList.add('hidden');
+            } else {
+                authView.classList.add('hidden');
+                contentFrame.classList.remove('hidden');
+            }
         }
 
         async function checkAuth() {
             try {
                 // Use /diagnostics which has explicit isAuthenticated() check
                 // and returns 401 when not logged in.
-                // (The /devices endpoint has no auth check and always returns 200)
                 var res = await fetch('/data/camera-driver/diagnostics', {
                     signal: AbortSignal.timeout(5000),
                     credentials: 'same-origin'
@@ -172,33 +211,31 @@
                 // Ignition redirects to login page (HTML) when not authenticated,
                 // or the handler returns 401 via sendAuthenticationRequired()
                 if (contentType.includes('text/html') || res.status === 401 || res.status === 403) {
-                    showView('authView');
+                    showState('auth');
                     return;
                 }
 
                 if (res.ok) {
-                    showView('contentFrame');
+                    showState('content');
                     return;
                 }
 
                 // Unexpected status - treat as auth required
-                showView('authView');
+                showState('auth');
 
             } catch (e) {
                 // Connection error - treat as auth required
-                showView('authView');
+                showState('auth');
             }
         }
 
         // Check auth on load
         checkAuth();
 
-        // Re-check periodically if auth is required (user may log in via another tab)
-        setInterval(function() {
-            if (!document.getElementById('authView').classList.contains('hidden')) {
-                checkAuth();
-            }
-        }, 10000);
+        // CONTINUOUS auth monitoring every 10 seconds REGARDLESS of current state
+        // This detects auth loss while content is showing (no browser popup)
+        // and auto-recovers when user logs in via another tab
+        setInterval(checkAuth, 10000);
     </script>
 </body>
 </html>
