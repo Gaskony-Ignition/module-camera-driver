@@ -13,6 +13,8 @@ dependencies {
     compileOnly(libs.ignition.common)
     compileOnly(libs.ignition.gateway.api)
     compileOnly(libs.ignition.driver.api)
+    compileOnly(libs.perspective.common)
+    compileOnly(libs.perspective.gateway)
 
     // HTTP client for ONVIF communication
     modlImplementation("org.apache.httpcomponents:httpclient:4.5.14")

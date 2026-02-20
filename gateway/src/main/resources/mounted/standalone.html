@@ -199,29 +199,20 @@
 
         async function checkAuth() {
             try {
-                // Use /diagnostics which has explicit isAuthenticated() check
-                // and returns 401 when not logged in.
-                var res = await fetch('/data/camera-driver/diagnostics', {
+                // Use /auth-status which returns 200 with {authenticated: true/false}
+                // instead of /diagnostics which returns 401 + WWW-Authenticate header
+                // that triggers the browser's native Basic Auth popup
+                var res = await fetch('/data/camera-driver/auth-status', {
                     signal: AbortSignal.timeout(5000),
                     credentials: 'same-origin'
                 });
 
-                var contentType = res.headers.get('content-type') || '';
-
-                // Ignition redirects to login page (HTML) when not authenticated,
-                // or the handler returns 401 via sendAuthenticationRequired()
-                if (contentType.includes('text/html') || res.status === 401 || res.status === 403) {
-                    showState('auth');
-                    return;
-                }
-
                 if (res.ok) {
-                    showState('content');
-                    return;
+                    var data = await res.json();
+                    showState(data.authenticated ? 'content' : 'auth');
+                } else {
+                    showState('auth');
                 }
-
-                // Unexpected status - treat as auth required
-                showState('auth');
 
             } catch (e) {
                 // Connection error - treat as auth required

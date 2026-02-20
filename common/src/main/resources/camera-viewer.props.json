@@ -1,0 +1,34 @@
+{
+  "type": "object",
+  "properties": {
+    "deviceName": {
+      "type": "string",
+      "default": "",
+      "description": "Name of the camera device connection in Ignition"
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["auto", "mse", "snapshot"],
+      "default": "auto",
+      "description": "Stream mode: auto (MSE with snapshot fallback), mse (live only), snapshot (polling only)"
+    },
+    "snapshotInterval": {
+      "type": "number",
+      "default": 5000,
+      "minimum": 1000,
+      "maximum": 60000,
+      "description": "Snapshot refresh interval in milliseconds (snapshot mode)"
+    },
+    "showOverlay": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show camera name and status overlay"
+    },
+    "objectFit": {
+      "type": "string",
+      "enum": ["contain", "cover", "fill"],
+      "default": "contain",
+      "description": "How the video fits the container"
+    }
+  }
+}

@@ -8,10 +8,12 @@ import com.inductiveautomation.ignition.gateway.model.GatewayContext;
 import com.inductiveautomation.ignition.gateway.opcua.server.api.AbstractDeviceModuleHook;
 import com.inductiveautomation.ignition.gateway.opcua.server.api.DeviceExtensionPoint;
 import com.inductiveautomation.ignition.gateway.web.systemjs.SystemJsModule;
+import com.onvif.driver.common.CameraComponents;
 import com.onvif.driver.gateway.device.ONVIFDeviceExtensionPoint;
 import com.onvif.driver.gateway.device.generic.GenericCameraExtensionPoint;
 import com.onvif.driver.gateway.servlet.ONVIFRoutes;
 import com.onvif.driver.gateway.stream.Go2RtcManager;
+import com.inductiveautomation.perspective.gateway.api.PerspectiveContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -117,6 +119,18 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
 
         // Device extension points already created in setup(), go2rtc already started in setup()
         logger.debug("Device extension points ready: ONVIF={}, GenericCamera={}", deviceExtensionPoint, genericCameraExtensionPoint);
+
+        // Register Perspective components (if Perspective module is loaded)
+        try {
+            PerspectiveContext perspectiveContext = PerspectiveContext.get(context);
+            perspectiveContext.getComponentRegistry().registerComponent(CameraComponents.VIEWER_DESCRIPTOR);
+            perspectiveContext.getComponentRegistry().registerComponent(CameraComponents.GRID_DESCRIPTOR);
+            logger.info("Registered Perspective components: Camera Viewer, Camera Grid");
+        } catch (Exception e) {
+            // Perspective module not loaded - this is fine, camera driver works without it
+            logger.debug("Perspective module not available - skipping component registration: {}", e.getMessage());
+        }
+
         logger.info("Camera Driver module started successfully");
     }
 
@@ -136,7 +150,7 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
         logger.info("Mounting route handlers at /data/camera-driver/*");
         logger.debug("RouteGroup: {}", routes);
 
-        String moduleVersion = "2.9.0";
+        String moduleVersion = "2.11.0";
         new ONVIFRoutes(context, deviceExtensionPoint, genericCameraExtensionPoint, go2RtcManager, moduleVersion).mountRoutes(routes);
 
         logger.info("Route handlers mounted successfully");
@@ -182,6 +196,15 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
     @Override
     public void shutdown() {
         logger.info("Camera Driver module shutting down...");
+
+        // Unregister Perspective components
+        try {
+            PerspectiveContext perspectiveContext = PerspectiveContext.get(context);
+            perspectiveContext.getComponentRegistry().removeComponent(CameraComponents.VIEWER_ID);
+            perspectiveContext.getComponentRegistry().removeComponent(CameraComponents.GRID_ID);
+        } catch (Exception e) {
+            logger.debug("Perspective cleanup skipped: {}", e.getMessage());
+        }
 
         // Shutdown rate limiting executor to prevent resource leak
         try {

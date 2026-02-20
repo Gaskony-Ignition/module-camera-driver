@@ -10,12 +10,14 @@ module.exports = (webpackConfigEnv = {}, argv = {}) => {
   const externals = [
     "react",
     "react-dom",
+    "@inductiveautomation/perspective-client",
   ];
 
   return {
     mode,
     entry: {
       connectionBrowser: [path.join(__dirname, "src/pages/ConnectionBrowser/index.ts")],
+      perspective: [path.join(__dirname, "src/perspective/index.ts")],
     },
     output: {
       // Export as SystemJS module for Ignition gateway

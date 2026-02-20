@@ -244,6 +244,16 @@ public class ONVIFRoutes {
             .mount();
         logger.debug("Mounted /player route");
 
+        // Mount auth status endpoint at /data/camera-driver/auth-status
+        // Returns 200 with {authenticated: true/false} — no 401, no WWW-Authenticate header
+        // Used by standalone.html to check auth without triggering browser Basic Auth popup
+        routes.newRoute("/auth-status")
+            .handler(this::handleAuthStatus)
+            .type(RouteGroup.TYPE_JSON)
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)
+            .mount();
+        logger.debug("Mounted /auth-status route");
+
         // Mount gateway logs endpoint at /data/camera-driver/logs/gateway
         routes.newRoute("/logs/gateway")
             .handler(this::handleGatewayLogs)
@@ -252,7 +262,7 @@ public class ONVIFRoutes {
             .mount();
         logger.debug("Mounted /logs/gateway route");
 
-        logger.info("Camera driver routes mounted: /snapshot, /stream, /devices, /device/:name/status, /connection-browser, /health, /diagnostics, /player, /logs/gateway");
+        logger.info("Camera driver routes mounted: /snapshot, /stream, /devices, /device/:name/status, /connection-browser, /health, /diagnostics, /player, /auth-status, /logs/gateway");
     }
 
     /**
@@ -1246,6 +1256,27 @@ public class ONVIFRoutes {
             response.sendError(500, "Error getting device status: " + e.getMessage());
         }
 
+        return null;
+    }
+
+    /**
+     * Handles auth status check requests.
+     * URL: http://gateway:8088/data/camera-driver/auth-status
+     *
+     * Returns 200 with {"authenticated": true/false} — never returns 401 or
+     * WWW-Authenticate header, so the browser won't show a native Basic Auth popup.
+     * Used by standalone.html for continuous auth monitoring.
+     */
+    private Object handleAuthStatus(RequestContext context, HttpServletResponse response) throws Exception {
+        JSONObject result = new JSONObject();
+        try {
+            boolean authenticated = isAuthenticated(context);
+            result.put("authenticated", authenticated);
+        } catch (Exception e) {
+            result.put("authenticated", false);
+        }
+        response.setContentType("application/json");
+        response.getWriter().write(result.toString());
         return null;
     }
 

@@ -11,4 +11,5 @@ java {
 dependencies {
     compileOnly(libs.ignition.common)
     compileOnly(libs.ignition.gateway.api)
+    compileOnly(libs.perspective.common)
 }
