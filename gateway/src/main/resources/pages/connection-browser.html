@@ -214,7 +214,7 @@
 
         .sidebar-version:hover .sidebar-version-text { opacity: 1; }
 
-        .sidebar.collapsed .sidebar-version-text { opacity: 0; }
+        .sidebar.collapsed .sidebar-version-text { opacity: 0; width: 0; }
 
         .sidebar-dedicated-btn {
             display: flex;
@@ -246,7 +246,7 @@
             transition: opacity 0.15s;
         }
 
-        .sidebar.collapsed .sidebar-dedicated-label { opacity: 0; }
+        .sidebar.collapsed .sidebar-dedicated-label { opacity: 0; width: 0; }
 
         .sidebar-toggle {
             display: flex;
@@ -279,7 +279,7 @@
             transition: opacity 0.15s;
         }
 
-        .sidebar.collapsed .sidebar-toggle-label { opacity: 0; }
+        .sidebar.collapsed .sidebar-toggle-label { opacity: 0; width: 0; }
 
         /* ================================================================
            Main Area
@@ -1212,9 +1212,9 @@
         @media (max-width: 700px) {
             .sidebar { width: var(--sidebar-collapsed); min-width: var(--sidebar-collapsed); }
             .sidebar .nav-label { display: none; }
-            .sidebar .sidebar-version-text { opacity: 0; }
-            .sidebar .sidebar-dedicated-label { opacity: 0; }
-            .sidebar .sidebar-toggle-label { opacity: 0; }
+            .sidebar .sidebar-version-text { opacity: 0; width: 0; }
+            .sidebar .sidebar-dedicated-label { opacity: 0; width: 0; }
+            .sidebar .sidebar-toggle-label { opacity: 0; width: 0; }
             .sidebar .nav-item:hover .nav-tooltip { display: block; }
             .content-area { padding: 16px; }
             .camera-grid.grid-3x3 { grid-template-columns: 1fr 1fr; }

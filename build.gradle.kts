@@ -34,7 +34,7 @@ ignitionModule {
             required = true
         }
         register("com.inductiveautomation.perspective") {
-            scope = "G"
+            scope = "GD"
             required = false
         }
     }

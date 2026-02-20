@@ -34,6 +34,7 @@ public class CameraComponents {
         .setSchema(loadSchema("/camera-viewer.props.json"))
         .setPaletteCategory("Camera Driver")
         .setDefaultMetaName("CameraViewer")
+        .addPaletteEntry("", "Camera Viewer", "Single camera live stream with MSE and snapshot support", null, null)
         .setResources(BROWSER_RESOURCES)
         .build();
 
@@ -44,6 +45,7 @@ public class CameraComponents {
         .setSchema(loadSchema("/camera-grid.props.json"))
         .setPaletteCategory("Camera Driver")
         .setDefaultMetaName("CameraGrid")
+        .addPaletteEntry("", "Camera Grid", "Multi-camera grid layout with configurable rows and columns", null, null)
         .setResources(BROWSER_RESOURCES)
         .build();
 

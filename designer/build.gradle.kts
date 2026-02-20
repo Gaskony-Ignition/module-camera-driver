@@ -12,4 +12,6 @@ dependencies {
     implementation(projects.common)
     compileOnly(libs.ignition.common)
     compileOnly(libs.ignition.designer.api)
+    compileOnly(libs.perspective.common)
+    compileOnly(libs.perspective.designer)
 }
