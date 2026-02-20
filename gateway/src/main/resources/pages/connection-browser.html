@@ -219,17 +219,18 @@
         .sidebar-dedicated-btn {
             display: flex;
             align-items: center;
-            gap: 8px;
-            width: calc(100% - 8px);
+            justify-content: center;
+            gap: 4px;
             padding: 6px 12px;
             margin: 0 4px;
-            background: none;
             border: none;
+            background: transparent;
             border-radius: 4px;
             color: var(--text-secondary);
             font-size: 11px;
             cursor: pointer;
-            transition: all 0.15s ease;
+            font-family: inherit;
+            transition: background 0.15s ease, color 0.15s ease;
             white-space: nowrap;
             overflow: hidden;
         }
@@ -250,18 +251,19 @@
         .sidebar-toggle {
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 8px;
-            width: calc(100% - 8px);
             padding: 10px;
             margin: 4px 4px;
-            background: none;
             border: none;
             border-top: 1px solid var(--border-default);
             border-radius: 0;
+            background: transparent;
             color: var(--text-secondary);
             font-size: 13px;
             cursor: pointer;
-            transition: all 0.15s ease;
+            font-family: inherit;
+            transition: background 0.15s ease, color 0.15s ease;
             white-space: nowrap;
             overflow: hidden;
         }
@@ -1549,6 +1551,12 @@
         // Initialization
         // ================================================================
         document.addEventListener('DOMContentLoaded', function() {
+            // Hide heading bar when embedded in iframe (standalone.html provides its own)
+            if (window.self !== window.top) {
+                var header = document.querySelector('.dedicated-header');
+                if (header) header.style.display = 'none';
+            }
+
             // Restore sidebar state
             if (sidebarCollapsed) {
                 document.getElementById('sidebar').classList.add('collapsed');
