@@ -30,9 +30,9 @@ public class DesignerHook extends AbstractDesignerModuleHook {
             registry.registerComponent(CameraComponents.VIEWER_DESCRIPTOR);
             registry.registerComponent(CameraComponents.GRID_DESCRIPTOR);
             logger.info("Registered Perspective components in Designer: Camera Viewer, Camera Grid");
-        } catch (Exception e) {
-            // Perspective module not loaded in Designer - this is fine
-            logger.debug("Perspective not available in Designer - skipping component registration: {}", e.getMessage());
+        } catch (Throwable t) {
+            // Perspective module not loaded or class loading issue - this is fine
+            logger.warn("Perspective component registration skipped in Designer: {}", t.getMessage());
         }
     }
 
@@ -42,8 +42,8 @@ public class DesignerHook extends AbstractDesignerModuleHook {
             try {
                 registry.removeComponent(CameraComponents.VIEWER_ID);
                 registry.removeComponent(CameraComponents.GRID_ID);
-            } catch (Exception e) {
-                logger.debug("Perspective cleanup in Designer skipped: {}", e.getMessage());
+            } catch (Throwable t) {
+                logger.debug("Perspective cleanup in Designer skipped: {}", t.getMessage());
             }
         }
         super.shutdown();

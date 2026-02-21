@@ -115,6 +115,10 @@ sourceSets {
             // go2rtc binaries are placed in build/go2rtc-binaries/go2rtc/ by downloadGo2Rtc
             // They end up at classpath: go2rtc/go2rtc_linux_amd64 etc.
             srcDir(layout.buildDirectory.dir("go2rtc-binaries"))
+
+            // Include web-ui webpack output (perspective.js, connectionBrowser.js) in gateway.jar
+            // so they're served via getMountedResourceFolder() at /res/camera-driver/*
+            srcDir(project(":web-ui").layout.buildDirectory.dir("generated-resources"))
         }
     }
 }

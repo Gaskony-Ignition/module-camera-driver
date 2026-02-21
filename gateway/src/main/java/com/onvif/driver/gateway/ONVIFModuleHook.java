@@ -126,9 +126,9 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
             perspectiveContext.getComponentRegistry().registerComponent(CameraComponents.VIEWER_DESCRIPTOR);
             perspectiveContext.getComponentRegistry().registerComponent(CameraComponents.GRID_DESCRIPTOR);
             logger.info("Registered Perspective components: Camera Viewer, Camera Grid");
-        } catch (Exception e) {
-            // Perspective module not loaded - this is fine, camera driver works without it
-            logger.debug("Perspective module not available - skipping component registration: {}", e.getMessage());
+        } catch (Throwable t) {
+            // Perspective module not loaded or class loading issue - camera driver works without it
+            logger.debug("Perspective component registration skipped: {}", t.getMessage());
         }
 
         logger.info("Camera Driver module started successfully");
@@ -150,7 +150,7 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
         logger.info("Mounting route handlers at /data/camera-driver/*");
         logger.debug("RouteGroup: {}", routes);
 
-        String moduleVersion = "2.11.0";
+        String moduleVersion = "2.11.1";
         new ONVIFRoutes(context, deviceExtensionPoint, genericCameraExtensionPoint, go2RtcManager, moduleVersion).mountRoutes(routes);
 
         logger.info("Route handlers mounted successfully");
@@ -202,8 +202,8 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
             PerspectiveContext perspectiveContext = PerspectiveContext.get(context);
             perspectiveContext.getComponentRegistry().removeComponent(CameraComponents.VIEWER_ID);
             perspectiveContext.getComponentRegistry().removeComponent(CameraComponents.GRID_ID);
-        } catch (Exception e) {
-            logger.debug("Perspective cleanup skipped: {}", e.getMessage());
+        } catch (Throwable t) {
+            logger.debug("Perspective cleanup skipped: {}", t.getMessage());
         }
 
         // Shutdown rate limiting executor to prevent resource leak

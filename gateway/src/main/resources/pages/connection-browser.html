@@ -108,9 +108,12 @@
             border-right: 1px solid var(--border-default);
             display: flex;
             flex-direction: column;
-            transition: width 0.2s ease, min-width 0.2s ease;
+            height: 100%;
+            flex-shrink: 0;
+            transition: width 0.25s ease, min-width 0.25s ease;
             overflow: hidden;
-            z-index: 10;
+            z-index: 200;
+            user-select: none;
         }
 
         .sidebar.collapsed {
@@ -119,9 +122,25 @@
         }
 
         .sidebar-nav {
+            display: flex;
+            flex-direction: column;
             flex: 1;
-            padding: 8px 0;
+            padding: 4px 0;
             overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .sidebar-nav::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .sidebar-nav::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .sidebar-nav::-webkit-scrollbar-thumb {
+            background: var(--border-default);
+            border-radius: 2px;
         }
 
         .nav-item {
@@ -130,18 +149,22 @@
             gap: var(--spacing-sm);
             padding: 10px 12px;
             margin: 1px 4px;
-            border-radius: 0 4px 4px 0;
+            border: none;
             border-left: 3px solid transparent;
-            color: var(--text-secondary);
+            border-radius: 0 4px 4px 0;
+            background: transparent;
+            color: #cdd6f4;
             cursor: pointer;
-            transition: all 0.15s ease;
-            position: relative;
+            font-size: 13px;
             white-space: nowrap;
+            transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+            position: relative;
+            width: calc(100% - 8px);
+            text-align: left;
         }
 
         .nav-item:hover {
-            background: var(--sidebar-hover);
-            color: var(--text-primary);
+            background: #45475a;
         }
 
         .nav-item.active {
@@ -165,31 +188,44 @@
         }
 
         .nav-item .nav-label {
-            font-size: 13px;
-            font-weight: 500;
             overflow: hidden;
+            text-overflow: ellipsis;
+            opacity: 1;
+            transition: opacity 0.15s ease;
         }
 
-        .sidebar.collapsed .nav-label { display: none; }
+        .sidebar.collapsed .nav-label {
+            opacity: 0;
+            width: 0;
+        }
 
         .nav-tooltip {
-            display: none;
             position: absolute;
-            left: 52px;
+            left: 100%;
             top: 50%;
             transform: translateY(-50%);
-            background: var(--sidebar-active);
-            color: var(--text-primary);
+            margin-left: 8px;
             padding: 4px 10px;
-            border-radius: 4px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
             font-size: 12px;
+            border-radius: 4px;
             white-space: nowrap;
-            z-index: 100;
             pointer-events: none;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            opacity: 0;
+            transition: opacity 0.15s ease;
+            z-index: 1300;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.4);
+            border: 1px solid var(--border-default);
         }
 
-        .sidebar.collapsed .nav-item:hover .nav-tooltip { display: block; }
+        .nav-item:hover .nav-tooltip {
+            opacity: 1;
+        }
+
+        .sidebar:not(.collapsed) .nav-item:hover .nav-tooltip {
+            opacity: 0;
+        }
 
         .sidebar-footer {
             padding: 0;
@@ -200,15 +236,16 @@
             align-items: center;
             justify-content: center;
             padding: 4px 12px;
-            transition: opacity 0.15s;
+            overflow: hidden;
+            white-space: nowrap;
         }
 
         .sidebar-version-text {
-            font-family: 'Consolas', 'Monaco', monospace;
+            font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
             font-size: 10px;
             color: var(--text-secondary);
             opacity: 0.6;
-            transition: opacity 0.15s;
+            transition: opacity 0.15s ease;
             white-space: nowrap;
         }
 
@@ -225,25 +262,27 @@
             margin: 0 4px;
             border: none;
             background: transparent;
-            border-radius: 4px;
             color: var(--text-secondary);
-            font-size: 11px;
             cursor: pointer;
-            font-family: inherit;
-            transition: background 0.15s ease, color 0.15s ease;
+            font-size: 11px;
             white-space: nowrap;
             overflow: hidden;
+            transition: background 0.15s ease, color 0.15s ease;
+            border-radius: 4px;
         }
 
         .sidebar-dedicated-btn:hover {
-            background: var(--sidebar-hover);
+            background: #45475a;
             color: var(--text-primary);
         }
 
         .sidebar-dedicated-btn svg { flex-shrink: 0; }
 
         .sidebar-dedicated-label {
-            transition: opacity 0.15s;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            opacity: 1;
+            transition: opacity 0.15s ease;
         }
 
         .sidebar.collapsed .sidebar-dedicated-label { opacity: 0; width: 0; }
@@ -252,31 +291,32 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
             padding: 10px;
             margin: 4px 4px;
             border: none;
             border-top: 1px solid var(--border-default);
-            border-radius: 0;
             background: transparent;
             color: var(--text-secondary);
-            font-size: 13px;
             cursor: pointer;
-            font-family: inherit;
             transition: background 0.15s ease, color 0.15s ease;
+            font-size: 13px;
+            gap: 8px;
             white-space: nowrap;
             overflow: hidden;
         }
 
         .sidebar-toggle:hover {
-            background: var(--sidebar-hover);
+            background: #45475a;
             color: var(--text-primary);
         }
 
         .sidebar-toggle svg { flex-shrink: 0; }
 
         .sidebar-toggle-label {
-            transition: opacity 0.15s;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            opacity: 1;
+            transition: opacity 0.15s ease;
         }
 
         .sidebar.collapsed .sidebar-toggle-label { opacity: 0; width: 0; }
