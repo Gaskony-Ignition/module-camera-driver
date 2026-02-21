@@ -6,28 +6,8 @@ const ESLintPlugin = require("eslint-webpack-plugin");
 module.exports = (webpackConfigEnv = {}, argv = {}) => {
   const { mode = "development" } = argv;
 
-  // Do not include these packages in the bundle as they will be provided by the gateway
-  const externals = [
-    "react",
-    "react-dom",
-    "@inductiveautomation/perspective-client",
-  ];
-
-  return {
+  const commonConfig = {
     mode,
-    entry: {
-      connectionBrowser: [path.join(__dirname, "src/pages/ConnectionBrowser/index.ts")],
-      perspective: [path.join(__dirname, "src/perspective/index.ts")],
-    },
-    output: {
-      // Export as SystemJS module for Ignition gateway
-      library: {
-        type: "system",
-      },
-      filename: "[name].js",
-      publicPath: "",
-      path: path.resolve(__dirname, "build/generated-resources/mounted/"),
-    },
     context: path.resolve(__dirname),
     module: {
       rules: [
@@ -55,6 +35,47 @@ module.exports = (webpackConfigEnv = {}, argv = {}) => {
       modules: ["node_modules"],
       extensions: [".js", ".jsx", ".scss", ".css", ".ts", ".tsx", ".d.ts"],
     },
-    externals,
   };
+
+  // Connection Browser: SystemJS for Ignition gateway config page
+  const connectionBrowserConfig = {
+    ...commonConfig,
+    entry: {
+      connectionBrowser: [path.join(__dirname, "src/pages/ConnectionBrowser/index.ts")],
+    },
+    output: {
+      library: { type: "system" },
+      filename: "[name].js",
+      publicPath: "",
+      path: path.resolve(__dirname, "build/generated-resources/mounted/"),
+    },
+    externals: [
+      "react",
+      "react-dom",
+    ],
+  };
+
+  // Perspective components: UMD for Perspective runtime (loaded via <script> tag)
+  const perspectiveConfig = {
+    ...commonConfig,
+    entry: {
+      perspective: [path.join(__dirname, "src/perspective/index.ts")],
+    },
+    output: {
+      library: {
+        name: "CameraDriverComponents",
+        type: "umd",
+      },
+      filename: "[name].js",
+      publicPath: "",
+      path: path.resolve(__dirname, "build/generated-resources/mounted/"),
+    },
+    externals: {
+      "react": "React",
+      "react-dom": "ReactDOM",
+      "@inductiveautomation/perspective-client": "PerspectiveClient",
+    },
+  };
+
+  return [connectionBrowserConfig, perspectiveConfig];
 };
