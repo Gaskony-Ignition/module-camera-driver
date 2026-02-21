@@ -2330,7 +2330,7 @@
                 '<div class="grid-cell-header">' +
                 '<select onchange="assignGridCamera(' + index + ', this.value)" title="Select camera">' + optionsHtml + '</select>' +
                 '<div class="grid-cell-actions">' +
-                (device ? '<button onclick="toggleGridStream(' + index + ')" title="Toggle stream"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>' : '') +
+                (device ? '<button id="grid-play-btn-' + index + '" onclick="toggleGridStream(' + index + ')" title="Play stream"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>' : '') +
                 (device ? '<button onclick="captureGridSnapshot(' + index + ')" title="Snapshot"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>' : '') +
                 '</div>' +
                 '</div>' +
@@ -2439,6 +2439,14 @@
                 gridCellStreams[cellIndex] = { type: 'mjpeg', deviceName: deviceName };
             }
 
+            // Update play button to stop icon
+            var playBtn = document.getElementById('grid-play-btn-' + cellIndex);
+            if (playBtn) {
+                playBtn.title = 'Stop stream';
+                playBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="12" height="16" rx="1"/></svg>';
+                playBtn.style.color = 'var(--accent-primary, #89b4fa)';
+            }
+
             addGridEvent(deviceName, 'Stream started');
         }
 
@@ -2529,6 +2537,14 @@
             var assignments = getGroupAssignments();
             if (assignments[cellIndex]) {
                 refreshGridSnapshot(cellIndex, assignments[cellIndex]);
+            }
+
+            // Restore play button icon
+            var playBtn = document.getElementById('grid-play-btn-' + cellIndex);
+            if (playBtn) {
+                playBtn.title = 'Play stream';
+                playBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                playBtn.style.color = '';
             }
 
             if (stream.deviceName) addGridEvent(stream.deviceName, 'Stream stopped');

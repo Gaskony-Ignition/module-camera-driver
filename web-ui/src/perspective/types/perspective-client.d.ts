@@ -26,4 +26,8 @@ declare module '@inductiveautomation/perspective-client' {
         getDefaultSize(): SizeObject;
         getPropsReducer(tree: PropertyTree): any;
     }
+
+    export namespace ComponentRegistry {
+        function register(component: ComponentMeta): void;
+    }
 }
