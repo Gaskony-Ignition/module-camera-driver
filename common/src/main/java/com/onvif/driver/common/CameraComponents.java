@@ -75,17 +75,29 @@ public class CameraComponents {
         BufferedImage img = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g.setColor(new Color(97, 175, 239));
-        g.fillRoundRect(1, 4, 14, 10, 3, 3);
-        g.setColor(new Color(10, 14, 20));
-        g.fillOval(4, 6, 6, 6);
-        g.setColor(new Color(97, 175, 239));
-        g.fillOval(5, 7, 4, 4);
-        g.fillRoundRect(11, 5, 3, 3, 1, 1);
-        g.setColor(new Color(10, 14, 20));
-        g.fillRect(12, 6, 1, 1);
-        g.setColor(new Color(97, 175, 239));
-        g.fillRoundRect(4, 2, 5, 3, 2, 2);
+
+        Color blue = new Color(97, 175, 239);
+        Color darkBlue = new Color(40, 80, 140);
+        Color lightBlue = new Color(160, 210, 255);
+
+        // Camera body
+        g.setColor(blue);
+        g.fillRoundRect(0, 4, 12, 10, 3, 3);
+
+        // Lens (outer ring + inner highlight)
+        g.setColor(darkBlue);
+        g.fillOval(2, 6, 7, 7);
+        g.setColor(lightBlue);
+        g.fillOval(4, 8, 3, 3);
+
+        // Viewfinder bump on top
+        g.setColor(blue);
+        g.fillRoundRect(2, 2, 5, 3, 1, 1);
+
+        // Video record triangle on right
+        g.setColor(blue);
+        g.fillPolygon(new int[]{12, 16, 12}, new int[]{5, 9, 13}, 3);
+
         g.dispose();
         return img;
     }
@@ -94,16 +106,21 @@ public class CameraComponents {
         BufferedImage img = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g.setColor(new Color(97, 175, 239));
-        g.fillRoundRect(1, 1, 6, 6, 2, 2);
-        g.fillRoundRect(9, 1, 6, 6, 2, 2);
-        g.fillRoundRect(1, 9, 6, 6, 2, 2);
-        g.fillRoundRect(9, 9, 6, 6, 2, 2);
-        g.setColor(new Color(10, 14, 20));
-        g.fillOval(3, 3, 2, 2);
-        g.fillOval(11, 3, 2, 2);
-        g.fillOval(3, 11, 2, 2);
-        g.fillOval(11, 11, 2, 2);
+
+        Color blue = new Color(97, 175, 239);
+
+        // 4x4 grid of squares (3px cells with 1px gaps)
+        int cellSize = 3;
+        int gap = 1;
+        for (int row = 0; row < 4; row++) {
+            for (int col = 0; col < 4; col++) {
+                int x = col * (cellSize + gap);
+                int y = row * (cellSize + gap);
+                g.setColor(blue);
+                g.fillRect(x, y, cellSize, cellSize);
+            }
+        }
+
         g.dispose();
         return img;
     }

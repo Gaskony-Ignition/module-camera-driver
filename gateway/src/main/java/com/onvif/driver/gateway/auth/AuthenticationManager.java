@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -73,13 +74,23 @@ public class AuthenticationManager {
      * @return true if authenticated, false otherwise
      */
     public boolean isAuthenticated(RequestContext requestContext) {
-        // Method 1: Check for valid Ignition WebUiSession (primary - works for gateway-logged-in users)
+        // Method 1a: Check for valid Ignition WebUiSession (gateway config UI sessions)
         if (WebUiSession.find(requestContext).isPresent()) {
             logger.debug("Request authenticated via Ignition WebUiSession");
             return true;
         }
 
+        // Method 1b: Check for valid HTTP session (Perspective Designer/runtime sessions)
+        // Perspective components run in an authenticated browser context but use a different
+        // session type than WebUiSession. If a valid HTTP session exists, the user was
+        // authenticated through Ignition's session management (Designer login, Perspective
+        // login, etc.) and the session cookie was set during that authentication flow.
         HttpServletRequest request = requestContext.getRequest();
+        HttpSession httpSession = request.getSession(false);
+        if (httpSession != null) {
+            logger.debug("Request authenticated via HTTP session (Perspective/Designer)");
+            return true;
+        }
 
         // Method 2: Check for Basic Authentication
         if (isBasicAuthValid(request)) {
