@@ -5,6 +5,7 @@ import com.inductiveautomation.perspective.common.api.BrowserResource;
 import com.inductiveautomation.perspective.common.api.ComponentDescriptor;
 import com.inductiveautomation.perspective.common.api.ComponentDescriptorImpl;
 
+import javax.swing.ImageIcon;
 import java.awt.image.BufferedImage;
 import java.util.Set;
 
@@ -49,6 +50,7 @@ public class CameraComponents {
         .setModuleId(MODULE_ID)
         .setSchema(VIEWER_SCHEMA)
         .setName("Camera Viewer")
+        .setIcon(new ImageIcon(CAMERA_ICON))
         .addPaletteEntry("", "Camera Viewer", "Single camera live stream with MSE and snapshot support",
             CAMERA_ICON, null)
         .setDefaultMetaName("CameraViewer")
@@ -61,6 +63,7 @@ public class CameraComponents {
         .setModuleId(MODULE_ID)
         .setSchema(GRID_SCHEMA)
         .setName("Camera Grid")
+        .setIcon(new ImageIcon(GRID_ICON))
         .addPaletteEntry("", "Camera Grid", "Multi-camera grid layout with configurable rows and columns",
             GRID_ICON, null)
         .setDefaultMetaName("CameraGrid")
