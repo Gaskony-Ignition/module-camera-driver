@@ -34,10 +34,16 @@ public class AuthenticationManager {
 
     private static final Logger logger = LoggerFactory.getLogger(AuthenticationManager.class);
 
+    /** Maximum number of consecutive invalid API-key submissions before an IP is locked out. */
+    private static final int MAX_FAILED_ATTEMPTS = 5;
+
+    /** How long (ms) a locked-out IP must wait before it can attempt again (15 minutes). */
+    private static final long LOCKOUT_DURATION_MS = 15 * 60 * 1000L;
+
     /** Holds a salted SHA-256 hash of an API key along with the owning username. */
     private record StoredApiKey(String username, String saltHex, String hashHex) {}
 
-    // Retained for external monitoring/admin use (e.g. future brute-force protection on API keys).
+    // Per-IP brute-force protection for API key submissions.
     private final Map<String, AtomicInteger> failedAttempts = new ConcurrentHashMap<>();
     private final Map<String, Long> lockoutUntil = new ConcurrentHashMap<>();
 
@@ -123,15 +129,85 @@ public class AuthenticationManager {
             return false;
         }
 
+        // Extract the client IP and check whether it is currently locked out.
+        String clientIP = getClientIP(request);
+        if (isIPLockedOut(clientIP)) {
+            logger.warn("API key request rejected — IP is locked out: {}", clientIP);
+            return false;
+        }
+
         for (StoredApiKey stored : apiKeys.values()) {
             if (verifyApiKey(apiKey, stored)) {
+                // Successful authentication: clear any accumulated failure state for this IP.
+                failedAttempts.remove(clientIP);
+                lockoutUntil.remove(clientIP);
                 logger.info("API key authentication successful for user: {}", stored.username());
                 return true;
             }
         }
 
-        logger.warn("Invalid API key provided");
+        // No matching key found — record the failure and potentially trigger a lockout.
+        recordFailedAttempt(clientIP);
+        logger.warn("Invalid API key from IP: {}", clientIP);
         return false;
+    }
+
+    /**
+     * Returns the originating client IP address, honouring standard proxy headers.
+     *
+     * @param request The HTTP request
+     * @return Client IP string
+     */
+    private static String getClientIP(HttpServletRequest request) {
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+        String xRealIP = request.getHeader("X-Real-IP");
+        if (xRealIP != null && !xRealIP.isEmpty()) {
+            return xRealIP;
+        }
+        return request.getRemoteAddr();
+    }
+
+    /**
+     * Returns true if the given IP is currently locked out due to too many failed attempts.
+     * Expired lockouts are automatically cleared.
+     *
+     * @param clientIP The client IP address
+     * @return true if the IP is locked out, false otherwise
+     */
+    private boolean isIPLockedOut(String clientIP) {
+        Long lockoutEnd = lockoutUntil.get(clientIP);
+        if (lockoutEnd == null) {
+            return false;
+        }
+        if (System.currentTimeMillis() < lockoutEnd) {
+            return true;
+        }
+        // Lockout has expired — clean up.
+        lockoutUntil.remove(clientIP);
+        failedAttempts.remove(clientIP);
+        return false;
+    }
+
+    /**
+     * Records a failed API-key attempt from the given IP. If the IP reaches
+     * {@link #MAX_FAILED_ATTEMPTS} consecutive failures it is locked out for
+     * {@link #LOCKOUT_DURATION_MS} milliseconds.
+     *
+     * @param clientIP The client IP address
+     */
+    private void recordFailedAttempt(String clientIP) {
+        AtomicInteger attempts = failedAttempts.computeIfAbsent(clientIP, k -> new AtomicInteger(0));
+        int count = attempts.incrementAndGet();
+        logger.warn("Failed API key attempt #{} from IP: {}", count, clientIP);
+
+        if (count >= MAX_FAILED_ATTEMPTS) {
+            long lockoutEnd = System.currentTimeMillis() + LOCKOUT_DURATION_MS;
+            lockoutUntil.put(clientIP, lockoutEnd);
+            logger.error("IP locked out for 15 minutes after {} failed API key attempts: {}", count, clientIP);
+        }
     }
 
     /**

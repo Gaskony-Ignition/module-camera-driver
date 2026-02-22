@@ -35,6 +35,7 @@ dependencies {
     // at test runtime even when the mock value is never dereferenced.
     testCompileOnly(libs.ignition.gateway.api)
     testRuntimeOnly(libs.ignition.gateway.api)
+    testCompileOnly(libs.ignition.driver.api)
     testRuntimeOnly(libs.ignition.driver.api)
 
     // Test dependencies (v2.1.0)

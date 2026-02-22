@@ -66,18 +66,10 @@ public class GenericCameraAddressSpaceBuilder {
 
         // Ignition gateway endpoints for Perspective consumption
         String deviceName = deviceContext.getName();
-        String snapshotEndpoint = String.format(
-            CameraDriverPaths.DATA_BASE + CameraDriverPaths.ROUTE_SNAPSHOT + "?device=%s",
-            urlEncode(deviceName)
-        );
-        String streamEndpoint = String.format(
-            CameraDriverPaths.DATA_BASE + CameraDriverPaths.ROUTE_STREAM + "?device=%s&fps=%d",
-            urlEncode(deviceName),
-            config.streamSettings().defaultFps()
-        );
-
-        addVariableNode(streamInfoFolder, "IgnitionSnapshotUrl", snapshotEndpoint);
-        addVariableNode(streamInfoFolder, "IgnitionStreamUrl", streamEndpoint);
+        addVariableNode(streamInfoFolder, "IgnitionSnapshotUrl",
+            buildSnapshotEndpoint(deviceName));
+        addVariableNode(streamInfoFolder, "IgnitionStreamUrl",
+            buildStreamEndpoint(deviceName, config.streamSettings().defaultFps()));
 
         logger.info("StreamInfo address space created");
     }
@@ -144,19 +136,58 @@ public class GenericCameraAddressSpaceBuilder {
         ));
     }
 
+    /**
+     * Selects the OPC-UA data type NodeId for a given Java value.
+     * Defaults to String for unknown types.
+     *
+     * Package-private to allow direct testing without the OPC-UA server stack.
+     */
+    static org.eclipse.milo.opcua.stack.core.types.builtin.NodeId selectDataType(Object value) {
+        if (value instanceof Boolean) return Identifiers.Boolean;
+        if (value instanceof Integer) return Identifiers.Int32;
+        if (value instanceof Long) return Identifiers.Int64;
+        if (value instanceof Double) return Identifiers.Double;
+        return Identifiers.String;
+    }
+
+    /**
+     * Builds the Ignition snapshot gateway endpoint URL for a generic camera device.
+     *
+     * Package-private to allow direct testing without the OPC-UA server stack.
+     */
+    static String buildSnapshotEndpoint(String deviceName) {
+        return CameraDriverPaths.DATA_BASE + CameraDriverPaths.ROUTE_SNAPSHOT
+            + "?device=" + urlEncode(deviceName);
+    }
+
+    /**
+     * Builds the Ignition stream gateway endpoint URL for a generic camera device.
+     *
+     * Package-private to allow direct testing without the OPC-UA server stack.
+     */
+    static String buildStreamEndpoint(String deviceName, int fps) {
+        return CameraDriverPaths.DATA_BASE + CameraDriverPaths.ROUTE_STREAM
+            + "?device=" + urlEncode(deviceName) + "&fps=" + fps;
+    }
+
+    /**
+     * URL encodes a string for use in URL parameters.
+     *
+     * Package-private to allow direct testing without the OPC-UA server stack.
+     */
+    static String urlEncode(String value) {
+        try {
+            return URLEncoder.encode(value, StandardCharsets.UTF_8.toString());
+        } catch (UnsupportedEncodingException e) {
+            return value;
+        }
+    }
+
     private void addVariableNode(UaFolderNode parent, String name, Object value) {
         try {
-            org.eclipse.milo.opcua.stack.core.types.builtin.NodeId dataType;
-            if (value instanceof Boolean) {
-                dataType = Identifiers.Boolean;
-            } else if (value instanceof Integer) {
-                dataType = Identifiers.Int32;
-            } else if (value instanceof Long) {
-                dataType = Identifiers.Int64;
-            } else if (value instanceof Double) {
-                dataType = Identifiers.Double;
-            } else {
-                dataType = Identifiers.String;
+            org.eclipse.milo.opcua.stack.core.types.builtin.NodeId dataType = selectDataType(value);
+            if (!(value instanceof Boolean) && !(value instanceof Integer)
+                    && !(value instanceof Long) && !(value instanceof Double)) {
                 value = String.valueOf(value);
             }
 
@@ -190,11 +221,4 @@ public class GenericCameraAddressSpaceBuilder {
         }
     }
 
-    private String urlEncode(String value) {
-        try {
-            return URLEncoder.encode(value, StandardCharsets.UTF_8.toString());
-        } catch (UnsupportedEncodingException e) {
-            return value;
-        }
-    }
 }

@@ -1,8 +1,11 @@
 package com.onvif.driver.gateway.auth;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -12,6 +15,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Unit tests for AuthenticationManager.
@@ -22,12 +26,14 @@ import static org.assertj.core.api.Assertions.*;
  * - Key verification (correct/wrong key)
  * - addApiKey / removeApiKey lifecycle
  * - Account lockout stats and clearAllLockouts
+ * - IP-based brute-force lockout via API key failures
  *
  * Note: GatewayContext is a compileOnly Ignition dependency unavailable on the test
  * classpath. AuthenticationManager's constructor only uses GatewayContext to resolve
  * the ApiKeyStore file path (which safely returns null when context is null),
  * so null is passed safely.
  */
+@ExtendWith(MockitoExtension.class)
 class AuthenticationManagerTest {
 
     AuthenticationManager authManager;
@@ -424,5 +430,122 @@ class AuthenticationManagerTest {
         assertThat(manager2.getFailedAttemptStats()).isEmpty();
         // manager1 must see its own populated map
         assertThat(manager1.getFailedAttemptStats()).containsKey("user");
+    }
+
+    // -----------------------------------------------------------------------
+    // API key brute-force / IP lockout tests
+    // -----------------------------------------------------------------------
+
+    /**
+     * Builds a mock HttpServletRequest that supplies an API key and returns the
+     * specified IP from getRemoteAddr(). No proxy headers are present so
+     * getClientIP() falls through to getRemoteAddr().
+     */
+    private HttpServletRequest buildMockRequest(String apiKey, String remoteAddr) {
+        HttpServletRequest req = mock(HttpServletRequest.class);
+        // getClientIP() checks X-Forwarded-For then X-Real-IP then getRemoteAddr().
+        when(req.getHeader("X-Forwarded-For")).thenReturn(null);
+        when(req.getHeader("X-Real-IP")).thenReturn(null);
+        when(req.getRemoteAddr()).thenReturn(remoteAddr);
+        // isApiKeyValid() tries the "apiKey" query param first, then the header.
+        when(req.getParameter("apiKey")).thenReturn(null);
+        when(req.getHeader("X-API-Key")).thenReturn(apiKey);
+        return req;
+    }
+
+    /**
+     * Calls the private isApiKeyValid(HttpServletRequest) method directly via reflection.
+     * This avoids WebUiSession.find() (which requires a real GatewayContext) while still
+     * exercising the full lockout logic wired inside isApiKeyValid.
+     */
+    private boolean invokeIsApiKeyValid(HttpServletRequest req) throws Exception {
+        Method method = AuthenticationManager.class.getDeclaredMethod(
+                "isApiKeyValid", HttpServletRequest.class);
+        method.setAccessible(true);
+        return (boolean) method.invoke(authManager, req);
+    }
+
+    @Test
+    void testApiKeyLockout_AfterMaxFailedAttempts() throws Exception {
+        // Set up a request with an invalid API key coming from a specific IP.
+        String clientIP = "192.168.1.50";
+        HttpServletRequest req = buildMockRequest("bad-key", clientIP);
+
+        // Submit MAX_FAILED_ATTEMPTS (5) invalid API key requests.
+        // Each call goes through isApiKeyValid() → recordFailedAttempt().
+        for (int i = 0; i < 5; i++) {
+            boolean result = invokeIsApiKeyValid(req);
+            assertThat(result).isFalse();
+        }
+
+        // At this point the IP should be locked out.
+        // Add a valid key — the next request should still be rejected due to lockout.
+        String validKey = AuthenticationManager.generateApiKey();
+        authManager.addApiKey(validKey, "legituser");
+
+        HttpServletRequest reqWithValidKey = buildMockRequest(validKey, clientIP);
+
+        boolean result = invokeIsApiKeyValid(reqWithValidKey);
+        assertThat(result)
+                .as("IP should be locked out even with a valid API key after 5 failed attempts")
+                .isFalse();
+
+        // The failed-attempt counter must be present for this IP.
+        assertThat(authManager.getFailedAttemptStats()).containsKey(clientIP);
+    }
+
+    @Test
+    void testApiKeyLockout_ClearsAfterExpiry() throws Exception {
+        String clientIP = "10.0.0.1";
+
+        // Manually place an already-expired lockout entry for this IP.
+        Field lockoutField = AuthenticationManager.class.getDeclaredField("lockoutUntil");
+        lockoutField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<String, Long> lockoutMap = (Map<String, Long>) lockoutField.get(authManager);
+        lockoutMap.put(clientIP, System.currentTimeMillis() - 1L); // expired 1 ms ago
+
+        // Add a valid API key.
+        String validKey = AuthenticationManager.generateApiKey();
+        authManager.addApiKey(validKey, "user1");
+
+        // A request with a valid key from the IP whose lockout has expired must succeed.
+        HttpServletRequest req = buildMockRequest(validKey, clientIP);
+
+        boolean result = invokeIsApiKeyValid(req);
+        assertThat(result)
+                .as("Expired lockout must not block a valid API key")
+                .isTrue();
+
+        // After a successful auth the lockout entry must be cleaned up.
+        assertThat(lockoutMap).doesNotContainKey(clientIP);
+    }
+
+    @Test
+    void testApiKeyLockout_SuccessResetsCounter() throws Exception {
+        String clientIP = "172.16.0.5";
+
+        // Manually seed some (non-lockout-threshold) failed attempts for this IP.
+        Field failedField = AuthenticationManager.class.getDeclaredField("failedAttempts");
+        failedField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<String, AtomicInteger> failedMap = (Map<String, AtomicInteger>) failedField.get(authManager);
+        failedMap.put(clientIP, new AtomicInteger(3));
+
+        // Add a valid API key and authenticate successfully.
+        String validKey = AuthenticationManager.generateApiKey();
+        authManager.addApiKey(validKey, "user1");
+
+        HttpServletRequest req = buildMockRequest(validKey, clientIP);
+
+        boolean result = invokeIsApiKeyValid(req);
+        assertThat(result)
+                .as("Valid API key must succeed when IP has partial failures but is not locked out")
+                .isTrue();
+
+        // Successful authentication must clear the IP's failure counter.
+        assertThat(failedMap)
+                .as("failedAttempts must be cleared for the IP after a successful API key auth")
+                .doesNotContainKey(clientIP);
     }
 }

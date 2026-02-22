@@ -71,13 +71,10 @@ public class GenericCameraDevice extends ManagedAddressSpaceWithLifecycle implem
     private void onStartup() {
         logger.info("=== Generic Camera Device Startup: {} ===", context.getName());
 
-        // Register in device registry
-        GenericCameraExtensionPoint.registerDevice(context.getName(), this);
-
         if (!config.general().enabled()) {
             deviceStatus = DeviceStatus.DISABLED.displayName();
-            logger.info("Device is disabled: {}", context.getName());
-            return;
+            logger.info("Device is disabled, skipping registration: {}", context.getName());
+            return;  // do NOT register disabled devices
         }
 
         try {
@@ -147,6 +144,11 @@ public class GenericCameraDevice extends ManagedAddressSpaceWithLifecycle implem
             deviceStatus = "Error: " + e.getMessage();
             logger.error("Failed to start Generic Camera device: {}", context.getName(), e);
         }
+
+        // Register after connection attempt (connected, connected-url-only, or error state).
+        // Disabled devices returned early above and are never registered.
+        GenericCameraExtensionPoint.registerDevice(context.getName(), this);
+        logger.info("Device registered in registry: {}", context.getName());
     }
 
     private void onShutdown() {

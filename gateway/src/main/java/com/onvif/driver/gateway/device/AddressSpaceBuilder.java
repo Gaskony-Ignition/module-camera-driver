@@ -213,6 +213,62 @@ public class AddressSpaceBuilder {
     }
 
     /**
+     * Selects the OPC-UA data type NodeId for a given Java value.
+     * Defaults to String for unknown types.
+     *
+     * Package-private to allow direct testing without the OPC-UA server stack.
+     */
+    static org.eclipse.milo.opcua.stack.core.types.builtin.NodeId selectDataType(Object value) {
+        if (value instanceof String) return Identifiers.String;
+        if (value instanceof Integer) return Identifiers.Int32;
+        if (value instanceof Long) return Identifiers.Int64;
+        if (value instanceof Double) return Identifiers.Double;
+        if (value instanceof Boolean) return Identifiers.Boolean;
+        return Identifiers.String;
+    }
+
+    /**
+     * Builds the Ignition snapshot gateway URL for an ONVIF profile.
+     *
+     * Package-private to allow direct testing without the OPC-UA server stack.
+     */
+    static String buildSnapshotUrl(String deviceName, String profileToken) {
+        return String.format(
+            "/main/data/camera-driver/snapshot?device=%s&profile=%s",
+            urlEncode(deviceName), urlEncode(profileToken)
+        );
+    }
+
+    /**
+     * Builds the Ignition MJPEG stream gateway URL for an ONVIF profile.
+     *
+     * Package-private to allow direct testing without the OPC-UA server stack.
+     */
+    static String buildStreamUrl(String deviceName, String profileToken, int fps) {
+        return String.format(
+            "/main/data/camera-driver/stream?device=%s&profile=%s&fps=%d",
+            urlEncode(deviceName), urlEncode(profileToken), fps
+        );
+    }
+
+    /**
+     * URL encodes a string for use in URL parameters.
+     *
+     * Package-private to allow direct testing without the OPC-UA server stack.
+     *
+     * @param value String to encode
+     * @return URL-encoded string
+     */
+    static String urlEncode(String value) {
+        try {
+            return URLEncoder.encode(value, StandardCharsets.UTF_8.toString());
+        } catch (UnsupportedEncodingException e) {
+            logger.warn("Failed to URL encode value: {}", value);
+            return value;
+        }
+    }
+
+    /**
      * Helper method to add a variable node to a folder.
      *
      * @param parent Parent folder node
@@ -222,19 +278,10 @@ public class AddressSpaceBuilder {
     private void addVariableNode(UaFolderNode parent, String name, Object value) {
         try {
             // Determine data type
-            org.eclipse.milo.opcua.stack.core.types.builtin.NodeId dataType;
-            if (value instanceof String) {
-                dataType = Identifiers.String;
-            } else if (value instanceof Integer) {
-                dataType = Identifiers.Int32;
-            } else if (value instanceof Long) {
-                dataType = Identifiers.Int64;
-            } else if (value instanceof Double) {
-                dataType = Identifiers.Double;
-            } else if (value instanceof Boolean) {
-                dataType = Identifiers.Boolean;
-            } else {
-                dataType = Identifiers.String;
+            org.eclipse.milo.opcua.stack.core.types.builtin.NodeId dataType = selectDataType(value);
+            if (!(value instanceof String) && !(value instanceof Integer)
+                    && !(value instanceof Long) && !(value instanceof Double)
+                    && !(value instanceof Boolean)) {
                 value = String.valueOf(value);
             }
 
@@ -348,18 +395,12 @@ public class AddressSpaceBuilder {
             String profileToken = profile.getToken();
 
             // Snapshot route URL (GET /main/data/camera-driver/snapshot)
-            String snapshotUrl = String.format(
-                "/main/data/camera-driver/snapshot?device=%s&profile=%s",
-                urlEncode(deviceName), urlEncode(profileToken)
-            );
-            addVariableNode(profileFolder, "IgnitionSnapshotUrl", snapshotUrl);
+            addVariableNode(profileFolder, "IgnitionSnapshotUrl",
+                buildSnapshotUrl(deviceName, profileToken));
 
             // MJPEG stream route URL (GET /main/data/camera-driver/stream)
-            String streamUrl = String.format(
-                "/main/data/camera-driver/stream?device=%s&profile=%s&fps=10",
-                urlEncode(deviceName), urlEncode(profileToken)
-            );
-            addVariableNode(profileFolder, "IgnitionStreamUrl", streamUrl);
+            addVariableNode(profileFolder, "IgnitionStreamUrl",
+                buildStreamUrl(deviceName, profileToken, 10));
 
             logger.debug("Added Ignition route URLs for profile {}", profileName);
         }
@@ -511,12 +552,4 @@ public class AddressSpaceBuilder {
      * @param value String to encode
      * @return URL-encoded string
      */
-    private String urlEncode(String value) {
-        try {
-            return URLEncoder.encode(value, StandardCharsets.UTF_8.toString());
-        } catch (UnsupportedEncodingException e) {
-            logger.warn("Failed to URL encode value: {}", value);
-            return value;
-        }
-    }
 }
