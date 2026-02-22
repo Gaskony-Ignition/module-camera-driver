@@ -13,6 +13,9 @@ import com.onvif.driver.common.CameraDriverPaths;
 import com.onvif.driver.gateway.device.ONVIFDeviceExtensionPoint;
 import com.onvif.driver.gateway.device.generic.GenericCameraExtensionPoint;
 import com.onvif.driver.gateway.servlet.ONVIFRoutes;
+import com.onvif.driver.gateway.servlet.RateLimiter;
+import com.onvif.driver.gateway.servlet.handlers.SnapshotHandler;
+import com.onvif.driver.gateway.servlet.handlers.StreamHandler;
 import com.onvif.driver.gateway.stream.Go2RtcManager;
 import com.inductiveautomation.perspective.gateway.api.PerspectiveContext;
 import org.slf4j.Logger;
@@ -209,12 +212,19 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
             logger.debug("Perspective cleanup skipped: {}", t.getMessage());
         }
 
+        // Clear rate limit state before shutting down executor (ensures clean reload)
+        RateLimiter.reset();
+
         // Shutdown rate limiting executor to prevent resource leak
         try {
             ONVIFRoutes.shutdown();
         } catch (Exception e) {
             logger.error("Error shutting down ONVIF routes", e);
         }
+
+        // Reset static counters so a hot-reload starts from zero
+        SnapshotHandler.resetCounters();
+        StreamHandler.resetCounters();
 
         // Stop go2rtc process
         if (go2RtcManager != null) {

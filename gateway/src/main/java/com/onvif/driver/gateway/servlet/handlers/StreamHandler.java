@@ -47,6 +47,11 @@ public class StreamHandler extends BaseHandler {
     public static int getActiveStreams() { return activeStreams.get(); }
     public static int getMaxConcurrentStreams() { return MAX_CONCURRENT_STREAMS; }
 
+    /** Resets the active counter to 0. Call during module shutdown to ensure clean state on reload. */
+    public static void resetCounters() {
+        activeStreams.set(0);
+    }
+
     /**
      * Handles MJPEG stream requests.
      * URL: http://gateway:8088/data/camera-driver/stream?device=DeviceName&profile=ProfileToken&fps=10
@@ -311,12 +316,18 @@ public class StreamHandler extends BaseHandler {
                 }
 
                 // Forward Content-Type from upstream (preserves codec info for MSE playback)
-                if (upstream.getEntity().getContentType() != null) {
-                    String upstreamContentType = upstream.getEntity().getContentType().getValue();
+                org.apache.http.HttpEntity entity = upstream.getEntity();
+                if (entity != null && entity.getContentType() != null) {
+                    String upstreamContentType = entity.getContentType().getValue();
                     if (!response.isCommitted()) {
                         response.setContentType(upstreamContentType);
                         logger.debug("Forwarding upstream Content-Type: {}", upstreamContentType);
                     }
+                }
+
+                if (entity == null) {
+                    logger.warn("No response entity from upstream for device: {}", deviceName);
+                    return false;
                 }
 
                 OutputStream output = response.getOutputStream();
@@ -324,7 +335,7 @@ public class StreamHandler extends BaseHandler {
                 int bytesRead;
                 long totalBytes = 0;
 
-                try (var inputStream = upstream.getEntity().getContent()) {
+                try (var inputStream = entity.getContent()) {
                     while ((bytesRead = inputStream.read(buffer)) != -1) {
                         output.write(buffer, 0, bytesRead);
                         output.flush();

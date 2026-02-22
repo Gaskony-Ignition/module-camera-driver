@@ -200,6 +200,8 @@ export class CameraGridMeta implements ComponentMeta {
         return CAMERA_GRID_TYPE;
     }
 
+    // ComponentMeta interface (Ignition SDK stub) requires ComponentType<any> — cannot narrow further
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getViewComponent(): React.ComponentType<any> {
         return CameraGridComponent;
     }
@@ -208,12 +210,12 @@ export class CameraGridMeta implements ComponentMeta {
         return { width: 800, height: 600 };
     }
 
-    getPropsReducer(tree: PropertyTree): any {
+    getPropsReducer(tree: PropertyTree): CameraGridProps['props'] {
         return {
             columns: tree.readNumber('columns', 2),
             rows: tree.readNumber('rows', 2),
-            cameras: tree.readArray('cameras', []),
-            mode: tree.readString('mode', 'auto'),
+            cameras: tree.readArray('cameras', []) as string[],
+            mode: tree.readString('mode', 'auto') as StreamMode,
             snapshotInterval: tree.readNumber('snapshotInterval', 5000),
             showOverlays: tree.readBoolean('showOverlays', true),
             gap: tree.readNumber('gap', 2),

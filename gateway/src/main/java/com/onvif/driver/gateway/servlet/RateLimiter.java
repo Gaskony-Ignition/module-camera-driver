@@ -53,6 +53,13 @@ public final class RateLimiter {
             return false;
         }
 
+        // Safety valve: if map exceeds threshold, clear stale entries to prevent unbounded growth.
+        // Each entry represents at most 1 minute of rate-limit state, so clearing is safe.
+        if (requestsPerIP.size() > 10_000) {
+            logger.warn("Rate limiter IP map exceeded 10,000 entries — clearing stale state");
+            requestsPerIP.clear();
+        }
+
         rateLimitExecutor.schedule(() -> {
             ipRequests.decrementAndGet();
             if (ipRequests.get() == 0) {
@@ -81,6 +88,13 @@ public final class RateLimiter {
     /** Returns number of IPs currently tracked (for diagnostics). */
     public static int getConnectedClientCount() {
         return requestsPerIP.size();
+    }
+
+    /**
+     * Clears all rate limit state. Call during module shutdown.
+     */
+    public static void reset() {
+        requestsPerIP.clear();
     }
 
     /**

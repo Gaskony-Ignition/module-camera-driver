@@ -2,6 +2,7 @@ package com.onvif.driver.gateway.servlet.handlers;
 
 import com.inductiveautomation.ignition.gateway.dataroutes.RequestContext;
 import com.inductiveautomation.ignition.gateway.model.GatewayContext;
+import com.onvif.driver.common.DeviceStatus;
 import com.onvif.driver.gateway.auth.AuthenticationManager;
 import com.onvif.driver.gateway.device.ONVIFDevice;
 import com.onvif.driver.gateway.device.ONVIFDeviceExtensionPoint;
@@ -52,6 +53,12 @@ public class DeviceApiHandler extends BaseHandler {
             Map<String, ONVIFDevice> allDevices = ONVIFDeviceExtensionPoint.getAllDevices();
             for (Map.Entry<String, ONVIFDevice> entry : allDevices.entrySet()) {
                 ONVIFDevice device = entry.getValue();
+
+                // Skip disabled devices — they have no active configuration
+                if (DeviceStatus.DISABLED.displayName().equalsIgnoreCase(device.getStatus())) {
+                    continue;
+                }
+
                 JSONObject deviceJson = new JSONObject();
                 deviceJson.put("name", entry.getKey());
                 deviceJson.put("type", "onvif");
@@ -81,6 +88,7 @@ public class DeviceApiHandler extends BaseHandler {
                     deviceJson.put("go2rtcRegistered", device.isGo2RtcStreamRegistered());
                 } catch (Exception e) {
                     logger.debug("Could not get additional info for device {}: {}", entry.getKey(), e.getMessage());
+                    try { deviceJson.put("infoError", true); } catch (Exception ignored) {}
                 }
 
                 devices.put(deviceJson);
@@ -91,6 +99,12 @@ public class DeviceApiHandler extends BaseHandler {
                 Map<String, GenericCameraDevice> genericDevices = GenericCameraExtensionPoint.getAllDevices();
                 for (Map.Entry<String, GenericCameraDevice> entry : genericDevices.entrySet()) {
                     GenericCameraDevice device = entry.getValue();
+
+                    // Skip disabled devices — they have no active configuration
+                    if (DeviceStatus.DISABLED.displayName().equalsIgnoreCase(device.getStatus())) {
+                        continue;
+                    }
+
                     JSONObject deviceJson = new JSONObject();
                     deviceJson.put("name", entry.getKey());
                     deviceJson.put("type", "generic");

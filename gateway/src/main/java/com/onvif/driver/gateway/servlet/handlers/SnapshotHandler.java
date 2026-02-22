@@ -39,6 +39,11 @@ public class SnapshotHandler extends BaseHandler {
     public static int getActiveSnapshots() { return activeSnapshots.get(); }
     public static int getMaxConcurrentSnapshots() { return MAX_CONCURRENT_SNAPSHOTS; }
 
+    /** Resets the active counter to 0. Call during module shutdown to ensure clean state on reload. */
+    public static void resetCounters() {
+        activeSnapshots.set(0);
+    }
+
     /**
      * Handles snapshot requests.
      * URL: http://gateway:8088/data/camera-driver/snapshot?device=DeviceName&profile=ProfileToken

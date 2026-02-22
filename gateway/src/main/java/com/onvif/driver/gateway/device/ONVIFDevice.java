@@ -99,11 +99,11 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
     private void onStartup() {
         logger.info("=== ONVIF Device Startup: {} ===", context.getName());
 
-        // Register this device in the extension point registry
+        connectWithRetry();
+
+        // Register after connection attempt so the device is in a known state when handlers see it
         ONVIFDeviceExtensionPoint.registerDevice(context.getName(), this);
         logger.info("Device registered in registry: {}", context.getName());
-
-        connectWithRetry();
     }
 
     /**

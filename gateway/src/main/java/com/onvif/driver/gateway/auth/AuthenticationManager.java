@@ -11,7 +11,6 @@ import jakarta.servlet.http.HttpSession;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
-import java.util.Arrays;
 import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
@@ -21,15 +20,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Manages authentication for Camera Driver HTTP endpoints.
  *
- * Supports three authentication methods:
+ * Supports two authentication methods:
  * 1. Ignition Session Authentication (primary)
- * 2. Basic Authentication (validates against Ignition gateway users)
- * 3. API Key Authentication (validates against configured API keys)
+ * 2. API Key Authentication (validates against configured API keys)
  *
  * Security Features:
  * - SHA-256 hashed API keys with salt
- * - Failed authentication attempt tracking
- * - Account lockout after repeated failures
  * - Secure credential handling
  *
  * @since 2.2.0
@@ -41,11 +37,7 @@ public class AuthenticationManager {
     /** Holds a salted SHA-256 hash of an API key along with the owning username. */
     private record StoredApiKey(String username, String saltHex, String hashHex) {}
 
-    // Account lockout configuration
-    private static final int MAX_FAILED_ATTEMPTS = 5;
-    private static final long LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
-
-    // Track failed authentication attempts per username
+    // Retained for external monitoring/admin use (e.g. future brute-force protection on API keys).
     private final Map<String, AtomicInteger> failedAttempts = new ConcurrentHashMap<>();
     private final Map<String, Long> lockoutUntil = new ConcurrentHashMap<>();
 
@@ -103,107 +95,12 @@ public class AuthenticationManager {
             return true;
         }
 
-        // Method 2: Check for Basic Authentication
-        if (isBasicAuthValid(request)) {
-            return true;
-        }
-
-        // Method 3: Check for API key
+        // Method 2: Check for API key
         if (isApiKeyValid(request)) {
             return true;
         }
 
-        logger.debug("Request not authenticated - no valid session, Basic auth, or API key");
-        return false;
-    }
-
-    /**
-     * Validates Basic Authentication credentials.
-     *
-     * IMPLEMENTATION NOTE: This validates against Ignition's gateway users.
-     * For full user source integration, additional API research may be needed.
-     *
-     * @param request The HTTP request
-     * @return true if Basic Auth is valid, false otherwise
-     */
-    private boolean isBasicAuthValid(HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Basic ")) {
-            return false;
-        }
-
-        try {
-            // Decode Base64 credentials
-            String base64Credentials = authHeader.substring("Basic ".length());
-            byte[] decoded = Base64.getDecoder().decode(base64Credentials);
-            String credentials = new String(decoded, StandardCharsets.UTF_8);
-
-            // Split username:password
-            String[] parts = credentials.split(":", 2);
-            if (parts.length != 2) {
-                logger.warn("Invalid Basic Auth format");
-                return false;
-            }
-
-            String username = parts[0];
-            String password = parts[1];
-
-            // Check if account is locked out
-            if (isAccountLockedOut(username)) {
-                logger.warn("Authentication denied - account locked out: {}", username);
-                return false;
-            }
-
-            // Validate credentials against Ignition gateway
-            boolean isValid = validateGatewayCredentials(username, password);
-
-            if (isValid) {
-                // Reset failed attempts on successful login
-                failedAttempts.remove(username);
-                lockoutUntil.remove(username);
-                logger.info("Basic Auth successful for user: {}", username);
-                return true;
-            } else {
-                // Track failed attempt
-                recordFailedAttempt(username);
-                logger.warn("Basic Auth failed for user: {}", username);
-                return false;
-            }
-
-        } catch (Exception e) {
-            logger.error("Error validating Basic Auth: {}", e.getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * Validates credentials against Ignition's gateway authentication system.
-     *
-     * NOT IMPLEMENTED: Basic Auth credential validation is not integrated with
-     * Ignition's UserSourceManager. Use Ignition session authentication or API key
-     * authentication instead.
-     *
-     * To enable Basic Auth, integrate with Ignition's UserSourceManager:
-     * 1. Validate against gatewayContext.getUserSourceManager()
-     * 2. Support multiple authentication realms (LDAP, Active Directory, etc.)
-     * 3. Handle configured authentication backends
-     *
-     * @param username The username
-     * @param password The password
-     * @return false (not implemented - fail-closed for security)
-     */
-    private boolean validateGatewayCredentials(String username, String password) {
-        if (username == null || username.trim().isEmpty()) {
-            return false;
-        }
-
-        if (password == null || password.isEmpty()) {
-            return false;
-        }
-
-        logger.warn("Basic Auth credential validation is not fully implemented. " +
-            "Please use Ignition session authentication or API key authentication. " +
-            "To enable Basic Auth, integrate with Ignition's UserSourceManager.");
+        logger.debug("Request not authenticated - no valid session or API key");
         return false;
     }
 
@@ -235,49 +132,6 @@ public class AuthenticationManager {
 
         logger.warn("Invalid API key provided");
         return false;
-    }
-
-    /**
-     * Checks if an account is currently locked out due to failed attempts.
-     *
-     * @param username The username to check
-     * @return true if locked out, false otherwise
-     */
-    private boolean isAccountLockedOut(String username) {
-        Long lockoutEnd = lockoutUntil.get(username);
-        if (lockoutEnd == null) {
-            return false;
-        }
-
-        if (System.currentTimeMillis() < lockoutEnd) {
-            return true;
-        }
-
-        // Lockout expired, clean up
-        lockoutUntil.remove(username);
-        failedAttempts.remove(username);
-        return false;
-    }
-
-    /**
-     * Records a failed authentication attempt and applies lockout if threshold exceeded.
-     *
-     * @param username The username that failed authentication
-     */
-    private void recordFailedAttempt(String username) {
-        AtomicInteger attempts = failedAttempts.computeIfAbsent(username, k -> new AtomicInteger(0));
-        int count = attempts.incrementAndGet();
-
-        logger.warn("Failed authentication attempt #{} for user: {}", count, username);
-
-        if (count >= MAX_FAILED_ATTEMPTS) {
-            long lockoutEnd = System.currentTimeMillis() + LOCKOUT_DURATION_MS;
-            lockoutUntil.put(username, lockoutEnd);
-            logger.error("Account locked out for 15 minutes due to {} failed attempts: {}", count, username);
-
-            // Audit log for security monitoring
-            logger.error("SECURITY ALERT: Multiple failed authentication attempts for user: {}", username);
-        }
     }
 
     /**

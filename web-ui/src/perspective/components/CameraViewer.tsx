@@ -80,10 +80,11 @@ export function useCameraStream(
                     if (oldSrc.startsWith('blob:')) URL.revokeObjectURL(oldSrc);
                     setStatus('streaming');
                 }
-            } catch (e: any) {
-                if (e.name !== 'AbortError') {
+            } catch (e: unknown) {
+                const err = e as Error;
+                if (err.name !== 'AbortError') {
                     setStatus('error');
-                    setError(e.message || 'Snapshot failed');
+                    setError(err.message || 'Snapshot failed');
                 }
             }
         };
@@ -127,11 +128,12 @@ export function useCameraStream(
                 API.stream(deviceName),
                 { credentials: 'include', signal: ac.signal }
             );
-        } catch (e: any) {
-            if (e.name !== 'AbortError') {
+        } catch (e: unknown) {
+            const err = e as Error;
+            if (err.name !== 'AbortError') {
                 if (fallbackToSnapshot) { startSnapshot(); return; }
                 setStatus('error');
-                setError('Failed to connect: ' + e.message);
+                setError('Failed to connect: ' + err.message);
             }
             return;
         }
@@ -186,8 +188,9 @@ export function useCameraStream(
                 try {
                     sourceBuffer.appendBuffer(value);
                     await new Promise<void>(r => sourceBuffer.addEventListener('updateend', () => r(), { once: true }));
-                } catch (e: any) {
-                    if (e.name === 'QuotaExceededError') {
+                } catch (e: unknown) {
+                    const err = e as Error;
+                    if (err.name === 'QuotaExceededError') {
                         if (sourceBuffer.buffered.length > 0 && !sourceBuffer.updating) {
                             const end = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
                             sourceBuffer.remove(0, Math.max(0, end - 5));
@@ -216,11 +219,12 @@ export function useCameraStream(
             if (fallbackToSnapshot) { startSnapshot(); return; }
             setStatus('error');
             setError('Stream ended');
-        } catch (e: any) {
-            if (e.name !== 'AbortError') {
+        } catch (e: unknown) {
+            const err = e as Error;
+            if (err.name !== 'AbortError') {
                 if (fallbackToSnapshot) { startSnapshot(); return; }
                 setStatus('error');
-                setError('Stream lost: ' + e.message);
+                setError('Stream lost: ' + err.message);
             }
         }
     }, [deviceName, videoRef, startSnapshot]);
@@ -252,17 +256,17 @@ const styles = {
         background: CAMERA_THEME.bg,
         overflow: 'hidden',
     },
-    video: (objectFit: string) => ({
+    video: (objectFit: React.CSSProperties['objectFit']) => ({
         width: '100%',
         height: '100%',
-        objectFit: objectFit as any,
+        objectFit,
         background: CAMERA_THEME.bg,
         display: 'block',
     }),
-    img: (objectFit: string) => ({
+    img: (objectFit: React.CSSProperties['objectFit']) => ({
         width: '100%',
         height: '100%',
-        objectFit: objectFit as any,
+        objectFit,
         background: CAMERA_THEME.bg,
         display: 'block',
     }),
@@ -373,6 +377,8 @@ export class CameraViewerMeta implements ComponentMeta {
         return CAMERA_VIEWER_TYPE;
     }
 
+    // ComponentMeta interface (Ignition SDK stub) requires ComponentType<any> — cannot narrow further
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getViewComponent(): React.ComponentType<any> {
         return CameraViewerComponent;
     }
@@ -381,13 +387,13 @@ export class CameraViewerMeta implements ComponentMeta {
         return { width: 480, height: 360 };
     }
 
-    getPropsReducer(tree: PropertyTree): any {
+    getPropsReducer(tree: PropertyTree): CameraViewerProps['props'] {
         return {
             deviceName: tree.readString('deviceName', ''),
-            mode: tree.readString('mode', 'auto'),
+            mode: tree.readString('mode', 'auto') as StreamMode,
             snapshotInterval: tree.readNumber('snapshotInterval', 5000),
             showOverlay: tree.readBoolean('showOverlay', true),
-            objectFit: tree.readString('objectFit', 'contain'),
+            objectFit: tree.readString('objectFit', 'contain') as 'contain' | 'cover' | 'fill',
         };
     }
 }
