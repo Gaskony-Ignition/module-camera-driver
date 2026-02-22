@@ -110,15 +110,23 @@ public class AuthenticationManager {
             logger.trace("HTTP session check failed: {}", t.getMessage());
         }
 
-        // Method 1c: Check for active Perspective session
-        // The Designer's embedded JCEF browser may not carry standard HTTP session cookies.
-        // If the Perspective module is loaded and has active sessions, the user authenticated
-        // through the Designer or Perspective runtime login. Allow requests in that context.
+        // Method 1c: Check for Perspective/Designer sessions from localhost.
+        // The Designer's embedded JCEF browser connects from 127.0.0.1/::1 to the gateway.
+        // It doesn't carry standard HTTP session cookies, but if the request originates from
+        // loopback AND there are active Perspective sessions, it's almost certainly a Designer
+        // component request. This is more secure than accepting all requests when any session exists.
         try {
-            PerspectiveContext pCtx = PerspectiveContext.get(gatewayContext);
-            if (pCtx != null && !pCtx.getSessionMonitor().getSessionInfos().isEmpty()) {
-                logger.debug("Request authenticated via active Perspective session context");
-                return true;
+            String remoteAddr = request.getRemoteAddr();
+            boolean isLocal = "127.0.0.1".equals(remoteAddr)
+                           || "0:0:0:0:0:0:0:1".equals(remoteAddr)
+                           || "::1".equals(remoteAddr)
+                           || remoteAddr.equals(request.getLocalAddr());
+            if (isLocal) {
+                PerspectiveContext pCtx = PerspectiveContext.get(gatewayContext);
+                if (pCtx != null && !pCtx.getSessionMonitor().getSessionInfos().isEmpty()) {
+                    logger.debug("Request authenticated via local origin + active Perspective session");
+                    return true;
+                }
             }
         } catch (Throwable t) {
             // Perspective module not loaded — skip this auth method

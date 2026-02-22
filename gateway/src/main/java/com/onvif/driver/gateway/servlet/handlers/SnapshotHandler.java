@@ -55,7 +55,9 @@ public class SnapshotHandler extends BaseHandler {
 
         // v2.1.0: Authentication check
         if (!isAuthenticated(requestContext)) {
-            sendAuthenticationRequired(response);
+            if (!response.isCommitted()) {
+                sendAuthenticationRequired(response);
+            }
             return null;
         }
 
@@ -129,6 +131,11 @@ public class SnapshotHandler extends BaseHandler {
                 String deviceStatus = onvifDevice.getStatus();
                 if (!DeviceStatus.isActive(deviceStatus)) {
                     response.sendError(503, "Device is not connected: " + deviceStatus);
+                    return null;
+                }
+
+                if (onvifDevice.getClient() == null) {
+                    response.sendError(503, "ONVIF client not initialized for device");
                     return null;
                 }
 

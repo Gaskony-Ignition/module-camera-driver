@@ -63,7 +63,9 @@ public class StreamHandler extends BaseHandler {
 
         // v2.1.0: Authentication check
         if (!isAuthenticated(requestContext)) {
-            sendAuthenticationRequired(response);
+            if (!response.isCommitted()) {
+                sendAuthenticationRequired(response);
+            }
             return null;
         }
 
@@ -208,6 +210,13 @@ public class StreamHandler extends BaseHandler {
         int errorCount = 0;
 
         logger.info("Starting MJPEG snapshot stream - device: {}, profile: {}, fps: {}", deviceName, profileToken, fps);
+
+        if (device.getClient() == null) {
+            if (!response.isCommitted()) {
+                response.sendError(503, "ONVIF client not initialized for device");
+            }
+            return;
+        }
 
         while (!Thread.currentThread().isInterrupted()) {
             long frameStart = System.currentTimeMillis();
