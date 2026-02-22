@@ -6,23 +6,47 @@
     <title>Camera Connection Browser</title>
     <style>
         /* ================================================================
-           Theme Variables (AI-Terminal palette)
+           Theme Variables (Catppuccin Mocha — exact match with AI Terminal)
            ================================================================ */
         :root {
-            --bg-primary: #0a0e14;
-            --bg-secondary: #14181f;
-            --bg-tertiary: #1a1f28;
-            --bg-hover: #20252e;
-            --text-primary: #e6e8eb;
-            --text-secondary: #b3b8c4;
-            --text-tertiary: #7d8594;
-            --accent-primary: #61afef;
-            --accent-secondary: #98c379;
-            --accent-warning: #e5c07b;
-            --accent-error: #e06c75;
-            --border-default: #20252e;
-            --success: #4ade80;
-            --error: #f87171;
+            /* Catppuccin Mocha — exact match with AI Terminal */
+            --bg-primary:   #11111b;
+            --bg-secondary: #181825;
+            --bg-tertiary:  #1e1e2e;
+            --bg-hover:     #313244;
+            --bg-active:    #45475a;
+
+            --text-primary:   #cdd6f4;
+            --text-secondary: #bac2de;
+            --text-tertiary:  #a6adc8;
+            --text-muted:     #6c7086;
+
+            --accent-primary:   #89b4fa;
+            --accent-secondary: #a6e3a1;
+            --accent-warning:   #f9e2af;
+            --accent-error:     #f38ba8;
+            --accent-info:      #89dceb;
+            --accent-peach:     #fab387;
+
+            --border-default: #313244;
+            --border-light:   #45475a;
+            --border-focus:   #89b4fa;
+            --border-accent:  rgba(137, 180, 250, 0.12);
+
+            --accent-primary-bg:   rgba(137, 180, 250, 0.1);
+            --accent-secondary-bg: rgba(166, 227, 161, 0.1);
+            --accent-error-bg:     rgba(243, 139, 168, 0.1);
+            --accent-warning-bg:   rgba(249, 226, 175, 0.1);
+
+            --header-gradient: linear-gradient(135deg, rgba(137, 180, 250, 0.06) 0%, rgba(137, 180, 250, 0.02) 40%, transparent 70%);
+
+            --success: #a6e3a1;
+            --error:   #f38ba8;
+            --warning: #f9e2af;
+            --info:    #89b4fa;
+
+            --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Ubuntu', 'Cantarell', sans-serif;
+            --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
 
             --sidebar-bg: #181825;
             --sidebar-active: #313244;
@@ -31,13 +55,28 @@
             --sidebar-width: 200px;
             --sidebar-collapsed: 48px;
 
-            --statusbar-bg: #1e1e2e;
+            --statusbar-bg: #11111b;
             --statusbar-text: #a6adc8;
 
             --card-bg: #1e1e2e;
             --card-border: #313244;
 
+            --spacing-xs: 4px;
             --spacing-sm: 8px;
+            --spacing-md: 16px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+
+            --radius-sm: 4px;
+            --radius-md: 6px;
+            --radius-lg: 8px;
+
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+            --shadow-md: 0 4px 6px rgba(0,0,0,0.4);
+            --shadow-hover: 0 4px 12px rgba(0,0,0,0.25);
+
+            --transition-fast:   0.15s ease;
+            --transition-normal: 0.25s ease;
         }
 
         /* ================================================================
@@ -46,7 +85,7 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         html, body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: var(--font-sans);
             font-size: 14px;
             line-height: 1.5;
             height: 100%;
@@ -346,20 +385,35 @@
         .view { display: none; }
         .view.active { display: block; }
 
+        /* ================================================================
+           Floating Page Header Card (AI Terminal pattern)
+           ================================================================ */
         .view-header {
-            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 20px;
+            border-radius: var(--radius-lg);
+            background: var(--header-gradient);
+            border: 1px solid var(--border-accent);
+            margin-bottom: 24px;
         }
-
-        .view-header h2 {
+        .view-header-icon {
+            color: var(--accent-primary);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+        }
+        .view-header-text h2 {
             font-size: 20px;
             font-weight: 600;
             color: var(--text-primary);
+            margin: 0;
         }
-
-        .view-header .view-subtitle {
+        .view-header-text .view-subtitle {
             font-size: 13px;
             color: var(--text-tertiary);
-            margin-top: 2px;
+            margin: 2px 0 0;
         }
 
         /* ================================================================
@@ -499,9 +553,9 @@
             border-radius: 12px;
         }
 
-        .badge-running { background: rgba(74, 222, 128, 0.12); color: var(--success); }
-        .badge-error { background: rgba(248, 113, 113, 0.12); color: var(--error); }
-        .badge-other { background: rgba(229, 192, 123, 0.12); color: var(--accent-warning); }
+        .badge-running { background: var(--accent-secondary-bg); color: var(--success); }
+        .badge-error { background: var(--accent-error-bg); color: var(--error); }
+        .badge-other { background: var(--accent-warning-bg); color: var(--accent-warning); }
 
         .device-card-body { padding: 14px 16px; }
 
@@ -786,14 +840,14 @@
         }
 
         .log-toggle-btn:hover { background: var(--bg-hover); }
-        .log-toggle-btn.active { background: rgba(74,222,128,0.12); color: var(--success); border-color: var(--success); }
+        .log-toggle-btn.active { background: var(--accent-secondary-bg); color: var(--success); border-color: var(--success); }
 
         .logs-paused-badge {
             display: inline-flex;
             align-items: center;
             gap: 4px;
             padding: 3px 10px;
-            background: rgba(229,192,123,0.15);
+            background: var(--accent-warning-bg);
             border-radius: 10px;
             font-size: 11px;
             font-weight: 600;
@@ -997,8 +1051,8 @@
             pointer-events: none;
         }
 
-        .grid-overlay-status.running { background: rgba(74,222,128,0.2); color: var(--success); }
-        .grid-overlay-status.error { background: rgba(248,113,113,0.2); color: var(--error); }
+        .grid-overlay-status.running { background: var(--accent-secondary-bg); color: var(--success); }
+        .grid-overlay-status.error { background: var(--accent-error-bg); color: var(--error); }
         .grid-overlay-status.offline { background: rgba(125,133,148,0.3); color: var(--text-tertiary); }
 
         .grid-overlay-type {
@@ -1156,7 +1210,7 @@
             align-items: center;
             gap: 6px;
             background: var(--accent-primary);
-            color: #0a0e14;
+            color: #11111b;
             padding: 8px 16px;
             border-radius: 6px;
             border: none;
@@ -1172,7 +1226,7 @@
         .btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--card-border); }
         .btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
         .btn-danger { background: transparent; color: var(--error); border: 1px solid var(--error); }
-        .btn-danger:hover { background: rgba(248,113,113,0.1); }
+        .btn-danger:hover { background: var(--accent-error-bg); }
 
         .copy-btn {
             background: var(--bg-hover);
@@ -1190,7 +1244,7 @@
             align-items: center;
             gap: 6px;
             padding: 3px 8px;
-            background: rgba(74, 222, 128, 0.12);
+            background: var(--accent-secondary-bg);
             border-radius: 10px;
             font-size: 11px;
             font-weight: 600;
@@ -1231,7 +1285,7 @@
         }
 
         .error-msg {
-            background: rgba(248,113,113,0.1);
+            background: var(--accent-error-bg);
             border: 1px solid var(--error);
             border-radius: 6px;
             padding: 14px 16px;
@@ -1329,18 +1383,6 @@
                         <span class="nav-label">Diagnostics</span>
                         <span class="nav-tooltip">Diagnostics</span>
                     </div>
-                    <div class="nav-item" data-view="logs" onclick="showView('logs')">
-                        <div class="nav-icon">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                <polyline points="14 2 14 8 20 8"/>
-                                <line x1="16" y1="13" x2="8" y2="13"/>
-                                <line x1="16" y1="17" x2="8" y2="17"/>
-                            </svg>
-                        </div>
-                        <span class="nav-label">Logs</span>
-                        <span class="nav-tooltip">Logs</span>
-                    </div>
                 </nav>
 
                 <div class="sidebar-footer">
@@ -1370,8 +1412,13 @@
                     <!-- Dashboard View -->
                     <div class="view active" id="view-dashboard">
                         <div class="view-header">
-                            <h2>Dashboard</h2>
-                            <div class="view-subtitle">Camera Driver module overview</div>
+                            <div class="view-header-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                            </div>
+                            <div class="view-header-text">
+                                <h2>Dashboard</h2>
+                                <div class="view-subtitle">Camera Driver module overview</div>
+                            </div>
                         </div>
                         <div class="stat-cards-grid" id="dashboardCards">
                             <div class="stat-card skeleton"><div class="stat-card-label">Total Devices</div><div class="stat-card-value">--</div><div class="stat-card-sub">loading...</div></div>
@@ -1398,8 +1445,13 @@
                     <!-- Cameras View -->
                     <div class="view" id="view-cameras">
                         <div class="view-header">
-                            <h2>Cameras</h2>
-                            <div class="view-subtitle">Browse and stream connected cameras</div>
+                            <div class="view-header-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                            </div>
+                            <div class="view-header-text">
+                                <h2>Cameras</h2>
+                                <div class="view-subtitle">Browse and stream connected cameras</div>
+                            </div>
                         </div>
                         <div class="cameras-toolbar">
                             <select id="deviceSelect" class="device-dropdown" aria-label="Select device">
@@ -1418,26 +1470,35 @@
                     <!-- Grid View (Live View) -->
                     <div class="view" id="view-grid">
                         <div class="view-header">
-                            <h2>Live View</h2>
-                            <div class="view-subtitle">Multi-camera grid display</div>
+                            <div class="view-header-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                            </div>
+                            <div class="view-header-text">
+                                <h2>Live View</h2>
+                                <div class="view-subtitle">Multi-camera grid display</div>
+                            </div>
                         </div>
-                        <div class="grid-toolbar">
-                            <select id="gridSizeSelect" class="grid-select" onchange="changeGridSize(this.value)" title="Grid size">
-                                <option value="1x1">1x1</option>
-                                <option value="2x2" selected>2x2</option>
-                                <option value="3x3">3x3</option>
-                                <option value="4x4">4x4</option>
-                            </select>
-                            <select id="gridGroupSelect" class="grid-select" onchange="switchGridGroup(this.value)" title="Camera group">
-                                <option value="__default__">All Cameras</option>
-                            </select>
-                            <button class="btn btn-sm btn-ghost" onclick="streamAllGrid()">Stream All</button>
-                            <button class="btn btn-sm btn-ghost" onclick="stopAllGrid()">Stop All</button>
-                            <button class="btn btn-sm btn-ghost" onclick="snapshotAllGrid()">Snapshot All</button>
-                            <div style="flex:1"></div>
-                            <button class="btn btn-sm btn-ghost" onclick="manageGridGroups()">Manage Groups</button>
+                        <div style="background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-lg);padding:16px;margin-bottom:16px;">
+                            <div class="grid-toolbar">
+                                <select id="gridSizeSelect" class="grid-select" onchange="changeGridSize(this.value)" title="Grid size">
+                                    <option value="1x1">1x1</option>
+                                    <option value="2x2" selected>2x2</option>
+                                    <option value="3x3">3x3</option>
+                                    <option value="4x4">4x4</option>
+                                </select>
+                                <select id="gridGroupSelect" class="grid-select" onchange="switchGridGroup(this.value)" title="Camera group">
+                                    <option value="__default__">All Cameras</option>
+                                </select>
+                                <button class="btn btn-sm btn-ghost" onclick="streamAllGrid()">Stream All</button>
+                                <button class="btn btn-sm btn-ghost" onclick="stopAllGrid()">Stop All</button>
+                                <button class="btn btn-sm btn-ghost" onclick="snapshotAllGrid()">Snapshot All</button>
+                                <div style="flex:1"></div>
+                                <button class="btn btn-sm btn-ghost" onclick="manageGridGroups()">Manage Groups</button>
+                            </div>
                         </div>
-                        <div id="cameraGrid" class="camera-grid grid-2x2"></div>
+                        <div style="background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-lg);padding:16px;margin-bottom:16px;">
+                            <div id="cameraGrid" class="camera-grid grid-2x2"></div>
+                        </div>
                         <div class="grid-event-log" id="gridEventLog">
                             <div class="grid-event-log-title">Events</div>
                             <div id="gridEvents"><span style="color:var(--text-tertiary);font-size:11px;">No events yet</span></div>
@@ -1447,8 +1508,13 @@
                     <!-- Diagnostics View -->
                     <div class="view" id="view-diagnostics">
                         <div class="view-header">
-                            <h2>Diagnostics</h2>
-                            <div class="view-subtitle">Resource usage and system health</div>
+                            <div class="view-header-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                            </div>
+                            <div class="view-header-text">
+                                <h2>Diagnostics</h2>
+                                <div class="view-subtitle">Resource usage and system health</div>
+                            </div>
                         </div>
                         <div class="diag-grid" id="diagContent">
                             <div class="diag-section">
@@ -1481,13 +1547,16 @@
                             <span class="live-dot" style="width:6px;height:6px;"></span>
                             Auto-refreshing every 5 seconds while this view is active
                         </div>
-                    </div>
 
-                    <!-- Logs View (server-side gateway logs) -->
-                    <div class="view" id="view-logs">
-                        <div class="view-header">
-                            <h2>Logs</h2>
-                            <div class="view-subtitle">Gateway log entries</div>
+                        <!-- Gateway Logs (moved from Logs page) -->
+                        <div class="view-header" style="margin-top: 24px;">
+                            <div class="view-header-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                            </div>
+                            <div class="view-header-text">
+                                <h2>Gateway Logs</h2>
+                                <div class="view-subtitle">Live gateway log entries</div>
+                            </div>
                         </div>
                         <div class="logs-toolbar">
                             <button class="log-filter-btn active" data-filter="all" onclick="filterLogs('all', this)">All</button>
@@ -1554,6 +1623,8 @@
         // ================================================================
         var devices = [];
         var activeView = localStorage.getItem('camera-driver-active-view') || 'dashboard';
+        // Migrate old 'logs' view to 'diagnostics'
+        if (activeView === 'logs') activeView = 'diagnostics';
         var sidebarCollapsed = localStorage.getItem('camera-driver-sidebar-collapsed') === 'true';
         var selectedDevice = '__ALL__';
         var moduleVersion = '';
@@ -1657,6 +1728,9 @@
         // View Routing
         // ================================================================
         function showView(viewName, skipLog) {
+            // Migrate old 'logs' view to 'diagnostics'
+            if (viewName === 'logs') viewName = 'diagnostics';
+
             // Stop stream if leaving cameras view
             if (activeView === 'cameras' && viewName !== 'cameras') {
                 stopActiveStream();
@@ -1665,10 +1739,6 @@
             // Stop diagnostics refresh if leaving
             if (activeView === 'diagnostics' && viewName !== 'diagnostics') {
                 if (diagInterval) { clearInterval(diagInterval); diagInterval = null; }
-            }
-
-            // Stop log polling if leaving logs
-            if (activeView === 'logs' && viewName !== 'logs') {
                 if (serverLogInterval) { clearInterval(serverLogInterval); serverLogInterval = null; }
             }
 
@@ -1689,10 +1759,9 @@
             if (viewName === 'diagnostics') {
                 fetchDiagnostics();
                 diagInterval = setInterval(fetchDiagnostics, 5000);
+                startLogPolling();
             } else if (viewName === 'cameras') {
                 if (devices.length === 0) loadDevices();
-            } else if (viewName === 'logs') {
-                startLogPolling();
             } else if (viewName === 'grid') {
                 initGridView();
             }
