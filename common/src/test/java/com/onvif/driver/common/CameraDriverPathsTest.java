@@ -116,6 +116,11 @@ class CameraDriverPathsTest {
         assertThat(CameraDriverPaths.ROUTE_LOGS_GATEWAY).isEqualTo("/logs/gateway");
     }
 
+    @Test
+    void testRouteMsePlayerJs_Value() {
+        assertThat(CameraDriverPaths.ROUTE_MSE_PLAYER_JS).isEqualTo("/mse-player.js");
+    }
+
     // ==================== ROUTE_* General Contract Tests ====================
 
     @Test
@@ -130,6 +135,7 @@ class CameraDriverPathsTest {
         assertThat(CameraDriverPaths.ROUTE_PLAYER).startsWith("/");
         assertThat(CameraDriverPaths.ROUTE_AUTH_STATUS).startsWith("/");
         assertThat(CameraDriverPaths.ROUTE_LOGS_GATEWAY).startsWith("/");
+        assertThat(CameraDriverPaths.ROUTE_MSE_PLAYER_JS).startsWith("/");
     }
 
     @Test
@@ -144,6 +150,7 @@ class CameraDriverPathsTest {
         assertThat(CameraDriverPaths.ROUTE_PLAYER).isNotNull().isNotEmpty();
         assertThat(CameraDriverPaths.ROUTE_AUTH_STATUS).isNotNull().isNotEmpty();
         assertThat(CameraDriverPaths.ROUTE_LOGS_GATEWAY).isNotNull().isNotEmpty();
+        assertThat(CameraDriverPaths.ROUTE_MSE_PLAYER_JS).isNotNull().isNotEmpty();
     }
 
     @Test
@@ -160,6 +167,7 @@ class CameraDriverPathsTest {
         assertThat(CameraDriverPaths.ROUTE_PLAYER).doesNotContain(CameraDriverPaths.DATA_BASE);
         assertThat(CameraDriverPaths.ROUTE_AUTH_STATUS).doesNotContain(CameraDriverPaths.DATA_BASE);
         assertThat(CameraDriverPaths.ROUTE_LOGS_GATEWAY).doesNotContain(CameraDriverPaths.DATA_BASE);
+        assertThat(CameraDriverPaths.ROUTE_MSE_PLAYER_JS).doesNotContain(CameraDriverPaths.DATA_BASE);
     }
 
     @Test
@@ -176,6 +184,7 @@ class CameraDriverPathsTest {
             CameraDriverPaths.ROUTE_PLAYER,
             CameraDriverPaths.ROUTE_AUTH_STATUS,
             CameraDriverPaths.ROUTE_LOGS_GATEWAY,
+            CameraDriverPaths.ROUTE_MSE_PLAYER_JS,
         };
         for (String route : routes) {
             String fullPath = CameraDriverPaths.DATA_BASE + route;

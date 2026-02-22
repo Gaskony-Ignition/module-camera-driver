@@ -14,7 +14,6 @@ import com.onvif.driver.gateway.stream.Go2RtcManager;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Extension point for the ONVIF Camera device type.
@@ -40,7 +39,7 @@ public class ONVIFDeviceExtensionPoint extends DeviceExtensionPoint<ONVIFDeviceC
      * Registry of all active ONVIF devices.
      * Used by servlets to look up devices by name.
      */
-    private static final Map<String, ONVIFDevice> deviceRegistry = new ConcurrentHashMap<>();
+    private static final DeviceRegistry<ONVIFDevice> registry = new DeviceRegistry<>();
 
     private volatile Go2RtcManager go2RtcManager;
 
@@ -163,7 +162,7 @@ public class ONVIFDeviceExtensionPoint extends DeviceExtensionPoint<ONVIFDeviceC
      * @param device Device instance
      */
     public static void registerDevice(String name, ONVIFDevice device) {
-        deviceRegistry.put(name, device);
+        registry.register(name, device);
     }
 
     /**
@@ -173,7 +172,7 @@ public class ONVIFDeviceExtensionPoint extends DeviceExtensionPoint<ONVIFDeviceC
      * @param name Device name
      */
     public static void unregisterDevice(String name) {
-        deviceRegistry.remove(name);
+        registry.unregister(name);
     }
 
     /**
@@ -184,7 +183,7 @@ public class ONVIFDeviceExtensionPoint extends DeviceExtensionPoint<ONVIFDeviceC
      * @return Device instance or null if not found
      */
     public ONVIFDevice getDevice(String name) {
-        return deviceRegistry.get(name);
+        return registry.get(name);
     }
 
     /**
@@ -193,6 +192,6 @@ public class ONVIFDeviceExtensionPoint extends DeviceExtensionPoint<ONVIFDeviceC
      * @return Map of device names to device instances
      */
     public static Map<String, ONVIFDevice> getAllDevices() {
-        return Map.copyOf(deviceRegistry);
+        return registry.getAll();
     }
 }

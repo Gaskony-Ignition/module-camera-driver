@@ -46,18 +46,25 @@ public class AuthenticationManager {
     private static final long LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
     // Track failed authentication attempts per username
-    private static final Map<String, AtomicInteger> failedAttempts = new ConcurrentHashMap<>();
-    private static final Map<String, Long> lockoutUntil = new ConcurrentHashMap<>();
+    private final Map<String, AtomicInteger> failedAttempts = new ConcurrentHashMap<>();
+    private final Map<String, Long> lockoutUntil = new ConcurrentHashMap<>();
 
-    // API Key storage (in-memory for now - should be moved to persistent storage)
+    // API Key storage: in-memory map, populated from persistent store on startup.
     // Key: random UUID (generated at addApiKey time); Value: salted-hash record.
     // Using a UUID key allows O(1) removal during iteration without a reverse-lookup map.
-    private static final Map<String, StoredApiKey> apiKeyStore = new ConcurrentHashMap<>();
+    private final Map<String, StoredApiKey> apiKeys = new ConcurrentHashMap<>();
 
     private final GatewayContext gatewayContext;
+    private final ApiKeyStore keyStore;
 
     public AuthenticationManager(GatewayContext gatewayContext) {
         this.gatewayContext = gatewayContext;
+        this.keyStore = new ApiKeyStore(gatewayContext);
+        // Load persisted keys into the in-memory map on startup
+        Map<String, ApiKeyStore.PersistedKey> persisted = this.keyStore.load();
+        for (Map.Entry<String, ApiKeyStore.PersistedKey> e : persisted.entrySet()) {
+            apiKeys.put(e.getKey(), new StoredApiKey(e.getValue().username(), e.getValue().saltHex(), e.getValue().hashHex()));
+        }
         initializeDefaultApiKeys();
     }
 
@@ -66,10 +73,9 @@ public class AuthenticationManager {
      * In production, these should be configured via module settings.
      */
     private void initializeDefaultApiKeys() {
-        // This is just a placeholder - in production, keys should be configured via Gateway Config
-        logger.info("API key authentication initialized");
-        logger.warn("Using in-memory API key storage - keys will be lost on Gateway restart");
-        logger.warn("For production use, configure API keys via Gateway Config page");
+        // Keys are loaded from persistent storage in the constructor (via ApiKeyStore).
+        // Additional keys can be added at runtime via addApiKey().
+        logger.info("API key authentication initialized ({} key(s) loaded)", apiKeys.size());
     }
 
     /**
@@ -220,7 +226,7 @@ public class AuthenticationManager {
             return false;
         }
 
-        for (StoredApiKey stored : apiKeyStore.values()) {
+        for (StoredApiKey stored : apiKeys.values()) {
             if (verifyApiKey(apiKey, stored)) {
                 logger.info("API key authentication successful for user: {}", stored.username());
                 return true;
@@ -283,9 +289,9 @@ public class AuthenticationManager {
     public void addApiKey(String apiKey, String username) {
         StoredApiKey stored = hashApiKeyWithSalt(apiKey, username);
         if (stored != null) {
-            apiKeyStore.put(UUID.randomUUID().toString(), stored);
+            apiKeys.put(UUID.randomUUID().toString(), stored);
+            keyStore.save(toPersistedMap());
             logger.info("API key added for user: {}", username);
-            logger.warn("API key stored in memory - will be lost on restart. Configure via Gateway settings for persistence.");
         } else {
             logger.error("Failed to hash API key for user: {}", username);
         }
@@ -298,7 +304,7 @@ public class AuthenticationManager {
      */
     public void removeApiKey(String apiKey) {
         String removedUser = null;
-        java.util.Iterator<java.util.Map.Entry<String, StoredApiKey>> iter = apiKeyStore.entrySet().iterator();
+        java.util.Iterator<java.util.Map.Entry<String, StoredApiKey>> iter = apiKeys.entrySet().iterator();
         while (iter.hasNext()) {
             java.util.Map.Entry<String, StoredApiKey> entry = iter.next();
             if (verifyApiKey(apiKey, entry.getValue())) {
@@ -308,6 +314,7 @@ public class AuthenticationManager {
             }
         }
         if (removedUser != null) {
+            keyStore.save(toPersistedMap());
             logger.info("API key removed for user: {}", removedUser);
         }
     }
@@ -417,5 +424,16 @@ public class AuthenticationManager {
         lockoutUntil.clear();
         failedAttempts.clear();
         logger.info("Cleared {} account lockouts", count);
+    }
+
+    /**
+     * Converts the in-memory apiKeys map into a map of PersistedKey records for saving.
+     */
+    private Map<String, ApiKeyStore.PersistedKey> toPersistedMap() {
+        Map<String, ApiKeyStore.PersistedKey> map = new java.util.HashMap<>();
+        for (Map.Entry<String, StoredApiKey> e : apiKeys.entrySet()) {
+            map.put(e.getKey(), new ApiKeyStore.PersistedKey(e.getValue().username(), e.getValue().saltHex(), e.getValue().hashHex()));
+        }
+        return map;
     }
 }

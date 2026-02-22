@@ -30,6 +30,7 @@ public final class CameraDriverPaths {
     public static final String ROUTE_PLAYER            = "/player";
     public static final String ROUTE_AUTH_STATUS       = "/auth-status";
     public static final String ROUTE_LOGS_GATEWAY      = "/logs/gateway";
+    public static final String ROUTE_MSE_PLAYER_JS     = "/mse-player.js";
 
     private CameraDriverPaths() {
         throw new UnsupportedOperationException("CameraDriverPaths is a constants class");

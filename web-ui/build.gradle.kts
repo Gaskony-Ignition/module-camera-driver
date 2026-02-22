@@ -56,6 +56,14 @@ val webpack by tasks.registering(NpmTask::class) {
     outputs.files(fileTree(projectOutput))
 }
 
+// Run Vitest frontend tests
+val frontendTest by tasks.registering(YarnTask::class) {
+    group = "verification"
+    description = "Run Vitest frontend unit tests"
+    args.set(listOf("test"))
+    dependsOn(yarnPackages)
+}
+
 tasks {
     processResources {
         dependsOn(webpack, yarnPackages)

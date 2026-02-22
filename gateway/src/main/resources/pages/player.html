@@ -100,12 +100,10 @@
         <button class="retry-btn" onclick="startPlayer()">Retry</button>
     </div>
 
+    <script src="/data/camera-driver/mse-player.js"></script>
     <script>
         var API_BASE = '/data/camera-driver';
-
-        let streamReader = null;
-        let mediaSource = null;
-        let abortController = null;
+        var player = null;
 
         function getDeviceName() {
             return new URLSearchParams(window.location.search).get('device');
@@ -127,24 +125,13 @@
         }
 
         function stopStream() {
-            if (abortController) {
-                abortController.abort();
-                abortController = null;
-            }
-            if (streamReader) {
-                try { streamReader.cancel(); } catch (e) {}
-                streamReader = null;
-            }
-            if (mediaSource && mediaSource.readyState === 'open') {
-                try { mediaSource.endOfStream(); } catch (e) {}
-            }
-            mediaSource = null;
+            if (player) { player.stop(); player = null; }
         }
 
         async function startPlayer() {
             stopStream();
 
-            const device = getDeviceName();
+            var device = getDeviceName();
             if (!device) {
                 showError('No device specified. Add ?device=YourDeviceName to the URL.');
                 return;
@@ -152,136 +139,14 @@
 
             showLoading();
 
-            if (!('MediaSource' in window)) {
-                showError('Your browser does not support Media Source Extensions. Use Chrome, Edge, or Firefox.');
-                return;
-            }
+            var videoEl = document.getElementById('video');
+            player = new MsePlayer(videoEl, showError);
 
-            const videoEl = document.getElementById('video');
-            mediaSource = new MediaSource();
-
-            const sourceOpenPromise = new Promise((resolve) => {
-                if (mediaSource.readyState === 'open') {
-                    resolve();
-                } else {
-                    mediaSource.addEventListener('sourceopen', resolve, { once: true });
-                }
-            });
-
-            videoEl.src = URL.createObjectURL(mediaSource);
-
-            abortController = new AbortController();
-            const streamUrl = API_BASE + '/stream?device=' + encodeURIComponent(device);
-
-            let response;
-            try {
-                response = await fetch(streamUrl, {
-                    credentials: 'include',
-                    signal: abortController.signal
-                });
-            } catch (e) {
-                if (e.name !== 'AbortError') showError('Failed to connect: ' + e.message);
-                return;
-            }
-
-            if (!response.ok) {
-                if (response.status === 401) {
-                    showError('Authentication required. Please log in to the Ignition Gateway.');
-                } else if (response.status === 404) {
-                    showError('Device not found: ' + device);
-                } else {
-                    showError('Failed to connect: HTTP ' + response.status);
-                }
-                return;
-            }
-
-            await sourceOpenPromise;
-
-            // Determine codec from Content-Type (go2rtc sends codec info)
-            const contentType = (response.headers.get('Content-Type') || '')
-                .replace(/;\s*charset=[^;]*/i, '').trim();
-            let mimeCodec = contentType;
-            if (!mimeCodec || !MediaSource.isTypeSupported(mimeCodec)) {
-                const fallbacks = [
-                    'video/mp4; codecs="avc1.640029,mp4a.40.2"',
-                    'video/mp4; codecs="avc1.640029"',
-                    'video/mp4; codecs="avc1.42E01E"'
-                ];
-                mimeCodec = fallbacks.find(c => MediaSource.isTypeSupported(c));
-                if (!mimeCodec) {
-                    showError('H.264 MP4 playback is not supported in this browser.');
-                    return;
-                }
-            }
-
-            const sourceBuffer = mediaSource.addSourceBuffer(mimeCodec);
-            sourceBuffer.mode = 'segments';
-
-            videoEl.addEventListener('playing', function() {
+            videoEl.addEventListener('playing', function () {
                 hideLoading();
             }, { once: true });
 
-            try {
-                const reader = response.body.getReader();
-                streamReader = reader;
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    if (sourceBuffer.updating) {
-                        await new Promise(resolve => {
-                            sourceBuffer.addEventListener('updateend', resolve, { once: true });
-                        });
-                    }
-
-                    try {
-                        sourceBuffer.appendBuffer(value);
-                        await new Promise(resolve => {
-                            sourceBuffer.addEventListener('updateend', resolve, { once: true });
-                        });
-                    } catch (e) {
-                        if (e.name === 'QuotaExceededError') {
-                            if (sourceBuffer.buffered.length > 0 && !sourceBuffer.updating) {
-                                const end = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
-                                sourceBuffer.remove(0, Math.max(0, end - 5));
-                                await new Promise(resolve => {
-                                    sourceBuffer.addEventListener('updateend', resolve, { once: true });
-                                });
-                                sourceBuffer.appendBuffer(value);
-                                await new Promise(resolve => {
-                                    sourceBuffer.addEventListener('updateend', resolve, { once: true });
-                                });
-                            }
-                        } else {
-                            console.error('SourceBuffer error:', e);
-                            break;
-                        }
-                    }
-
-                    // Trim buffer to prevent memory growth (keep ~30s)
-                    try {
-                        if (!sourceBuffer.updating && sourceBuffer.buffered.length > 0) {
-                            const start = sourceBuffer.buffered.start(0);
-                            const end = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
-                            if (end - start > 30) {
-                                sourceBuffer.remove(0, end - 15);
-                                await new Promise(resolve => {
-                                    sourceBuffer.addEventListener('updateend', resolve, { once: true });
-                                });
-                            }
-                        }
-                    } catch (e) { /* ignore trim errors */ }
-                }
-
-                // Stream ended normally
-                showError('Stream ended. The camera may have disconnected.');
-            } catch (e) {
-                if (e.name !== 'AbortError') {
-                    console.error('MSE stream error:', e);
-                    showError('Stream connection lost: ' + e.message);
-                }
-            }
+            await player.start(API_BASE + '/stream?device=' + encodeURIComponent(device));
         }
 
         document.addEventListener('DOMContentLoaded', startPlayer);

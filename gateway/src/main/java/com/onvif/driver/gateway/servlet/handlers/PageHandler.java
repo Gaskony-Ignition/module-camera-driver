@@ -57,6 +57,28 @@ public class PageHandler extends BaseHandler {
     }
 
     /**
+     * Serves the shared MSE player JavaScript module.
+     * URL: /data/camera-driver/mse-player.js
+     */
+    public Object handleMsePlayerJs(RequestContext requestContext, HttpServletResponse response) throws Exception {
+        try (InputStream stream = getClass().getResourceAsStream("/pages/mse-player.js")) {
+            if (stream == null) {
+                logger.error("mse-player.js not found at /pages/mse-player.js");
+                response.sendError(404, "mse-player.js not found");
+                return null;
+            }
+            String js = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+            response.setContentType("application/javascript; charset=UTF-8");
+            response.setHeader("Cache-Control", "public, max-age=3600");
+            response.getWriter().write(js);
+        } catch (Exception e) {
+            logger.error("Error serving mse-player.js", e);
+            response.sendError(500, "Internal server error");
+        }
+        return null;
+    }
+
+    /**
      * Handles serving the connection browser HTML page.
      * URL: http://gateway:8088/data/camera-driver/connection-browser
      */

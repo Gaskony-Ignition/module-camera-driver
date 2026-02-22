@@ -1617,6 +1617,7 @@
     <!-- ================================================================
          JavaScript
          ================================================================ -->
+    <script src="/data/camera-driver/mse-player.js"></script>
     <script>
         // ================================================================
         // Constants
@@ -1641,10 +1642,9 @@
         var statusBarInterval = null;
 
         // MSE streaming state (cameras view)
-        var activeStreamReader = null;
         var activeMediaSource = null;
-        var activeAbortController = null;
         var activeStreamDeviceName = null;
+        var inlinePlayer = null;
 
         // Server-side logs state
         var serverLogEntries = [];
@@ -2050,109 +2050,18 @@
         }
 
         // ================================================================
-        // MSE Player
+        // MSE Player (uses shared MsePlayer from /data/camera-driver/mse-player.js)
         // ================================================================
         async function playMseStream(videoElement, url) {
             stopMseStream();
-
-            if (!('MediaSource' in window)) {
-                showInlineStreamError('Your browser does not support Media Source Extensions.');
-                return;
-            }
-
-            var mediaSource = new MediaSource();
-            activeMediaSource = mediaSource;
-
-            var sourceOpenPromise = new Promise(function(resolve) {
-                if (mediaSource.readyState === 'open') { resolve(); }
-                else { mediaSource.addEventListener('sourceopen', resolve, { once: true }); }
+            inlinePlayer = new MsePlayer(videoElement, function(msg) {
+                showInlineStreamError(msg);
             });
-
-            videoElement.src = URL.createObjectURL(mediaSource);
-            activeAbortController = new AbortController();
-
-            var response;
-            try {
-                response = await fetch(url, { credentials: 'include', signal: activeAbortController.signal });
-            } catch (e) {
-                if (e.name !== 'AbortError') showInlineStreamError('Failed to connect: ' + e.message);
-                return;
-            }
-
-            if (!response.ok) {
-                showInlineStreamError('Failed to connect: HTTP ' + response.status);
-                return;
-            }
-
-            await sourceOpenPromise;
-
-            var contentType = (response.headers.get('Content-Type') || '').replace(/;\s*charset=[^;]*/i, '').trim();
-            var mimeCodec = contentType;
-            if (!mimeCodec || !MediaSource.isTypeSupported(mimeCodec)) {
-                var fallbacks = [
-                    'video/mp4; codecs="avc1.640029,mp4a.40.2"',
-                    'video/mp4; codecs="avc1.640029"',
-                    'video/mp4; codecs="avc1.42E01E"'
-                ];
-                mimeCodec = fallbacks.find(function(c) { return MediaSource.isTypeSupported(c); });
-                if (!mimeCodec) {
-                    showInlineStreamError('H.264 MP4 playback not supported in this browser.');
-                    return;
-                }
-            }
-
-            var sourceBuffer = mediaSource.addSourceBuffer(mimeCodec);
-            sourceBuffer.mode = 'segments';
-
-            try {
-                var reader = response.body.getReader();
-                activeStreamReader = reader;
-
-                while (true) {
-                    var result = await reader.read();
-                    if (result.done) break;
-
-                    if (sourceBuffer.updating) {
-                        await new Promise(function(resolve) { sourceBuffer.addEventListener('updateend', resolve, { once: true }); });
-                    }
-
-                    try {
-                        sourceBuffer.appendBuffer(result.value);
-                        await new Promise(function(resolve) { sourceBuffer.addEventListener('updateend', resolve, { once: true }); });
-                    } catch (e) {
-                        if (e.name === 'QuotaExceededError') {
-                            if (sourceBuffer.buffered.length > 0 && !sourceBuffer.updating) {
-                                var end = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
-                                sourceBuffer.remove(0, Math.max(0, end - 5));
-                                await new Promise(function(resolve) { sourceBuffer.addEventListener('updateend', resolve, { once: true }); });
-                                sourceBuffer.appendBuffer(result.value);
-                                await new Promise(function(resolve) { sourceBuffer.addEventListener('updateend', resolve, { once: true }); });
-                            }
-                        } else { break; }
-                    }
-
-                    try {
-                        if (!sourceBuffer.updating && sourceBuffer.buffered.length > 0) {
-                            var start = sourceBuffer.buffered.start(0);
-                            var bufEnd = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
-                            if (bufEnd - start > 30) {
-                                sourceBuffer.remove(0, bufEnd - 15);
-                                await new Promise(function(resolve) { sourceBuffer.addEventListener('updateend', resolve, { once: true }); });
-                            }
-                        }
-                    } catch (e) { /* ignore trim errors */ }
-                }
-            } catch (e) {
-                if (e.name !== 'AbortError') {
-                    showInlineStreamError('Stream connection lost: ' + e.message);
-                }
-            }
+            await inlinePlayer.start(url);
         }
 
         function stopMseStream() {
-            if (activeAbortController) { activeAbortController.abort(); activeAbortController = null; }
-            if (activeStreamReader) { try { activeStreamReader.cancel(); } catch (e) {} activeStreamReader = null; }
-            if (activeMediaSource && activeMediaSource.readyState === 'open') { try { activeMediaSource.endOfStream(); } catch (e) {} }
+            if (inlinePlayer) { inlinePlayer.stop(); inlinePlayer = null; }
             activeMediaSource = null;
         }
 
@@ -2525,69 +2434,15 @@
         }
 
         async function playGridMseStream(videoElement, url, abortCtrl, cellIndex) {
-            if (!('MediaSource' in window)) return;
-
-            var mediaSource = new MediaSource();
-            var sourceOpenPromise = new Promise(function(resolve) {
-                if (mediaSource.readyState === 'open') resolve();
-                else mediaSource.addEventListener('sourceopen', resolve, { once: true });
+            var gridPlayer = new MsePlayer(videoElement, function(msg) {
+                var stream = gridCellStreams[cellIndex];
+                addGridEvent(stream ? stream.deviceName : 'Unknown', 'Stream error: ' + msg);
             });
 
-            videoElement.src = URL.createObjectURL(mediaSource);
+            // Wire the external abortCtrl to MsePlayer's internal abort
+            abortCtrl.signal.addEventListener('abort', function() { gridPlayer.stop(); });
 
-            var response;
-            try {
-                response = await fetch(url, { credentials: 'include', signal: abortCtrl.signal });
-            } catch (e) { return; }
-            if (!response.ok) return;
-
-            await sourceOpenPromise;
-
-            var contentType = (response.headers.get('Content-Type') || '').replace(/;\s*charset=[^;]*/i, '').trim();
-            var mimeCodec = contentType;
-            if (!mimeCodec || !MediaSource.isTypeSupported(mimeCodec)) {
-                var fallbacks = ['video/mp4; codecs="avc1.640029,mp4a.40.2"', 'video/mp4; codecs="avc1.640029"', 'video/mp4; codecs="avc1.42E01E"'];
-                mimeCodec = fallbacks.find(function(c) { return MediaSource.isTypeSupported(c); });
-                if (!mimeCodec) return;
-            }
-
-            var sourceBuffer = mediaSource.addSourceBuffer(mimeCodec);
-            sourceBuffer.mode = 'segments';
-
-            try {
-                var reader = response.body.getReader();
-                while (true) {
-                    var result = await reader.read();
-                    if (result.done) break;
-                    if (sourceBuffer.updating) {
-                        await new Promise(function(r) { sourceBuffer.addEventListener('updateend', r, { once: true }); });
-                    }
-                    try {
-                        sourceBuffer.appendBuffer(result.value);
-                        await new Promise(function(r) { sourceBuffer.addEventListener('updateend', r, { once: true }); });
-                    } catch (e) {
-                        if (e.name === 'QuotaExceededError' && sourceBuffer.buffered.length > 0 && !sourceBuffer.updating) {
-                            var end = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
-                            sourceBuffer.remove(0, Math.max(0, end - 5));
-                            await new Promise(function(r) { sourceBuffer.addEventListener('updateend', r, { once: true }); });
-                        } else { break; }
-                    }
-                    try {
-                        if (!sourceBuffer.updating && sourceBuffer.buffered.length > 0) {
-                            var bufEnd = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
-                            var bufStart = sourceBuffer.buffered.start(0);
-                            if (bufEnd - bufStart > 30) {
-                                sourceBuffer.remove(0, bufEnd - 15);
-                                await new Promise(function(r) { sourceBuffer.addEventListener('updateend', r, { once: true }); });
-                            }
-                        }
-                    } catch(e) {}
-                }
-            } catch (e) {
-                if (e.name !== 'AbortError') {
-                    addGridEvent(gridCellStreams[cellIndex] ? gridCellStreams[cellIndex].deviceName : 'Unknown', 'Stream error: ' + e.message);
-                }
-            }
+            await gridPlayer.start(url);
         }
 
         function stopGridCellStream(cellIndex) {

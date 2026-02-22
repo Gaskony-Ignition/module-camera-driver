@@ -8,13 +8,13 @@ import com.inductiveautomation.ignition.gateway.opcua.server.api.DeviceExtension
 import com.inductiveautomation.ignition.gateway.opcua.server.api.DeviceProfileConfig;
 import com.inductiveautomation.ignition.gateway.web.nav.ExtensionPointResourceForm;
 import com.inductiveautomation.ignition.gateway.web.nav.WebUiComponent;
+import com.onvif.driver.gateway.device.DeviceRegistry;
 import com.onvif.driver.gateway.stream.Go2RtcManager;
 import com.onvif.driver.gateway.util.ValidationUtil;
 
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Extension point for the Generic Camera device type.
@@ -27,7 +27,7 @@ public class GenericCameraExtensionPoint extends DeviceExtensionPoint<GenericCam
 
     public static final String TYPE_ID = "com.onvif.driver.GenericCamera";
 
-    private static final Map<String, GenericCameraDevice> deviceRegistry = new ConcurrentHashMap<>();
+    private static final DeviceRegistry<GenericCameraDevice> registry = new DeviceRegistry<>();
 
     private volatile Go2RtcManager go2RtcManager;
 
@@ -111,18 +111,18 @@ public class GenericCameraExtensionPoint extends DeviceExtensionPoint<GenericCam
     }
 
     public static void registerDevice(String name, GenericCameraDevice device) {
-        deviceRegistry.put(name, device);
+        registry.register(name, device);
     }
 
     public static void unregisterDevice(String name) {
-        deviceRegistry.remove(name);
+        registry.unregister(name);
     }
 
     public GenericCameraDevice getDevice(String name) {
-        return deviceRegistry.get(name);
+        return registry.get(name);
     }
 
     public static Map<String, GenericCameraDevice> getAllDevices() {
-        return Map.copyOf(deviceRegistry);
+        return registry.getAll();
     }
 }

@@ -119,6 +119,12 @@ public class ONVIFRoutes {
             .accessControl(AccessControlStrategy.OPEN_ROUTE)
             .mount();
 
+        routes.newRoute(CameraDriverPaths.ROUTE_MSE_PLAYER_JS)
+            .handler(pageHandler::handleMsePlayerJs)
+            .type(RouteGroup.TYPE_OCTET_STREAM)
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)
+            .mount();
+
         logger.info("Camera driver routes mounted under /data/{}", CameraDriverPaths.MOUNT_ALIAS);
     }
 

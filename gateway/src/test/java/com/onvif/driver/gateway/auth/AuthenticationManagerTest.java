@@ -24,8 +24,9 @@ import static org.assertj.core.api.Assertions.*;
  * - Account lockout stats and clearAllLockouts
  *
  * Note: GatewayContext is a compileOnly Ignition dependency unavailable on the test
- * classpath. AuthenticationManager's constructor only uses GatewayContext in
- * validateGatewayCredentials (Basic Auth, untested here), so null is passed safely.
+ * classpath. AuthenticationManager's constructor only uses GatewayContext to resolve
+ * the ApiKeyStore file path (which safely returns null when context is null),
+ * so null is passed safely.
  */
 class AuthenticationManagerTest {
 
@@ -37,25 +38,25 @@ class AuthenticationManagerTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        // GatewayContext is compileOnly; passing null is safe because the constructor
-        // only logs in initializeDefaultApiKeys() and never dereferences the field there.
+        // GatewayContext is compileOnly; passing null is safe — ApiKeyStore.resolveStoreFile
+        // catches the NullPointerException and returns null (falls back to in-memory only).
         authManager = new AuthenticationManager(null);
-        // Clear the shared static state so tests do not interfere with each other.
-        clearStaticApiKeyStore();
+        // Clear instance state so tests do not interfere with each other.
+        clearApiKeys();
         authManager.clearAllLockouts();
     }
 
     @AfterEach
     void tearDown() throws Exception {
-        clearStaticApiKeyStore();
+        clearApiKeys();
         authManager.clearAllLockouts();
     }
 
-    /** Empties the static apiKeyStore via reflection. */
-    private static void clearStaticApiKeyStore() throws Exception {
-        Field field = AuthenticationManager.class.getDeclaredField("apiKeyStore");
+    /** Empties the instance apiKeys map via reflection. */
+    private void clearApiKeys() throws Exception {
+        Field field = AuthenticationManager.class.getDeclaredField("apiKeys");
         field.setAccessible(true);
-        Map<?, ?> store = (Map<?, ?>) field.get(null);
+        Map<?, ?> store = (Map<?, ?>) field.get(authManager);
         store.clear();
     }
 
@@ -253,9 +254,9 @@ class AuthenticationManagerTest {
 
     @Test
     void testAddApiKey_PopulatesStore() throws Exception {
-        Field field = AuthenticationManager.class.getDeclaredField("apiKeyStore");
+        Field field = AuthenticationManager.class.getDeclaredField("apiKeys");
         field.setAccessible(true);
-        Map<?, ?> store = (Map<?, ?>) field.get(null);
+        Map<?, ?> store = (Map<?, ?>) field.get(authManager);
 
         assertThat(store).isEmpty();
 
@@ -273,9 +274,9 @@ class AuthenticationManagerTest {
         authManager.addApiKey(key, "user1");
         authManager.addApiKey(key, "user2");
 
-        Field field = AuthenticationManager.class.getDeclaredField("apiKeyStore");
+        Field field = AuthenticationManager.class.getDeclaredField("apiKeys");
         field.setAccessible(true);
-        Map<?, ?> store = (Map<?, ?>) field.get(null);
+        Map<?, ?> store = (Map<?, ?>) field.get(authManager);
 
         // Both entries must be present (different UUID keys, different salts)
         assertThat(store).hasSize(2);
@@ -294,9 +295,9 @@ class AuthenticationManagerTest {
         String key = AuthenticationManager.generateApiKey();
         authManager.addApiKey(key, "user1");
 
-        Field field = AuthenticationManager.class.getDeclaredField("apiKeyStore");
+        Field field = AuthenticationManager.class.getDeclaredField("apiKeys");
         field.setAccessible(true);
-        Map<?, ?> store = (Map<?, ?>) field.get(null);
+        Map<?, ?> store = (Map<?, ?>) field.get(authManager);
 
         assertThat(store).hasSize(1);
         authManager.removeApiKey(key);
@@ -320,9 +321,9 @@ class AuthenticationManagerTest {
 
         authManager.removeApiKey(key1);
 
-        Field field = AuthenticationManager.class.getDeclaredField("apiKeyStore");
+        Field field = AuthenticationManager.class.getDeclaredField("apiKeys");
         field.setAccessible(true);
-        Map<?, ?> store = (Map<?, ?>) field.get(null);
+        Map<?, ?> store = (Map<?, ?>) field.get(authManager);
 
         // Only key2 entry must remain
         assertThat(store).hasSize(1);
@@ -345,17 +346,17 @@ class AuthenticationManagerTest {
 
     @Test
     void testClearAllLockouts_ResetsState() throws Exception {
-        // Manually inject a lockout entry into the static maps via reflection
+        // Manually inject a lockout entry into the instance maps via reflection
         Field failedAttemptsField = AuthenticationManager.class.getDeclaredField("failedAttempts");
         failedAttemptsField.setAccessible(true);
         @SuppressWarnings("unchecked")
-        Map<String, AtomicInteger> failedMap = (Map<String, AtomicInteger>) failedAttemptsField.get(null);
+        Map<String, AtomicInteger> failedMap = (Map<String, AtomicInteger>) failedAttemptsField.get(authManager);
         failedMap.put("testuser", new AtomicInteger(5));
 
         Field lockoutUntilField = AuthenticationManager.class.getDeclaredField("lockoutUntil");
         lockoutUntilField.setAccessible(true);
         @SuppressWarnings("unchecked")
-        Map<String, Long> lockoutMap = (Map<String, Long>) lockoutUntilField.get(null);
+        Map<String, Long> lockoutMap = (Map<String, Long>) lockoutUntilField.get(authManager);
         lockoutMap.put("testuser", System.currentTimeMillis() + 999_999L);
 
         // Verify they are populated before clearing
@@ -369,11 +370,11 @@ class AuthenticationManagerTest {
 
     @Test
     void testGetFailedAttemptStats_ReturnsDefensiveCopy() throws Exception {
-        // Populate the static map directly
+        // Populate the instance map directly
         Field field = AuthenticationManager.class.getDeclaredField("failedAttempts");
         field.setAccessible(true);
         @SuppressWarnings("unchecked")
-        Map<String, AtomicInteger> failedMap = (Map<String, AtomicInteger>) field.get(null);
+        Map<String, AtomicInteger> failedMap = (Map<String, AtomicInteger>) field.get(authManager);
         failedMap.put("alice", new AtomicInteger(3));
 
         Map<String, AtomicInteger> stats = authManager.getFailedAttemptStats();
@@ -383,5 +384,45 @@ class AuthenticationManagerTest {
         // Modifying the returned copy must not affect the original
         stats.clear();
         assertThat(failedMap).containsKey("alice");
+    }
+
+    // -----------------------------------------------------------------------
+    // Instance isolation tests (verifies the static → instance fix)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void testTwoInstances_HaveIsolatedApiKeyStores() throws Exception {
+        AuthenticationManager manager1 = new AuthenticationManager(null);
+        AuthenticationManager manager2 = new AuthenticationManager(null);
+
+        // Add a key only to manager1
+        manager1.addApiKey("only-in-manager1", "user1");
+
+        Field field = AuthenticationManager.class.getDeclaredField("apiKeys");
+        field.setAccessible(true);
+
+        Map<?, ?> store1 = (Map<?, ?>) field.get(manager1);
+        Map<?, ?> store2 = (Map<?, ?>) field.get(manager2);
+
+        assertThat(store1).hasSize(1);
+        assertThat(store2).isEmpty();
+    }
+
+    @Test
+    void testTwoInstances_HaveIsolatedFailedAttempts() throws Exception {
+        AuthenticationManager manager1 = new AuthenticationManager(null);
+        AuthenticationManager manager2 = new AuthenticationManager(null);
+
+        // Inject a failed attempt into manager1 only
+        Field field = AuthenticationManager.class.getDeclaredField("failedAttempts");
+        field.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<String, AtomicInteger> failedMap1 = (Map<String, AtomicInteger>) field.get(manager1);
+        failedMap1.put("user", new AtomicInteger(3));
+
+        // manager2 must see its own empty map
+        assertThat(manager2.getFailedAttemptStats()).isEmpty();
+        // manager1 must see its own populated map
+        assertThat(manager1.getFailedAttemptStats()).containsKey("user");
     }
 }

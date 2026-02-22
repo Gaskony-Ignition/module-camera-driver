@@ -29,11 +29,13 @@ dependencies {
     // Include web-ui component bundle
     modlImplementation(projects.webUi)
 
-    // Make Ignition gateway API available during test compilation and runtime
-    // Required because AuthenticationManager has a GatewayContext field that the JVM must resolve
-    // when loading the class, even when null is passed to the constructor.
+    // Make Ignition gateway + driver APIs available during test compilation and runtime.
+    // Required because mocked classes (ONVIFDeviceExtensionPoint, GenericCameraExtensionPoint)
+    // extend DeviceExtensionPoint from driver-api, and Mockito resolves the full class hierarchy
+    // at test runtime even when the mock value is never dereferenced.
     testCompileOnly(libs.ignition.gateway.api)
     testRuntimeOnly(libs.ignition.gateway.api)
+    testRuntimeOnly(libs.ignition.driver.api)
 
     // Test dependencies (v2.1.0)
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.1")
