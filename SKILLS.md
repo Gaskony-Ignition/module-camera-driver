@@ -1,6 +1,6 @@
-# CRITICAL LEARNINGS FROM PLC SIMULATOR PROJECT
+# Camera Driver Module - Skills & Knowledge Base
 
-This document captures critical lessons learned during the development of the Ignition PLC Simulator module. **Read this carefully before implementing the Camera Driver to avoid the same mistakes.**
+This document captures critical lessons learned during the development of the Camera Driver module. **Read this carefully before making changes to avoid repeating past mistakes.**
 
 ---
 

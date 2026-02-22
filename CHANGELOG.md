@@ -72,7 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ONVIF Device Type Rename**: Device dropdown now shows "ONVIF Camera" instead of "Camera Driver" to distinguish from Generic Camera
 - **Module Description**: Updated to "Multi-protocol camera driver supporting ONVIF, RTSP, MJPEG, and snapshot URL connections"
 - **Documentation Overhaul**: All documentation rewritten to present ONVIF and Generic Camera as equal device types
-- **CLAUDE_CONTEXT.md**: Complete rewrite with multi-protocol architecture documentation
+- **CLAUDE.md**: Complete rewrite with multi-protocol architecture documentation
 - **README.md**: Restructured around two device types (ONVIF Camera + Generic Camera)
 - **All docs**: Updated USAGE.md, TESTING.md, SECURITY.md, CAMERA_COMPATIBILITY.md, IMPLEMENTATION_STATUS.md
 - **i18n Properties**: Updated ONVIFDevice.properties descriptions to be camera-focused (not ONVIF-centric)
@@ -299,7 +299,7 @@ If upgrading from v2.0.0:
 - SslValidationMode enum with STRICT, TRUST_FIRST_USE, and INSECURE options
 - SSL validation configuration field in device configuration UI
 - ValidationUtil class for centralized input validation (eliminates code duplication)
-- CLAUDE_CONTEXT.md for AI-assisted development
+- CLAUDE.md for AI-assisted development
 - Comprehensive docs/SECURITY.md documentation
 - gradle.properties.template for secure credential setup
 - CORS origin validation helper methods

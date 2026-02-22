@@ -189,11 +189,11 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
         logger.info("Testing connection to ONVIF device at {}:{}...",
             config.connection().ipAddress(), config.connection().port());
         if (!onvifClient.testConnection()) {
-            logger.error("❌ Connection test FAILED to {}:{}",
+            logger.error("Connection test FAILED to {}:{}",
                 config.connection().ipAddress(), config.connection().port());
             throw new IOException("Connection test failed");
         }
-        logger.info("✅ Connection test PASSED");
+        logger.info("Connection test PASSED");
 
         deviceStatus = DeviceStatus.DISCOVERING.displayName();
 
@@ -201,11 +201,11 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
         logger.info("Retrieving device information...");
         DeviceInformation deviceInfo = onvifClient.getDeviceInformation();
         if (deviceInfo == null) {
-            logger.error("❌ Failed to retrieve device information");
+            logger.error("Failed to retrieve device information");
             throw new IOException("Failed to retrieve device information");
         }
 
-        logger.info("✅ Device Information Retrieved:");
+        logger.info("Device Information Retrieved:");
         logger.info("  - Manufacturer: {}", deviceInfo.manufacturer());
         logger.info("  - Model: {}", deviceInfo.model());
         logger.info("  - Firmware: {}", deviceInfo.firmwareVersion());
@@ -221,7 +221,7 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
             logger.info("Auto-discovering ONVIF services...");
             services = onvifClient.getServices();
             if (services != null && !services.isEmpty()) {
-                logger.info("✅ Discovered {} ONVIF service(s):", services.size());
+                logger.info("Discovered {} ONVIF service(s):", services.size());
                 for (ONVIFService service : services) {
                     logger.info("  - {} (v{}): {}",
                         service.getServiceName(),
@@ -229,7 +229,7 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
                         service.getXAddr());
                 }
             } else {
-                logger.warn("⚠️ No ONVIF services discovered");
+                logger.warn("No ONVIF services discovered");
             }
 
             // Get media profiles if media service available
@@ -240,7 +240,7 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
                             logger.info("Retrieving media profiles...");
                             mediaProfiles = onvifClient.getMediaProfiles();
                             if (mediaProfiles != null && !mediaProfiles.isEmpty()) {
-                                logger.info("✅ Retrieved {} media profile(s):", mediaProfiles.size());
+                                logger.info("Retrieved {} media profile(s):", mediaProfiles.size());
                                 for (MediaProfile profile : mediaProfiles) {
                                     logger.info("  - {}: {}x{} @ {}fps ({})",
                                         profile.getName(),
@@ -251,11 +251,11 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
                                 }
                             }
                         } catch (Exception e) {
-                            logger.warn("⚠️ Failed to get media profiles: {}", e.getMessage());
+                            logger.warn("Failed to get media profiles: {}", e.getMessage());
                         }
                     } else if (service.getServiceName().equalsIgnoreCase("ptz")) {
                         hasPTZ = true;
-                        logger.info("✅ PTZ support detected");
+                        logger.info("PTZ support detected");
                     }
                 }
             }
@@ -285,14 +285,14 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
         if (config.onvif().pollInterval() > 0) {
             logger.info("Starting polling with interval: {} seconds", config.onvif().pollInterval());
             startPolling(mediaProfiles, hasPTZ);
-            logger.info("✅ Polling started successfully");
+            logger.info("Polling started successfully");
         } else {
             logger.info("Polling disabled (interval = 0)");
         }
 
         deviceStatus = DeviceStatus.RUNNING.displayName();
         logger.info("===========================================");
-        logger.info("✅ ONVIF DEVICE STARTED SUCCESSFULLY");
+        logger.info("ONVIF DEVICE STARTED SUCCESSFULLY");
         logger.info("Device Name: {}", context.getName());
         logger.info("Status: CONNECTED AND RUNNING");
         logger.info("Endpoint: {}://{}:{}",

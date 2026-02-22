@@ -3,7 +3,7 @@
 ## Project Overview
 
 **Name**: Ignition Camera Driver Module
-**Version**: 2.7.6
+**Version**: 2.26.0
 **Status**: Production Ready
 **Language**: Java 17
 **Framework**: Inductive Automation Ignition SDK 8.3.0
@@ -19,7 +19,7 @@
 
 ### Essential Reading Order
 1. **This file** - Overall context and architecture
-2. **LEARNINGS.md** - Critical bugs and lessons learned (READ THIS to avoid hours of debugging)
+2. **SKILLS.md** - Critical bugs and lessons learned (READ THIS to avoid hours of debugging)
 3. **docs/SECURITY.md** - Security architecture and practices
 4. **README.md** - User-facing documentation
 5. **docs/IMPLEMENTATION_STATUS.md** - Current implementation status
@@ -28,7 +28,7 @@
 ```bash
 cd /modules/ignition-module-camera-driver
 ./gradlew clean build
-# Output: build/CameraDriver-2.7.6.modl
+# Output: build/CameraDriver-2.26.0.modl
 ```
 
 ### Common Commands
@@ -185,7 +185,7 @@ Properties file must be in exact package structure:
 ## Working with This Project
 
 ### Before Making Changes
-1. Read LEARNINGS.md (avoid repeated mistakes)
+1. Read SKILLS.md (avoid repeated mistakes)
 2. Check docs/SECURITY.md (security requirements)
 3. Review docs/IMPLEMENTATION_STATUS.md (what's done)
 
@@ -202,4 +202,4 @@ Java packages remain `com.onvif.driver.*` for backward compatibility. Class name
 ---
 
 **Last Updated**: 2026-02-11
-**Document Version**: 2.7.6
+**Document Version**: 2.26.0

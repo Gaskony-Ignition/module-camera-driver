@@ -1,35 +1,13 @@
-# ============================================================================
-# Ignition Camera Driver - Gradle Properties Template
-# ============================================================================
-#
-# SETUP INSTRUCTIONS:
-# 1. Copy this file: cp gradle.properties.template gradle.properties
-# 2. Set environment variables with your actual passwords:
-#    export KEYSTORE_PASSWORD="your-secure-password-here"
-#    export CERT_PASSWORD="your-secure-password-here"
-# 3. Build the module: ./gradlew clean build
-#
-# SECURITY WARNING:
-# - NEVER commit gradle.properties with real passwords to version control
-# - The gradle.properties file is in .gitignore to prevent accidental commits
-# - The keystore and certificate files are also in .gitignore
-#
-# For production deployments:
-# - Use strong passwords (16+ characters)
-# - Store passwords in secure vault (not plain text)
-# - Regenerate certificates periodically
-# ============================================================================
-
 # Ignition SDK version
 ignition.sdk.version=8.3.0
 
-# Module signing configuration
-# These values reference environment variables for security
-ignition.signing.keystoreFile=camera-driver.jks
-ignition.signing.keystorePassword=${KEYSTORE_PASSWORD}
-ignition.signing.certFile=camera-driver.der
-ignition.signing.certPassword=${CERT_PASSWORD}
-ignition.signing.certAlias=camera-driver
+# Gaskony Module Signing Configuration
+# Uses shared keystore for consistent vendor name across all Gaskony modules
+ignition.signing.keystoreFile=/path/to/your/gaskony-keystore.jks
+ignition.signing.keystorePassword=YOUR_PASSWORD_HERE
+ignition.signing.certAlias=gaskony-module
+ignition.signing.certPassword=YOUR_PASSWORD_HERE
+ignition.signing.certFile=/path/to/your/gaskony-cert.pem
 
 # Gradle daemon settings
 org.gradle.daemon=true

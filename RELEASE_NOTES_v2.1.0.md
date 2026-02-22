@@ -436,7 +436,7 @@ All documentation updated to reflect v2.1.0:
 - **CHANGELOG.md**: Complete version history
 - **docs/SECURITY.md**: Security architecture and best practices
 - **README.md**: Getting started guide
-- **CLAUDE_CONTEXT.md**: Developer context
+- **CLAUDE.md**: Developer context
 
 ### Issue Reporting
 - GitHub Issues: [Create issue]

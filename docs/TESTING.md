@@ -344,7 +344,7 @@ Note: These endpoints require authentication. Use your Ignition gateway credenti
 
 For issues or questions:
 1. Check gateway logs in `wrapper.log`
-2. Review LEARNINGS.md for common pitfalls
+2. Review SKILLS.md for common pitfalls
 3. Check PLAN.md for implementation roadmap
 4. File issues on GitHub (when repository is public)
 

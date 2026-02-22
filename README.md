@@ -14,7 +14,7 @@ For cameras that provide direct RTSP, MJPEG, or snapshot HTTP URLs but may not s
 
 ## Current Status
 
-**Version**: 2.7.8 | **Status**: Production Ready
+**Version**: 2.26.0 | **Status**: Production Ready
 
 ### Supported Connection Types
 
@@ -39,12 +39,12 @@ For cameras that provide direct RTSP, MJPEG, or snapshot HTTP URLs but may not s
 ```bash
 cd /modules/ignition-module-camera-driver
 ./gradlew clean build
-# Output: build/CameraDriver-2.7.8.modl
+# Output: build/CameraDriver-2.26.0.modl
 ```
 
 ### 2. Install
 ```bash
-docker cp build/CameraDriver-2.7.8.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
+docker cp build/CameraDriver-2.26.0.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
 docker restart ignition-gateway
 ```
 
@@ -131,17 +131,17 @@ ignition-module-camera-driver/
 | Document | Description |
 |----------|-------------|
 | [CHANGELOG.md](CHANGELOG.md) | Complete version history |
-| [LEARNINGS.md](LEARNINGS.md) | Critical SDK lessons (read first!) |
+| [SKILLS.md](SKILLS.md) | Critical SDK lessons (read first!) |
 | [docs/USAGE.md](docs/USAGE.md) | HTTP endpoint usage guide |
 | [docs/SECURITY.md](docs/SECURITY.md) | Security architecture |
 | [docs/TESTING.md](docs/TESTING.md) | Testing guide |
 | [docs/CAMERA_COMPATIBILITY.md](docs/CAMERA_COMPATIBILITY.md) | Camera compatibility notes |
 | [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) | Feature tracking |
-| [CLAUDE_CONTEXT.md](CLAUDE_CONTEXT.md) | AI assistant context |
+| [CLAUDE.md](CLAUDE.md) | AI assistant context |
 
 ## BEFORE YOU START IMPLEMENTING
 
-**Read `LEARNINGS.md` first!** It documents critical bugs and lessons learned that took significant time to debug:
+**Read `SKILLS.md` first!** It documents critical bugs and lessons learned that took significant time to debug:
 - Why display names show as "?...?" and how to fix it
 - Resource bundle registration (critical!)
 - FormFieldType options and their actual behavior
