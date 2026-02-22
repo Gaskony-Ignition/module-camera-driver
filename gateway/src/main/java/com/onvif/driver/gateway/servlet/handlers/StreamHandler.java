@@ -148,6 +148,11 @@ public class StreamHandler extends BaseHandler {
                     response.sendError(400, "Invalid profile token format");
                     return null;
                 }
+                // Auto-select default profile if none provided (Perspective components)
+                if (profileToken == null || profileToken.trim().isEmpty()) {
+                    profileToken = onvifDevice.getDefaultProfileToken();
+                    logger.debug("Using default profile token for ONVIF device {}: {}", deviceName, profileToken);
+                }
                 streamOnvifDevice(onvifDevice, deviceName, profileToken, fps, response, origin, requestContext, startTime);
             }
 

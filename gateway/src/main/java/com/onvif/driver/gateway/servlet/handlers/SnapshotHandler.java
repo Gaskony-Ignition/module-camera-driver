@@ -112,10 +112,14 @@ public class SnapshotHandler extends BaseHandler {
             byte[] snapshotBytes;
 
             if (onvifDevice != null) {
-                // ONVIF device - requires profile token
+                // ONVIF device - use provided profile token or fall back to default
                 if (profileToken == null || profileToken.trim().isEmpty()) {
-                    response.sendError(400, "Missing required parameter: profile (required for ONVIF devices)");
-                    return null;
+                    profileToken = onvifDevice.getDefaultProfileToken();
+                    if (profileToken == null) {
+                        response.sendError(400, "No media profiles available for ONVIF device");
+                        return null;
+                    }
+                    logger.debug("Using default profile token for ONVIF device {}: {}", deviceName, profileToken);
                 }
                 if (!ValidationUtil.isValidProfileToken(profileToken)) {
                     response.sendError(400, "Invalid profile token format");

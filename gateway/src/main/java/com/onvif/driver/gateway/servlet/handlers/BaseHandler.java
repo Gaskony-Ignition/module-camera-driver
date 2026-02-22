@@ -75,7 +75,9 @@ public abstract class BaseHandler {
      * Sends an authentication required error response.
      */
     protected void sendAuthenticationRequired(HttpServletResponse response) throws IOException {
-        response.setHeader("WWW-Authenticate", "Basic realm=\"Camera Driver\", charset=\"UTF-8\"");
+        // Do NOT set WWW-Authenticate: Basic — it can trigger auth dialogs in the Designer's
+        // embedded JCEF browser, intercepting the 401 before the component's fetch() sees it.
+        // The connection browser uses its own auth flow via /auth-status, not WWW-Authenticate.
         response.sendError(401, "Authentication required. Please log in to the Ignition Gateway or provide an API key.");
     }
 }

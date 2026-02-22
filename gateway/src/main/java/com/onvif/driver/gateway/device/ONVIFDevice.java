@@ -57,6 +57,7 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
     private ONVIFPoller poller;
     private AddressSpaceBuilder addressSpaceBuilder;
     private boolean go2RtcStreamRegistered = false;
+    private volatile String defaultProfileToken = null;
 
     // Auto-reconnect state
     private int reconnectAttempts = 0;
@@ -260,6 +261,12 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
             }
         } else {
             logger.info("Auto-discover disabled, skipping service discovery");
+        }
+
+        // Cache the default profile token for Perspective components that don't specify one
+        if (mediaProfiles != null && !mediaProfiles.isEmpty()) {
+            this.defaultProfileToken = mediaProfiles.get(0).getToken();
+            logger.info("Default profile token cached: {}", defaultProfileToken);
         }
 
         // Register first RTSP stream with go2rtc (with embedded credentials)
@@ -561,6 +568,16 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
      */
     public ONVIFClient getClient() {
         return onvifClient;
+    }
+
+    /**
+     * Returns the default (first) media profile token, cached at device startup.
+     * Used by Perspective components that don't specify a profile parameter.
+     *
+     * @return Default profile token or null if no profiles were discovered
+     */
+    public String getDefaultProfileToken() {
+        return defaultProfileToken;
     }
 
     /**

@@ -3,6 +3,7 @@ package com.onvif.driver.gateway.auth;
 import com.inductiveautomation.ignition.gateway.dataroutes.RequestContext;
 import com.inductiveautomation.ignition.gateway.model.GatewayContext;
 import com.inductiveautomation.ignition.gateway.web.session.WebUiSession;
+import com.inductiveautomation.perspective.gateway.api.PerspectiveContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,9 +85,13 @@ public class AuthenticationManager {
      */
     public boolean isAuthenticated(RequestContext requestContext) {
         // Method 1a: Check for valid Ignition WebUiSession (gateway config UI sessions)
-        if (WebUiSession.find(requestContext).isPresent()) {
-            logger.debug("Request authenticated via Ignition WebUiSession");
-            return true;
+        try {
+            if (WebUiSession.find(requestContext).isPresent()) {
+                logger.debug("Request authenticated via Ignition WebUiSession");
+                return true;
+            }
+        } catch (Throwable t) {
+            logger.trace("WebUiSession check failed: {}", t.getMessage());
         }
 
         // Method 1b: Check for valid HTTP session (Perspective Designer/runtime sessions)
@@ -95,10 +100,29 @@ public class AuthenticationManager {
         // authenticated through Ignition's session management (Designer login, Perspective
         // login, etc.) and the session cookie was set during that authentication flow.
         HttpServletRequest request = requestContext.getRequest();
-        HttpSession httpSession = request.getSession(false);
-        if (httpSession != null) {
-            logger.debug("Request authenticated via HTTP session (Perspective/Designer)");
-            return true;
+        try {
+            HttpSession httpSession = request.getSession(false);
+            if (httpSession != null) {
+                logger.debug("Request authenticated via HTTP session (Perspective/Designer)");
+                return true;
+            }
+        } catch (Throwable t) {
+            logger.trace("HTTP session check failed: {}", t.getMessage());
+        }
+
+        // Method 1c: Check for active Perspective session
+        // The Designer's embedded JCEF browser may not carry standard HTTP session cookies.
+        // If the Perspective module is loaded and has active sessions, the user authenticated
+        // through the Designer or Perspective runtime login. Allow requests in that context.
+        try {
+            PerspectiveContext pCtx = PerspectiveContext.get(gatewayContext);
+            if (pCtx != null && !pCtx.getSessionMonitor().getSessionInfos().isEmpty()) {
+                logger.debug("Request authenticated via active Perspective session context");
+                return true;
+            }
+        } catch (Throwable t) {
+            // Perspective module not loaded — skip this auth method
+            logger.trace("Perspective session check skipped: {}", t.getMessage());
         }
 
         // Method 2: Check for API key
