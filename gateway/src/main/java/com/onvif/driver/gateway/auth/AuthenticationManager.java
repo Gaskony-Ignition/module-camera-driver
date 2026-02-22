@@ -14,6 +14,7 @@ import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -37,6 +38,9 @@ public class AuthenticationManager {
 
     private static final Logger logger = LoggerFactory.getLogger(AuthenticationManager.class);
 
+    /** Holds a salted SHA-256 hash of an API key along with the owning username. */
+    private record StoredApiKey(String username, String saltHex, String hashHex) {}
+
     // Account lockout configuration
     private static final int MAX_FAILED_ATTEMPTS = 5;
     private static final long LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
@@ -46,8 +50,9 @@ public class AuthenticationManager {
     private static final Map<String, Long> lockoutUntil = new ConcurrentHashMap<>();
 
     // API Key storage (in-memory for now - should be moved to persistent storage)
-    // Format: Map<apiKeyHash, username>
-    private static final Map<String, String> apiKeyStore = new ConcurrentHashMap<>();
+    // Key: random UUID (generated at addApiKey time); Value: salted-hash record.
+    // Using a UUID key allows O(1) removal during iteration without a reverse-lookup map.
+    private static final Map<String, StoredApiKey> apiKeyStore = new ConcurrentHashMap<>();
 
     private final GatewayContext gatewayContext;
 
@@ -215,14 +220,11 @@ public class AuthenticationManager {
             return false;
         }
 
-        // Hash the provided API key
-        String hashedKey = hashApiKey(apiKey);
-
-        // Check if hashed key exists in store
-        String username = apiKeyStore.get(hashedKey);
-        if (username != null) {
-            logger.info("API key authentication successful for user: {}", username);
-            return true;
+        for (StoredApiKey stored : apiKeyStore.values()) {
+            if (verifyApiKey(apiKey, stored)) {
+                logger.info("API key authentication successful for user: {}", stored.username());
+                return true;
+            }
         }
 
         logger.warn("Invalid API key provided");
@@ -279,10 +281,14 @@ public class AuthenticationManager {
      * @param username The username associated with this key
      */
     public void addApiKey(String apiKey, String username) {
-        String hashedKey = hashApiKey(apiKey);
-        apiKeyStore.put(hashedKey, username);
-        logger.info("API key added for user: {}", username);
-        logger.warn("API key stored in memory - will be lost on restart. Configure via Gateway settings for persistence.");
+        StoredApiKey stored = hashApiKeyWithSalt(apiKey, username);
+        if (stored != null) {
+            apiKeyStore.put(UUID.randomUUID().toString(), stored);
+            logger.info("API key added for user: {}", username);
+            logger.warn("API key stored in memory - will be lost on restart. Configure via Gateway settings for persistence.");
+        } else {
+            logger.error("Failed to hash API key for user: {}", username);
+        }
     }
 
     /**
@@ -291,27 +297,64 @@ public class AuthenticationManager {
      * @param apiKey The plain-text API key to remove
      */
     public void removeApiKey(String apiKey) {
-        String hashedKey = hashApiKey(apiKey);
-        String username = apiKeyStore.remove(hashedKey);
-        if (username != null) {
-            logger.info("API key removed for user: {}", username);
+        String removedUser = null;
+        java.util.Iterator<java.util.Map.Entry<String, StoredApiKey>> iter = apiKeyStore.entrySet().iterator();
+        while (iter.hasNext()) {
+            java.util.Map.Entry<String, StoredApiKey> entry = iter.next();
+            if (verifyApiKey(apiKey, entry.getValue())) {
+                removedUser = entry.getValue().username();
+                iter.remove();
+                break;
+            }
+        }
+        if (removedUser != null) {
+            logger.info("API key removed for user: {}", removedUser);
         }
     }
 
     /**
-     * Hashes an API key using SHA-256.
+     * Hashes an API key with a freshly generated random salt.
      *
-     * @param apiKey The plain-text API key
-     * @return The hashed key as a hex string
+     * @param apiKey    The plain-text API key
+     * @param username  The associated username
+     * @return StoredApiKey with salt and hash, or null on error
      */
-    private String hashApiKey(String apiKey) {
+    private StoredApiKey hashApiKeyWithSalt(String apiKey, String username) {
         try {
+            byte[] salt = new byte[16];
+            new SecureRandom().nextBytes(salt);
+            String saltHex = bytesToHex(salt);
+
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            digest.update(salt);
             byte[] hash = digest.digest(apiKey.getBytes(StandardCharsets.UTF_8));
-            return bytesToHex(hash);
+
+            return new StoredApiKey(username, saltHex, bytesToHex(hash));
         } catch (Exception e) {
             logger.error("Error hashing API key", e);
             return null;
+        }
+    }
+
+    /**
+     * Verifies a plain-text API key against a stored salted hash.
+     *
+     * @param apiKey The plain-text API key to verify
+     * @param stored The stored salted hash record
+     * @return true if the key matches, false otherwise
+     */
+    private boolean verifyApiKey(String apiKey, StoredApiKey stored) {
+        try {
+            byte[] salt = hexToBytes(stored.saltHex());
+
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            digest.update(salt);
+            byte[] hash = digest.digest(apiKey.getBytes(StandardCharsets.UTF_8));
+
+            return bytesToHex(hash).equals(stored.hashHex());
+        } catch (Exception e) {
+            logger.error("Error verifying API key", e);
+            return false;
         }
     }
 
@@ -327,6 +370,22 @@ public class AuthenticationManager {
             sb.append(String.format("%02x", b));
         }
         return sb.toString();
+    }
+
+    /**
+     * Converts a hex string to a byte array (inverse of {@link #bytesToHex}).
+     *
+     * @param hex The hex string (must have even length)
+     * @return The decoded byte array
+     */
+    private static byte[] hexToBytes(String hex) {
+        int len = hex.length();
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
+                                 + Character.digit(hex.charAt(i + 1), 16));
+        }
+        return data;
     }
 
     /**

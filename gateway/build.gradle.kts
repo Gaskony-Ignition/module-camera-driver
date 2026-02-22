@@ -29,6 +29,12 @@ dependencies {
     // Include web-ui component bundle
     modlImplementation(projects.webUi)
 
+    // Make Ignition gateway API available during test compilation and runtime
+    // Required because AuthenticationManager has a GatewayContext field that the JVM must resolve
+    // when loading the class, even when null is passed to the constructor.
+    testCompileOnly(libs.ignition.gateway.api)
+    testRuntimeOnly(libs.ignition.gateway.api)
+
     // Test dependencies (v2.1.0)
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.1")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.1")
