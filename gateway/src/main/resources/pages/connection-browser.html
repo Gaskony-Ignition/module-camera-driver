@@ -1721,11 +1721,10 @@
                 renderDeviceCards();
             });
 
-            // Log list scroll detection for auto-scroll
+            // Log list scroll detection for auto-scroll (newest at top)
             document.getElementById('logsList').addEventListener('scroll', function() {
                 var el = this;
-                var atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
-                serverLogAutoScroll = atBottom;
+                serverLogAutoScroll = el.scrollTop < 30;
             });
         });
 
@@ -2149,22 +2148,19 @@
                 if (isInitial) {
                     serverLogEntries = entries;
                 } else if (entries.length > 0) {
-                    // Append new entries
-                    for (var i = 0; i < entries.length; i++) {
-                        serverLogEntries.push(entries[i]);
-                    }
-                    // Trim to max
+                    // Prepend new entries at the top (newest-first order)
+                    serverLogEntries = entries.concat(serverLogEntries);
+                    // Trim oldest entries from the end
                     while (serverLogEntries.length > SERVER_LOG_MAX) {
-                        serverLogEntries.shift();
+                        serverLogEntries.pop();
                     }
                 } else {
                     return; // No new entries, skip re-render
                 }
 
-                // Track last event ID
+                // Track last event ID (first entry = newest since newest-first order)
                 if (serverLogEntries.length > 0) {
-                    var lastEntry = serverLogEntries[serverLogEntries.length - 1];
-                    serverLogLastEventId = lastEntry.id || 0;
+                    serverLogLastEventId = serverLogEntries[0].id || 0;
                 }
 
                 renderServerLogs();
@@ -2185,19 +2181,15 @@
             var html = '';
             for (var i = 0; i < serverLogEntries.length; i++) {
                 var e = serverLogEntries[i];
+                var ts = e.timestampMs ? new Date(e.timestampMs).toLocaleString() : '';
                 html += '<div class="log-entry">' +
-                    '<span class="log-timestamp">' + escapeHtml(e.timestamp) + '</span>' +
+                    '<span class="log-timestamp">' + escapeHtml(ts) + '</span>' +
                     '<span class="log-type ' + escapeHtml(e.level) + '">' + escapeHtml(e.level) + '</span>' +
                     '<span class="log-source" title="' + escapeAttr(e.logger || '') + '">' + escapeHtml(e.source || '') + '</span>' +
                     '<span class="log-message">' + escapeHtml(e.message) + '</span>' +
                     '</div>';
             }
             list.innerHTML = html;
-
-            // Auto-scroll to bottom
-            if (serverLogAutoScroll) {
-                list.scrollTop = list.scrollHeight;
-            }
         }
 
         function filterLogs(type, btn) {

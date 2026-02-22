@@ -92,14 +92,14 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
             context.getWebResourceManager().getNavigationModel().getConnections()
                 .addCategory("camera-driver", cat -> cat
                     .label("Camera Driver")
-                    .addPage("Connection Browser", page -> page
+                    .addPage("Devices", page -> page
                         .position(10)
                         .mount("/camera-connection-browser", "CameraConnectionBrowser", connectionBrowserModule)
                     )
                 );
 
             logger.info("Added 'Camera Driver' menu item to Gateway Config:");
-            logger.info("  - Connection Browser: /app/camera-connection-browser");
+            logger.info("  - Devices: /app/camera-connection-browser");
         } catch (Exception e) {
             logger.error("Failed to add WebUI navigation menu item", e);
         }

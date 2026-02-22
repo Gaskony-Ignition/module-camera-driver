@@ -16,8 +16,6 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -33,9 +31,6 @@ public class GatewayLogHandler extends BaseHandler {
     private static final int DEFAULT_LOG_LINES = 100;
     private static final int MAX_LOG_LINES = 500;
     private static final String CAMERA_DRIVER_LOGGER_PREFIX = "com.onvif.driver";
-    private static final DateTimeFormatter LOG_DATE_FORMAT =
-        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-            .withZone(ZoneId.systemDefault());
 
     public GatewayLogHandler(GatewayContext context,
                               ONVIFDeviceExtensionPoint deviceExtensionPoint,
@@ -160,8 +155,6 @@ public class GatewayLogHandler extends BaseHandler {
                         String loggerName = rs.getString("logger_name");
                         String level = rs.getString("level_string");
 
-                        String formattedTime = LOG_DATE_FORMAT.format(java.time.Instant.ofEpochMilli(timestmp));
-
                         // Shorten logger name for display (last segment)
                         String source = loggerName;
                         if (loggerName != null && loggerName.contains(".")) {
@@ -169,7 +162,7 @@ public class GatewayLogHandler extends BaseHandler {
                         }
 
                         entry.put("id", eventId);
-                        entry.put("timestamp", formattedTime);
+                        entry.put("timestampMs", timestmp);
                         entry.put("level", level);
                         entry.put("source", source);
                         entry.put("logger", loggerName);
@@ -180,8 +173,7 @@ public class GatewayLogHandler extends BaseHandler {
                     }
                 }
 
-                // Reverse to chronological order (oldest first)
-                Collections.reverse(tempList);
+                // Return newest-first (DESC query order preserved)
                 for (JSONObject entry : tempList) {
                     entries.put(entry);
                 }

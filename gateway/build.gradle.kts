@@ -137,7 +137,7 @@ tasks.named<ProcessResources>("processResources") {
     // Inject the Gradle project version into module.properties at build time.
     // Single source of truth: build.gradle.kts → module.properties → ONVIFModuleHook
     filesMatching("module.properties") {
-        expand(mapOf("moduleVersion" to project.version))
+        expand(mapOf("moduleVersion" to rootProject.version))
     }
 }
 
