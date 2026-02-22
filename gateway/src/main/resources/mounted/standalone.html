@@ -7,14 +7,26 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
+        /* ── Catppuccin Mocha palette (matches connection-browser.html) ───────── */
+        :root {
+            --bg-primary:   #11111b;
+            --bg-secondary: #181825;
+            --border:       #313244;
+            --text-primary: #cdd6f4;
+            --text-muted:   #a6adc8;
+            --accent:       #89b4fa;
+            --accent-hover: #b4d0ff;
+            --font-sans:    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
         html, body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            font-family: var(--font-sans);
             font-size: 14px;
             line-height: 1.5;
             height: 100%;
             overflow: hidden;
-            background-color: #0a0e14;
-            color: #e6e8eb;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
         }
@@ -24,8 +36,8 @@
             flex-direction: column;
             width: 100%;
             height: 100%;
-            background-color: #0a0e14;
-            color: #e6e8eb;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
         }
 
         /* Heading bar */
@@ -36,15 +48,15 @@
             padding: 0 14px;
             height: 32px;
             min-height: 32px;
-            background: #14181f;
-            border-bottom: 1px solid #20252e;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
             font-size: 13px;
             font-weight: 500;
-            color: #e6e8eb;
+            color: var(--text-primary);
         }
 
         .dedicated-header svg {
-            color: #61afef;
+            color: var(--accent);
             flex-shrink: 0;
         }
 
@@ -55,15 +67,15 @@
             justify-content: center;
             width: 100%;
             flex: 1;
-            background-color: #0a0e14;
+            background-color: var(--bg-primary);
         }
 
         .auth-required-card {
             text-align: center;
             padding: 48px 56px;
             border-radius: 12px;
-            background-color: #14181f;
-            border: 1px solid #20252e;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border);
             box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
             max-width: 440px;
         }
@@ -73,20 +85,20 @@
             align-items: center;
             justify-content: center;
             gap: 10px;
-            color: #e6e8eb;
+            color: var(--text-primary);
             font-size: 18px;
             font-weight: 600;
         }
 
         .auth-required-card .auth-module-identity svg {
-            color: #61afef;
+            color: var(--accent);
             flex-shrink: 0;
         }
 
         .auth-required-card .auth-divider {
             width: 48px;
             height: 1px;
-            background: #20252e;
+            background: var(--border);
             margin: 20px auto;
         }
 
@@ -100,13 +112,13 @@
             margin: 0 0 8px;
             font-size: 18px;
             font-weight: 600;
-            color: #e6e8eb;
+            color: var(--text-primary);
         }
 
         .auth-required-card p {
             margin: 4px 0;
             font-size: 14px;
-            color: #b3b8c4;
+            color: var(--text-muted);
             line-height: 1.6;
         }
 
@@ -116,8 +128,8 @@
             gap: 8px;
             margin-top: 20px;
             padding: 10px 24px;
-            background: #61afef;
-            color: #0a0e14;
+            background: var(--accent);
+            color: var(--bg-primary);
             border: none;
             border-radius: 6px;
             font-size: 14px;
@@ -128,7 +140,7 @@
         }
 
         .auth-required-card .auth-login-btn:hover {
-            background: #7bc4ff;
+            background: var(--accent-hover);
         }
 
         /* Content iframe */
@@ -172,13 +184,19 @@
             </div>
         </div>
 
-        <!-- Authenticated content -->
+        <!-- Authenticated content (src set by JS to keep API_BASE as single source of truth) -->
         <iframe id="contentFrame" class="content-frame hidden"
-                src="/data/camera-driver/connection-browser"
                 title="Camera Connection Browser"></iframe>
     </div>
 
     <script>
+        // Single source of truth for API base path in this page.
+        // If the module mount alias changes, update this constant and CameraDriverPaths.MOUNT_ALIAS.
+        var API_BASE = '/data/camera-driver';
+
+        // Set iframe src from the constant so the path is not duplicated in HTML attributes.
+        document.getElementById('contentFrame').src = API_BASE + '/connection-browser';
+
         var currentState = null; // 'auth' or 'content'
 
         function showState(state) {
@@ -202,7 +220,7 @@
                 // Use /auth-status which returns 200 with {authenticated: true/false}
                 // instead of /diagnostics which returns 401 + WWW-Authenticate header
                 // that triggers the browser's native Basic Auth popup
-                var res = await fetch('/data/camera-driver/auth-status', {
+                var res = await fetch(API_BASE + '/auth-status', {
                     signal: AbortSignal.timeout(5000),
                     credentials: 'same-origin'
                 });

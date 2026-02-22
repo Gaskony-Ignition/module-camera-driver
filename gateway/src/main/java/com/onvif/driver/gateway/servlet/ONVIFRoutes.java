@@ -4,6 +4,8 @@ import com.inductiveautomation.ignition.gateway.dataroutes.AccessControlStrategy
 import com.inductiveautomation.ignition.gateway.dataroutes.RequestContext;
 import com.inductiveautomation.ignition.gateway.dataroutes.RouteGroup;
 import com.inductiveautomation.ignition.gateway.model.GatewayContext;
+import com.onvif.driver.common.CameraDriverPaths;
+import com.onvif.driver.common.DeviceStatus;
 import com.onvif.driver.gateway.auth.AuthenticationManager;
 import com.onvif.driver.gateway.device.ONVIFDevice;
 import com.onvif.driver.gateway.device.ONVIFDeviceExtensionPoint;
@@ -181,89 +183,69 @@ public class ONVIFRoutes {
         logger.info("Mounting camera driver routes...");
         logger.debug("RouteGroup: {}, class: {}", routes, routes.getClass().getName());
 
-        // Mount snapshot endpoint at /data/camera-driver/snapshot
-        routes.newRoute("/snapshot")
+        routes.newRoute(CameraDriverPaths.ROUTE_SNAPSHOT)
             .handler(this::handleSnapshot)
-            .type(RouteGroup.TYPE_OCTET_STREAM)  // Binary data (handler sets image/jpeg)
-            .accessControl(AccessControlStrategy.OPEN_ROUTE)  // Custom auth handled in handler
+            .type(RouteGroup.TYPE_OCTET_STREAM)
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)
             .mount();
-        logger.debug("Mounted /snapshot route");
 
-        // Mount stream endpoint at /data/camera-driver/stream
-        routes.newRoute("/stream")
+        routes.newRoute(CameraDriverPaths.ROUTE_STREAM)
             .handler(this::handleStream)
-            .type(RouteGroup.TYPE_OCTET_STREAM)  // Binary data (handler sets multipart/x-mixed-replace)
-            .accessControl(AccessControlStrategy.OPEN_ROUTE)  // Custom auth handled in handler
+            .type(RouteGroup.TYPE_OCTET_STREAM)
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)
             .mount();
-        logger.debug("Mounted /stream route");
 
-        // Mount device list endpoint at /data/camera-driver/devices
-        routes.newRoute("/devices")
+        routes.newRoute(CameraDriverPaths.ROUTE_DEVICES)
             .handler(this::handleListDevices)
             .type(RouteGroup.TYPE_JSON)
-            .accessControl(AccessControlStrategy.OPEN_ROUTE)  // Custom auth handled in handler
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)
             .mount();
-        logger.debug("Mounted /devices route");
 
-        // Mount device status endpoint at /data/camera-driver/device/:name/status
-        routes.newRoute("/device/:name/status")
+        routes.newRoute(CameraDriverPaths.ROUTE_DEVICE_STATUS)
             .handler(this::handleDeviceStatus)
             .type(RouteGroup.TYPE_JSON)
             .accessControl(AccessControlStrategy.OPEN_ROUTE)
             .mount();
-        logger.debug("Mounted /device/:name/status route");
 
-        // Mount connection browser page at /data/camera-driver/connection-browser
-        routes.newRoute("/connection-browser")
+        routes.newRoute(CameraDriverPaths.ROUTE_CONNECTION_BROWSER)
             .handler(this::handleConnectionBrowserPage)
-            .type(RouteGroup.TYPE_OCTET_STREAM)  // Will set text/html in handler
+            .type(RouteGroup.TYPE_OCTET_STREAM)
             .accessControl(AccessControlStrategy.OPEN_ROUTE)
             .mount();
-        logger.debug("Mounted /connection-browser route");
 
-        // Mount health check endpoint
-        routes.newRoute("/health")
+        routes.newRoute(CameraDriverPaths.ROUTE_HEALTH)
             .handler(this::handleHealthCheck)
             .type(RouteGroup.TYPE_JSON)
             .accessControl(AccessControlStrategy.OPEN_ROUTE)
             .mount();
-        logger.debug("Mounted /health route");
 
-        // Mount diagnostics endpoint at /data/camera-driver/diagnostics
-        routes.newRoute("/diagnostics")
+        routes.newRoute(CameraDriverPaths.ROUTE_DIAGNOSTICS)
             .handler(this::handleDiagnostics)
             .type(RouteGroup.TYPE_JSON)
             .accessControl(AccessControlStrategy.OPEN_ROUTE)
             .mount();
-        logger.debug("Mounted /diagnostics route");
 
-        // Mount embeddable player page at /data/camera-driver/player
-        routes.newRoute("/player")
+        routes.newRoute(CameraDriverPaths.ROUTE_PLAYER)
             .handler(this::handlePlayerPage)
             .type(RouteGroup.TYPE_OCTET_STREAM)
             .accessControl(AccessControlStrategy.OPEN_ROUTE)
             .mount();
-        logger.debug("Mounted /player route");
 
-        // Mount auth status endpoint at /data/camera-driver/auth-status
         // Returns 200 with {authenticated: true/false} — no 401, no WWW-Authenticate header
         // Used by standalone.html to check auth without triggering browser Basic Auth popup
-        routes.newRoute("/auth-status")
+        routes.newRoute(CameraDriverPaths.ROUTE_AUTH_STATUS)
             .handler(this::handleAuthStatus)
             .type(RouteGroup.TYPE_JSON)
             .accessControl(AccessControlStrategy.OPEN_ROUTE)
             .mount();
-        logger.debug("Mounted /auth-status route");
 
-        // Mount gateway logs endpoint at /data/camera-driver/logs/gateway
-        routes.newRoute("/logs/gateway")
+        routes.newRoute(CameraDriverPaths.ROUTE_LOGS_GATEWAY)
             .handler(this::handleGatewayLogs)
             .type(RouteGroup.TYPE_JSON)
             .accessControl(AccessControlStrategy.OPEN_ROUTE)
             .mount();
-        logger.debug("Mounted /logs/gateway route");
 
-        logger.info("Camera driver routes mounted: /snapshot, /stream, /devices, /device/:name/status, /connection-browser, /health, /diagnostics, /player, /auth-status, /logs/gateway");
+        logger.info("Camera driver routes mounted under /data/{}", CameraDriverPaths.MOUNT_ALIAS);
     }
 
     /**
@@ -346,7 +328,7 @@ public class ONVIFRoutes {
                 }
 
                 String deviceStatus = onvifDevice.getStatus();
-                if (!"Running".equals(deviceStatus) && !"Connected".equals(deviceStatus)) {
+                if (!DeviceStatus.isActive(deviceStatus)) {
                     response.sendError(503, "Device is not connected: " + deviceStatus);
                     return null;
                 }
@@ -361,7 +343,7 @@ public class ONVIFRoutes {
             } else {
                 // Generic camera device
                 String deviceStatus = genericDevice.getStatus();
-                if (!"Running".equals(deviceStatus) && !"Connected".equals(deviceStatus)) {
+                if (!DeviceStatus.isActive(deviceStatus)) {
                     response.sendError(503, "Device is not connected: " + deviceStatus);
                     return null;
                 }
@@ -406,16 +388,8 @@ public class ONVIFRoutes {
             logger.debug("Setting response headers");
             response.setContentType("image/jpeg");
             response.setContentLength(snapshotBytes.length);
-            response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-            response.setHeader("Pragma", "no-cache");
-            response.setHeader("Expires", "0");
-            // CORS - only allow requests from authenticated Ignition sessions
-            // In production, this should be restricted to specific origins
             String origin = context.getRequest().getHeader("Origin");
-            if (origin != null && isAllowedOrigin(origin)) {
-                response.setHeader("Access-Control-Allow-Origin", origin);
-                response.setHeader("Access-Control-Allow-Credentials", "true");
-            }
+            setStreamingHeaders(response, origin);
 
             logger.debug("Writing {} bytes to response", snapshotBytes.length);
             response.getOutputStream().write(snapshotBytes);
@@ -511,7 +485,7 @@ public class ONVIFRoutes {
 
             // Check device status
             String deviceStatus = onvifDevice != null ? onvifDevice.getStatus() : genericDevice.getStatus();
-            if (!"Running".equals(deviceStatus) && !"Connected".equals(deviceStatus)) {
+            if (!DeviceStatus.isActive(deviceStatus)) {
                 response.sendError(503, "Device is not connected: " + deviceStatus);
                 return null;
             }
@@ -542,6 +516,63 @@ public class ONVIFRoutes {
         }
 
         return null;
+    }
+
+    /** Maximum consecutive stream errors before the stream loop exits. */
+    private static final int MAX_CONSECUTIVE_STREAM_ERRORS = 5;
+
+    /**
+     * Sets the standard no-cache and CORS response headers for streaming and snapshot endpoints.
+     * Single source of truth: changing security headers here propagates to every endpoint.
+     */
+    private void setStreamingHeaders(HttpServletResponse response, String origin) {
+        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        response.setHeader("Pragma", "no-cache");
+        response.setHeader("Expires", "0");
+        response.setHeader("Connection", "close");
+        if (origin != null && isAllowedOrigin(origin)) {
+            response.setHeader("Access-Control-Allow-Origin", origin);
+            response.setHeader("Access-Control-Allow-Credentials", "true");
+        }
+    }
+
+    /**
+     * Builds the synthetic profiles JSON array for a Generic Camera device.
+     * Single source of truth for the /devices and /device/:name/status endpoints.
+     */
+    private JSONArray buildGenericCameraProfiles(GenericCameraDevice device) throws Exception {
+        GenericCameraConfig cfg = device.getConfig();
+        JSONArray profiles = new JSONArray();
+
+        String rtspUrl = device.getAuthenticatedRtspUrl();
+        if (rtspUrl != null && !rtspUrl.trim().isEmpty()) {
+            JSONObject rtspProfile = new JSONObject();
+            rtspProfile.put("token", "rtsp");
+            rtspProfile.put("name", "RTSP Stream");
+            rtspProfile.put("encoding", "H.264");
+            rtspProfile.put("streamUri", rtspUrl);
+            int fps = cfg.streamSettings() != null ? cfg.streamSettings().defaultFps() : 15;
+            rtspProfile.put("frameRate", fps);
+            profiles.put(rtspProfile);
+        }
+        String snapshotUrl = cfg.cameraConnection().snapshotUrl();
+        if (snapshotUrl != null && !snapshotUrl.trim().isEmpty()) {
+            JSONObject snapshotProfile = new JSONObject();
+            snapshotProfile.put("token", "snapshot");
+            snapshotProfile.put("name", "HTTP Snapshot");
+            snapshotProfile.put("encoding", "JPEG");
+            profiles.put(snapshotProfile);
+        }
+        String mjpegUrl = cfg.cameraConnection().mjpegUrl();
+        if (mjpegUrl != null && !mjpegUrl.trim().isEmpty()) {
+            JSONObject mjpegProfile = new JSONObject();
+            mjpegProfile.put("token", "mjpeg");
+            mjpegProfile.put("name", "MJPEG Stream");
+            mjpegProfile.put("encoding", "MJPEG");
+            mjpegProfile.put("streamUri", mjpegUrl);
+            profiles.put(mjpegProfile);
+        }
+        return profiles;
     }
 
     /**
@@ -584,14 +615,7 @@ public class ONVIFRoutes {
         if (device.isGo2RtcStreamRegistered() && go2RtcManager != null && go2RtcManager.isAvailable()) {
             logger.info("Streaming via go2rtc MP4 for ONVIF device: {}", deviceName);
             String go2rtcMp4Url = go2RtcManager.getStreamMp4Url(deviceName);
-            response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-            response.setHeader("Pragma", "no-cache");
-            response.setHeader("Expires", "0");
-            response.setHeader("Connection", "close");
-            if (origin != null && isAllowedOrigin(origin)) {
-                response.setHeader("Access-Control-Allow-Origin", origin);
-                response.setHeader("Access-Control-Allow-Credentials", "true");
-            }
+            setStreamingHeaders(response, origin);
             if (proxyStream(go2rtcMp4Url, response, deviceName, startTime)) {
                 return;
             }
@@ -605,20 +629,12 @@ public class ONVIFRoutes {
         }
 
         response.setContentType("multipart/x-mixed-replace; boundary=" + BOUNDARY);
-        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-        response.setHeader("Pragma", "no-cache");
-        response.setHeader("Expires", "0");
-        response.setHeader("Connection", "close");
-        if (origin != null && isAllowedOrigin(origin)) {
-            response.setHeader("Access-Control-Allow-Origin", origin);
-            response.setHeader("Access-Control-Allow-Credentials", "true");
-        }
+        setStreamingHeaders(response, origin);
 
         OutputStream output = response.getOutputStream();
         long frameDelay = 1000 / fps;
         int frameCount = 0;
         int errorCount = 0;
-        int maxConsecutiveErrors = 5;
 
         logger.info("Starting MJPEG snapshot stream - device: {}, profile: {}, fps: {}", deviceName, profileToken, fps);
 
@@ -638,7 +654,7 @@ public class ONVIFRoutes {
                 }
             } catch (IOException e) {
                 errorCount++;
-                if (errorCount >= maxConsecutiveErrors) {
+                if (errorCount >= MAX_CONSECUTIVE_STREAM_ERRORS) {
                     logger.error("Too many consecutive errors, stopping stream for device: {}", deviceName);
                     break;
                 }
@@ -677,14 +693,7 @@ public class ONVIFRoutes {
         if (hasRtsp && device.isGo2RtcStreamRegistered() && go2RtcManager != null && go2RtcManager.isAvailable()) {
             logger.info("Streaming via go2rtc MP4 for device: {}", deviceName);
             String go2rtcMp4Url = go2RtcManager.getStreamMp4Url(deviceName);
-            response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-            response.setHeader("Pragma", "no-cache");
-            response.setHeader("Expires", "0");
-            response.setHeader("Connection", "close");
-            if (origin != null && isAllowedOrigin(origin)) {
-                response.setHeader("Access-Control-Allow-Origin", origin);
-                response.setHeader("Access-Control-Allow-Credentials", "true");
-            }
+            setStreamingHeaders(response, origin);
             if (proxyStream(go2rtcMp4Url, response, deviceName, startTime)) {
                 return;
             }
@@ -693,14 +702,7 @@ public class ONVIFRoutes {
 
         // Set MJPEG headers for fallback methods
         response.setContentType("multipart/x-mixed-replace; boundary=" + BOUNDARY);
-        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-        response.setHeader("Pragma", "no-cache");
-        response.setHeader("Expires", "0");
-        response.setHeader("Connection", "close");
-        if (origin != null && isAllowedOrigin(origin)) {
-            response.setHeader("Access-Control-Allow-Origin", origin);
-            response.setHeader("Access-Control-Allow-Credentials", "true");
-        }
+        setStreamingHeaders(response, origin);
 
         // Fallback 2: Native MJPEG URL proxy
         if (hasMjpeg) {
@@ -787,7 +789,6 @@ public class ONVIFRoutes {
         long frameDelay = 1000 / fps;
         int frameCount = 0;
         int errorCount = 0;
-        int maxConsecutiveErrors = 5;
 
         while (!Thread.currentThread().isInterrupted()) {
             long frameStart = System.currentTimeMillis();
@@ -805,7 +806,7 @@ public class ONVIFRoutes {
                 }
             } catch (IOException e) {
                 errorCount++;
-                if (errorCount >= maxConsecutiveErrors) {
+                if (errorCount >= MAX_CONSECUTIVE_STREAM_ERRORS) {
                     logger.error("Too many snapshot errors, stopping stream for device: {}", deviceName);
                     break;
                 }
@@ -1061,36 +1062,7 @@ public class ONVIFRoutes {
                     }
                     deviceJson.put("go2rtcRegistered", device.isGo2RtcStreamRegistered());
 
-                    // Generate synthetic profiles from configured URLs
-                    JSONArray genericProfiles = new JSONArray();
-                    String rtspUrl = device.getAuthenticatedRtspUrl();
-                    if (rtspUrl != null && !rtspUrl.trim().isEmpty()) {
-                        JSONObject rtspProfile = new JSONObject();
-                        rtspProfile.put("token", "rtsp");
-                        rtspProfile.put("name", "RTSP Stream");
-                        rtspProfile.put("encoding", "H.264");
-                        rtspProfile.put("streamUri", rtspUrl);
-                        int fps = cfg.streamSettings() != null ? cfg.streamSettings().defaultFps() : 15;
-                        rtspProfile.put("frameRate", fps);
-                        genericProfiles.put(rtspProfile);
-                    }
-                    String snapshotUrl = cfg.cameraConnection().snapshotUrl();
-                    if (snapshotUrl != null && !snapshotUrl.trim().isEmpty()) {
-                        JSONObject snapshotProfile = new JSONObject();
-                        snapshotProfile.put("token", "snapshot");
-                        snapshotProfile.put("name", "HTTP Snapshot");
-                        snapshotProfile.put("encoding", "JPEG");
-                        genericProfiles.put(snapshotProfile);
-                    }
-                    String mjpegUrl = cfg.cameraConnection().mjpegUrl();
-                    if (mjpegUrl != null && !mjpegUrl.trim().isEmpty()) {
-                        JSONObject mjpegProfile = new JSONObject();
-                        mjpegProfile.put("token", "mjpeg");
-                        mjpegProfile.put("name", "MJPEG Stream");
-                        mjpegProfile.put("encoding", "MJPEG");
-                        mjpegProfile.put("streamUri", mjpegUrl);
-                        genericProfiles.put(mjpegProfile);
-                    }
+                    JSONArray genericProfiles = buildGenericCameraProfiles(device);
                     if (genericProfiles.length() > 0) {
                         deviceJson.put("profiles", genericProfiles);
                         deviceJson.put("profileCount", genericProfiles.length());
@@ -1151,37 +1123,7 @@ public class ONVIFRoutes {
                 result.put("go2rtcRegistered", genericDevice.isGo2RtcStreamRegistered());
                 result.put("timestamp", System.currentTimeMillis());
 
-                // Generate synthetic profiles from configured URLs
-                GenericCameraConfig cfg = genericDevice.getConfig();
-                JSONArray genericProfiles = new JSONArray();
-                String rtspUrl = genericDevice.getAuthenticatedRtspUrl();
-                if (rtspUrl != null && !rtspUrl.trim().isEmpty()) {
-                    JSONObject rtspProfile = new JSONObject();
-                    rtspProfile.put("token", "rtsp");
-                    rtspProfile.put("name", "RTSP Stream");
-                    rtspProfile.put("encoding", "H.264");
-                    rtspProfile.put("streamUri", rtspUrl);
-                    int fps = cfg.streamSettings() != null ? cfg.streamSettings().defaultFps() : 15;
-                    rtspProfile.put("frameRate", fps);
-                    genericProfiles.put(rtspProfile);
-                }
-                String snapshotUrl = cfg.cameraConnection().snapshotUrl();
-                if (snapshotUrl != null && !snapshotUrl.trim().isEmpty()) {
-                    JSONObject snapshotProfile = new JSONObject();
-                    snapshotProfile.put("token", "snapshot");
-                    snapshotProfile.put("name", "HTTP Snapshot");
-                    snapshotProfile.put("encoding", "JPEG");
-                    genericProfiles.put(snapshotProfile);
-                }
-                String mjpegUrl = cfg.cameraConnection().mjpegUrl();
-                if (mjpegUrl != null && !mjpegUrl.trim().isEmpty()) {
-                    JSONObject mjpegProfile = new JSONObject();
-                    mjpegProfile.put("token", "mjpeg");
-                    mjpegProfile.put("name", "MJPEG Stream");
-                    mjpegProfile.put("encoding", "MJPEG");
-                    mjpegProfile.put("streamUri", mjpegUrl);
-                    genericProfiles.put(mjpegProfile);
-                }
+                JSONArray genericProfiles = buildGenericCameraProfiles(genericDevice);
                 if (genericProfiles.length() > 0) {
                     result.put("profiles", genericProfiles);
                     result.put("profileCount", genericProfiles.length());
@@ -1299,12 +1241,10 @@ public class ONVIFRoutes {
         // Count running devices
         int runningCount = 0;
         for (ONVIFDevice d : ONVIFDeviceExtensionPoint.getAllDevices().values()) {
-            String s = d.getStatus();
-            if ("Running".equals(s) || "Connected".equals(s)) runningCount++;
+            if (DeviceStatus.isActive(d.getStatus())) runningCount++;
         }
         for (GenericCameraDevice d : GenericCameraExtensionPoint.getAllDevices().values()) {
-            String s = d.getStatus();
-            if ("Running".equals(s) || "Connected".equals(s)) runningCount++;
+            if (DeviceStatus.isActive(d.getStatus())) runningCount++;
         }
         result.put("runningCount", runningCount);
 

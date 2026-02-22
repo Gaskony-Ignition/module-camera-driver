@@ -7,6 +7,7 @@ import com.onvif.driver.gateway.onvif.MediaProfile;
 import com.onvif.driver.gateway.onvif.ONVIFClient;
 import com.onvif.driver.gateway.onvif.ONVIFService;
 import com.onvif.driver.gateway.onvif.PTZStatus;
+import com.onvif.driver.common.DeviceStatus;
 import com.onvif.driver.gateway.stream.Go2RtcManager;
 import com.onvif.driver.gateway.util.CredentialUtil;
 import org.eclipse.milo.opcua.sdk.core.Reference;
@@ -51,7 +52,7 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
     private final SubscriptionModel subscriptionModel;
 
     private UaFolderNode rootNode;
-    private String deviceStatus = "Initializing";
+    private String deviceStatus = DeviceStatus.INITIALIZING.displayName();
     private ONVIFClient onvifClient;
     private ONVIFPoller poller;
     private AddressSpaceBuilder addressSpaceBuilder;
@@ -158,7 +159,7 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
         logger.info("Poll Interval: {} seconds", config.onvif().pollInterval());
         logger.info("Auto-discover: {}", config.onvif().autoDiscover());
 
-        deviceStatus = "Connecting";
+        deviceStatus = DeviceStatus.CONNECTING.displayName();
 
         // Retrieve password from SecretConfig
         String password = CredentialUtil.resolvePassword(context.getGatewayContext(), config.connection().password());
@@ -193,7 +194,7 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
         }
         logger.info("✅ Connection test PASSED");
 
-        deviceStatus = "Discovering Services";
+        deviceStatus = DeviceStatus.DISCOVERING.displayName();
 
         // Get device information
         logger.info("Retrieving device information...");
@@ -267,7 +268,7 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
         }
 
         // Create OPC-UA address space
-        deviceStatus = "Building Address Space";
+        deviceStatus = DeviceStatus.BUILDING_ADDRESS_SPACE.displayName();
         logger.info("Creating OPC UA address space...");
         createRootNode();
         buildAddressSpace(deviceInfo, services, mediaProfiles, hasPTZ);
@@ -282,7 +283,7 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
             logger.info("Polling disabled (interval = 0)");
         }
 
-        deviceStatus = "Running";
+        deviceStatus = DeviceStatus.RUNNING.displayName();
         logger.info("===========================================");
         logger.info("✅ ONVIF DEVICE STARTED SUCCESSFULLY");
         logger.info("Device Name: {}", context.getName());
@@ -344,7 +345,7 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
             }
         }
 
-        deviceStatus = "Stopped";
+        deviceStatus = DeviceStatus.STOPPED.displayName();
 
         // Unregister this device from the extension point registry
         ONVIFDeviceExtensionPoint.unregisterDevice(context.getName());

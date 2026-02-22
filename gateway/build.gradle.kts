@@ -123,8 +123,13 @@ sourceSets {
     }
 }
 
-tasks.named("processResources") {
+tasks.named<ProcessResources>("processResources") {
     dependsOn(downloadGo2Rtc)
+    // Inject the Gradle project version into module.properties at build time.
+    // Single source of truth: build.gradle.kts → module.properties → ONVIFModuleHook
+    filesMatching("module.properties") {
+        expand(mapOf("moduleVersion" to project.version))
+    }
 }
 
 tasks.test {

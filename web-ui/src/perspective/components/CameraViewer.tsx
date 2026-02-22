@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { ComponentProps, ComponentMeta, PropertyTree, SizeObject } from '@inductiveautomation/perspective-client';
+import { StreamMode, StreamStatus } from '../types';
+import { CAMERA_THEME } from '../theme';
+import { API } from '../../api/paths';
 
 export const CAMERA_VIEWER_TYPE = 'cam.display.camera-viewer';
-
-type StreamMode = 'auto' | 'mse' | 'snapshot';
-type StreamStatus = 'loading' | 'streaming' | 'error' | 'idle';
 
 interface CameraViewerProps extends ComponentProps {
     props: {
@@ -60,7 +60,7 @@ export function useCameraStream(
         const fetchSnapshot = async () => {
             try {
                 const resp = await fetch(
-                    `/data/camera-driver/snapshot?device=${encodeURIComponent(deviceName)}`,
+                    API.snapshot(deviceName),
                     { credentials: 'include' }
                 );
                 if (!resp.ok) {
@@ -119,7 +119,7 @@ export function useCameraStream(
         let response: Response;
         try {
             response = await fetch(
-                `/data/camera-driver/stream?device=${encodeURIComponent(deviceName)}`,
+                API.stream(deviceName),
                 { credentials: 'include', signal: ac.signal }
             );
         } catch (e: any) {
@@ -244,21 +244,21 @@ const styles = {
         position: 'relative' as const,
         width: '100%',
         height: '100%',
-        background: '#1c1c22',
+        background: CAMERA_THEME.bg,
         overflow: 'hidden',
     },
     video: (objectFit: string) => ({
         width: '100%',
         height: '100%',
         objectFit: objectFit as any,
-        background: '#1c1c22',
+        background: CAMERA_THEME.bg,
         display: 'block',
     }),
     img: (objectFit: string) => ({
         width: '100%',
         height: '100%',
         objectFit: objectFit as any,
-        background: '#1c1c22',
+        background: CAMERA_THEME.bg,
         display: 'block',
     }),
     overlay: {
@@ -267,10 +267,10 @@ const styles = {
         left: 0,
         right: 0,
         padding: '6px 10px',
-        background: 'linear-gradient(transparent, rgba(0,0,0,0.7))',
-        color: '#e0e0e8',
+        background: CAMERA_THEME.overlayGradient,
+        color: CAMERA_THEME.text,
         fontSize: '12px',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        fontFamily: CAMERA_THEME.fontFamily,
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -282,7 +282,9 @@ const styles = {
         borderRadius: '50%',
         display: 'inline-block',
         marginRight: 6,
-        background: status === 'streaming' ? '#4caf50' : status === 'error' ? '#e05555' : '#ffa726',
+        background: status === 'streaming' ? CAMERA_THEME.success
+                  : status === 'error'     ? CAMERA_THEME.error
+                  :                          CAMERA_THEME.warning,
     }),
     centerOverlay: {
         position: 'absolute' as const,
@@ -294,12 +296,12 @@ const styles = {
         flexDirection: 'column' as const,
         alignItems: 'center',
         justifyContent: 'center',
-        color: '#8b8fa0',
+        color: CAMERA_THEME.textMuted,
         fontSize: '13px',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        fontFamily: CAMERA_THEME.fontFamily,
     },
     errorText: {
-        color: '#e05555',
+        color: CAMERA_THEME.error,
         textAlign: 'center' as const,
         maxWidth: '80%',
         lineHeight: 1.5,

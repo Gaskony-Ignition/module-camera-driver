@@ -1,6 +1,7 @@
 package com.onvif.driver.gateway.device.generic;
 
 import com.inductiveautomation.ignition.gateway.opcua.server.api.DeviceContext;
+import com.onvif.driver.common.CameraDriverPaths;
 import org.eclipse.milo.opcua.sdk.core.AccessLevel;
 import org.eclipse.milo.opcua.sdk.core.Reference;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaFolderNode;
@@ -66,11 +67,11 @@ public class GenericCameraAddressSpaceBuilder {
         // Ignition gateway endpoints for Perspective consumption
         String deviceName = deviceContext.getName();
         String snapshotEndpoint = String.format(
-            "/main/data/camera-driver/snapshot?device=%s",
+            CameraDriverPaths.DATA_BASE + CameraDriverPaths.ROUTE_SNAPSHOT + "?device=%s",
             urlEncode(deviceName)
         );
         String streamEndpoint = String.format(
-            "/main/data/camera-driver/stream?device=%s&fps=%d",
+            CameraDriverPaths.DATA_BASE + CameraDriverPaths.ROUTE_STREAM + "?device=%s&fps=%d",
             urlEncode(deviceName),
             config.streamSettings().defaultFps()
         );

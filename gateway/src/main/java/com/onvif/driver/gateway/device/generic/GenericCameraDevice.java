@@ -2,6 +2,7 @@ package com.onvif.driver.gateway.device.generic;
 
 import com.inductiveautomation.ignition.gateway.opcua.server.api.Device;
 import com.inductiveautomation.ignition.gateway.opcua.server.api.DeviceContext;
+import com.onvif.driver.common.DeviceStatus;
 import com.onvif.driver.gateway.stream.Go2RtcManager;
 import com.onvif.driver.gateway.util.CredentialUtil;
 import org.eclipse.milo.opcua.sdk.core.Reference;
@@ -43,7 +44,7 @@ public class GenericCameraDevice extends ManagedAddressSpaceWithLifecycle implem
     private final SubscriptionModel subscriptionModel;
 
     private UaFolderNode rootNode;
-    private String deviceStatus = "Initializing";
+    private String deviceStatus = DeviceStatus.INITIALIZING.displayName();
     private GenericCameraClient cameraClient;
     private GenericCameraAddressSpaceBuilder addressSpaceBuilder;
     private boolean go2RtcStreamRegistered = false;
@@ -74,13 +75,13 @@ public class GenericCameraDevice extends ManagedAddressSpaceWithLifecycle implem
         GenericCameraExtensionPoint.registerDevice(context.getName(), this);
 
         if (!config.general().enabled()) {
-            deviceStatus = "Disabled";
+            deviceStatus = DeviceStatus.DISABLED.displayName();
             logger.info("Device is disabled: {}", context.getName());
             return;
         }
 
         try {
-            deviceStatus = "Connecting";
+            deviceStatus = DeviceStatus.CONNECTING.displayName();
 
             // Resolve password if configured
             String password = CredentialUtil.resolvePassword(context.getGatewayContext(), config.cameraConnection().password());
@@ -127,7 +128,7 @@ public class GenericCameraDevice extends ManagedAddressSpaceWithLifecycle implem
             }
 
             // Build OPC-UA address space
-            deviceStatus = "Building Address Space";
+            deviceStatus = DeviceStatus.BUILDING_ADDRESS_SPACE.displayName();
             createRootNode();
 
             addressSpaceBuilder = new GenericCameraAddressSpaceBuilder(
@@ -138,7 +139,8 @@ public class GenericCameraDevice extends ManagedAddressSpaceWithLifecycle implem
             String connectionStatus = httpReachable || go2RtcStreamRegistered ? "Connected" : "URL-Only";
             addressSpaceBuilder.buildStatus(connectionStatus, go2RtcAvailable);
 
-            deviceStatus = httpReachable || go2RtcStreamRegistered ? "Running" : "Connected";
+            deviceStatus = httpReachable || go2RtcStreamRegistered
+                ? DeviceStatus.RUNNING.displayName() : DeviceStatus.CONNECTED.displayName();
             logger.info("=== Generic Camera Device Started: {} (Status: {}) ===", context.getName(), deviceStatus);
 
         } catch (Exception e) {
@@ -165,7 +167,7 @@ public class GenericCameraDevice extends ManagedAddressSpaceWithLifecycle implem
             }
         }
 
-        deviceStatus = "Stopped";
+        deviceStatus = DeviceStatus.STOPPED.displayName();
 
         // Unregister from device registry
         GenericCameraExtensionPoint.unregisterDevice(context.getName());
@@ -253,7 +255,7 @@ public class GenericCameraDevice extends ManagedAddressSpaceWithLifecycle implem
 
         if (go2RtcStreamRegistered) {
             logger.info("Late registration of RTSP stream with go2rtc succeeded for device: {}", context.getName());
-            deviceStatus = "Running";
+            deviceStatus = DeviceStatus.RUNNING.displayName();
         }
 
         return go2RtcStreamRegistered;

@@ -1,5 +1,6 @@
 import React from "react";
 import "./_styles.scss";
+import { API } from "../../api/paths";
 
 /**
  * Connection Browser component
@@ -15,7 +16,7 @@ const ConnectionBrowserPage = () => {
     <div className="connection-browser-container">
       <iframe
         key="camera-connection-browser"
-        src="/data/camera-driver/connection-browser"
+        src={API.connectionBrowser}
         className="connection-browser-iframe"
         title="Camera Connection Browser"
       />

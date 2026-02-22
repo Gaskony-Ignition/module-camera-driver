@@ -1,10 +1,10 @@
 import React, { useRef } from 'react';
 import { ComponentProps, ComponentMeta, PropertyTree, SizeObject } from '@inductiveautomation/perspective-client';
 import { useCameraStream } from './CameraViewer';
+import { StreamMode } from '../types';
+import { CAMERA_THEME } from '../theme';
 
 export const CAMERA_GRID_TYPE = 'cam.display.camera-grid';
-
-type StreamMode = 'auto' | 'mse' | 'snapshot';
 
 interface CameraGridProps extends ComponentProps {
     props: {
@@ -23,21 +23,21 @@ const cellStyles = {
         position: 'relative' as const,
         width: '100%',
         height: '100%',
-        background: '#1c1c22',
+        background: CAMERA_THEME.bg,
         overflow: 'hidden',
     },
     video: {
         width: '100%',
         height: '100%',
         objectFit: 'contain' as const,
-        background: '#1c1c22',
+        background: CAMERA_THEME.bg,
         display: 'block',
     },
     img: {
         width: '100%',
         height: '100%',
         objectFit: 'contain' as const,
-        background: '#1c1c22',
+        background: CAMERA_THEME.bg,
         display: 'block',
     },
     overlay: {
@@ -46,10 +46,10 @@ const cellStyles = {
         left: 0,
         right: 0,
         padding: '4px 8px',
-        background: 'linear-gradient(transparent, rgba(0,0,0,0.7))',
-        color: '#e0e0e8',
+        background: CAMERA_THEME.overlayGradient,
+        color: CAMERA_THEME.text,
         fontSize: '11px',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        fontFamily: CAMERA_THEME.fontFamily,
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -61,7 +61,7 @@ const cellStyles = {
         borderRadius: '50%',
         display: 'inline-block',
         marginRight: 4,
-        background: streaming ? '#4caf50' : '#ffa726',
+        background: streaming ? CAMERA_THEME.success : CAMERA_THEME.warning,
     }),
     centerOverlay: {
         position: 'absolute' as const,
@@ -72,28 +72,28 @@ const cellStyles = {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        color: '#8b8fa0',
+        color: CAMERA_THEME.textMuted,
         fontSize: '12px',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        fontFamily: CAMERA_THEME.fontFamily,
     },
     errorText: {
-        color: '#e05555',
+        color: CAMERA_THEME.error,
         textAlign: 'center' as const,
         fontSize: '11px',
     },
     placeholder: {
         width: '100%',
         height: '100%',
-        border: '2px dashed #3c3c44',
+        border: `2px dashed ${CAMERA_THEME.border}`,
         borderRadius: 4,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        color: '#555',
+        color: CAMERA_THEME.textMuted,
         fontSize: '12px',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        fontFamily: CAMERA_THEME.fontFamily,
         boxSizing: 'border-box' as const,
-        background: '#1c1c22',
+        background: CAMERA_THEME.bg,
     },
 };
 
@@ -169,7 +169,7 @@ function CameraGridComponent(props: CameraGridProps) {
             gridTemplateColumns: `repeat(${cols}, 1fr)`,
             gridTemplateRows: `repeat(${rws}, 1fr)`,
             gap: `${gap}px`,
-            background: '#111118',
+            background: CAMERA_THEME.bgGrid,
         },
     });
 

@@ -9,6 +9,7 @@ import com.inductiveautomation.ignition.gateway.opcua.server.api.AbstractDeviceM
 import com.inductiveautomation.ignition.gateway.opcua.server.api.DeviceExtensionPoint;
 import com.inductiveautomation.ignition.gateway.web.systemjs.SystemJsModule;
 import com.onvif.driver.common.CameraComponents;
+import com.onvif.driver.common.CameraDriverPaths;
 import com.onvif.driver.gateway.device.ONVIFDeviceExtensionPoint;
 import com.onvif.driver.gateway.device.generic.GenericCameraExtensionPoint;
 import com.onvif.driver.gateway.servlet.ONVIFRoutes;
@@ -17,9 +18,11 @@ import com.inductiveautomation.perspective.gateway.api.PerspectiveContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.Properties;
 
 /**
  * Module hook for the Camera Driver.
@@ -150,7 +153,7 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
         logger.info("Mounting route handlers at /data/camera-driver/*");
         logger.debug("RouteGroup: {}", routes);
 
-        String moduleVersion = "2.12.0";
+        String moduleVersion = loadModuleVersion();
         new ONVIFRoutes(context, deviceExtensionPoint, genericCameraExtensionPoint, go2RtcManager, moduleVersion).mountRoutes(routes);
 
         logger.info("Route handlers mounted successfully");
@@ -173,8 +176,8 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
      */
     @Override
     public Optional<String> getMountPathAlias() {
-        logger.debug("getMountPathAlias() returning: camera-driver");
-        return Optional.of("camera-driver");
+        logger.debug("getMountPathAlias() returning: {}", CameraDriverPaths.MOUNT_ALIAS);
+        return Optional.of(CameraDriverPaths.MOUNT_ALIAS);
     }
 
     /**
@@ -258,5 +261,22 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
     @Override
     public boolean isFreeModule() {
         return true;
+    }
+
+    /**
+     * Loads the module version from module.properties, which is populated at build time
+     * by Gradle resource filtering from build.gradle.kts (the single source of truth).
+     */
+    private static String loadModuleVersion() {
+        try (InputStream is = ONVIFModuleHook.class.getResourceAsStream("/module.properties")) {
+            if (is != null) {
+                Properties props = new Properties();
+                props.load(is);
+                return props.getProperty("module.version", "unknown");
+            }
+        } catch (Exception e) {
+            // Non-fatal — version is informational only
+        }
+        return "unknown";
     }
 }
