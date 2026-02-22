@@ -1,5 +1,6 @@
 package com.onvif.driver.gateway.onvif;
 
+import com.onvif.driver.gateway.onvif.util.XmlUtil;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -53,7 +54,7 @@ public class ONVIFAuth {
                 "<wsu:Created>%s</wsu:Created>" +
                 "</wsse:UsernameToken>" +
                 "</wsse:Security>",
-                username, passwordDigest, nonce, created
+                XmlUtil.escapeXml(username), passwordDigest, nonce, created
             );
 
         } catch (Exception e) {

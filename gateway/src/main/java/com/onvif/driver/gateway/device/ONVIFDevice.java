@@ -153,7 +153,7 @@ public class ONVIFDevice extends ManagedAddressSpaceWithLifecycle implements Dev
         logger.info("Device Name: {}", context.getName());
         logger.info("IP Address: {}", config.connection().ipAddress());
         logger.info("Port: {}", config.connection().port());
-        logger.info("Username: {}", config.connection().username());
+        logger.debug("Username: {}", config.connection().username());
         logger.info("Use HTTPS: {}", config.connection().useHttps());
         logger.info("Connection Timeout: {} seconds", config.connection().timeout());
         logger.info("Poll Interval: {} seconds", config.onvif().pollInterval());

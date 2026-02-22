@@ -40,11 +40,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.text.SimpleDateFormat;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -304,15 +304,14 @@ public class ONVIFRoutes {
             }
 
             // Look up device in both registries (ONVIF first, then Generic Camera)
-            ONVIFDevice onvifDevice = deviceExtensionPoint.getDevice(deviceName);
-            GenericCameraDevice genericDevice = genericCameraExtensionPoint != null
-                ? genericCameraExtensionPoint.getDevice(deviceName) : null;
-
-            if (onvifDevice == null && genericDevice == null) {
+            DeviceLookup devices = findDevice(deviceName);
+            if (!devices.found()) {
                 logger.warn("Device not found in any registry: {}", deviceName);
-                response.sendError(404, "Device not found: " + deviceName);
+                response.sendError(404, "Device not found");
                 return null;
             }
+            ONVIFDevice onvifDevice = devices.onvif();
+            GenericCameraDevice genericDevice = devices.generic();
 
             byte[] snapshotBytes;
 
@@ -474,14 +473,13 @@ public class ONVIFRoutes {
             }
 
             // Look up device in both registries
-            ONVIFDevice onvifDevice = deviceExtensionPoint.getDevice(deviceName);
-            GenericCameraDevice genericDevice = genericCameraExtensionPoint != null
-                ? genericCameraExtensionPoint.getDevice(deviceName) : null;
-
-            if (onvifDevice == null && genericDevice == null) {
-                response.sendError(404, "Device not found: " + deviceName);
+            DeviceLookup devices = findDevice(deviceName);
+            if (!devices.found()) {
+                response.sendError(404, "Device not found");
                 return null;
             }
+            ONVIFDevice onvifDevice = devices.onvif();
+            GenericCameraDevice genericDevice = devices.generic();
 
             // Check device status
             String deviceStatus = onvifDevice != null ? onvifDevice.getStatus() : genericDevice.getStatus();
@@ -534,6 +532,40 @@ public class ONVIFRoutes {
             response.setHeader("Access-Control-Allow-Origin", origin);
             response.setHeader("Access-Control-Allow-Credentials", "true");
         }
+    }
+
+    /**
+     * Builds a JSON object for a single ONVIF MediaProfile, including snapshot and stream URIs.
+     * Single source of truth for the /devices and /device/:name/status endpoints.
+     *
+     * @param device  The ONVIF device (used to retrieve authenticated URIs)
+     * @param profile The MediaProfile to convert
+     * @return JSONObject with token, name, width, height, frameRate, encoding, snapshotUri, streamUri
+     * @throws Exception if JSON construction fails
+     */
+    private JSONObject buildOnvifProfileJson(ONVIFDevice device, MediaProfile profile) throws Exception {
+        JSONObject profileJson = new JSONObject();
+        profileJson.put("token", profile.getToken());
+        profileJson.put("name", profile.getName());
+        profileJson.put("width", profile.getWidth());
+        profileJson.put("height", profile.getHeight());
+        profileJson.put("frameRate", profile.getFrameRate());
+        profileJson.put("encoding", profile.getEncoding());
+
+        try {
+            String snapshotUri = device.getClient().getSnapshotUri(profile.getToken());
+            profileJson.put("snapshotUri", device.getAuthenticatedUrl(snapshotUri));
+        } catch (Exception e) {
+            logger.debug("Could not get snapshot URI for profile {}: {}", profile.getToken(), e.getMessage());
+        }
+        try {
+            String streamUri = device.getClient().getStreamUri(profile.getToken());
+            profileJson.put("streamUri", device.getAuthenticatedUrl(streamUri));
+        } catch (Exception e) {
+            logger.debug("Could not get stream URI for profile {}: {}", profile.getToken(), e.getMessage());
+        }
+
+        return profileJson;
     }
 
     /**
@@ -874,6 +906,26 @@ public class ONVIFRoutes {
     }
 
     /**
+     * Holds the result of looking up a device by name across both registries.
+     */
+    private record DeviceLookup(ONVIFDevice onvif, GenericCameraDevice generic) {
+        boolean found() { return onvif != null || generic != null; }
+    }
+
+    /**
+     * Looks up a device by name in both the ONVIF and Generic Camera registries.
+     *
+     * @param deviceName The device name to look up
+     * @return A DeviceLookup with whichever device(s) were found (may have nulls if not found)
+     */
+    private DeviceLookup findDevice(String deviceName) {
+        ONVIFDevice onvif = deviceExtensionPoint != null ? deviceExtensionPoint.getDevice(deviceName) : null;
+        GenericCameraDevice generic = genericCameraExtensionPoint != null
+            ? genericCameraExtensionPoint.getDevice(deviceName) : null;
+        return new DeviceLookup(onvif, generic);
+    }
+
+    /**
      * Gets the client IP address from the request, handling proxy headers.
      *
      * @param request The HTTP request
@@ -974,8 +1026,10 @@ public class ONVIFRoutes {
     private Object handleListDevices(RequestContext context, HttpServletResponse response) throws Exception {
         logger.debug("List devices request received");
 
-        // NOTE: No custom authentication check needed - Ignition's /data/ routes
-        // require authenticated session by default. The Gateway handles this.
+        if (!isAuthenticated(context)) {
+            sendAuthenticationRequired(response);
+            return null;
+        }
 
         try {
             JSONObject result = new JSONObject();
@@ -1004,29 +1058,7 @@ public class ONVIFRoutes {
                         if (profiles != null) {
                             JSONArray profilesJson = new JSONArray();
                             for (MediaProfile profile : profiles) {
-                                JSONObject profileJson = new JSONObject();
-                                profileJson.put("token", profile.getToken());
-                                profileJson.put("name", profile.getName());
-                                profileJson.put("width", profile.getWidth());
-                                profileJson.put("height", profile.getHeight());
-                                profileJson.put("frameRate", profile.getFrameRate());
-                                profileJson.put("encoding", profile.getEncoding());
-
-                                // Get snapshot and stream URIs (with credentials embedded)
-                                try {
-                                    String snapshotUri = device.getClient().getSnapshotUri(profile.getToken());
-                                    profileJson.put("snapshotUri", device.getAuthenticatedUrl(snapshotUri));
-                                } catch (Exception e) {
-                                    logger.debug("Could not get snapshot URI for profile {}: {}", profile.getToken(), e.getMessage());
-                                }
-                                try {
-                                    String streamUri = device.getClient().getStreamUri(profile.getToken());
-                                    profileJson.put("streamUri", device.getAuthenticatedUrl(streamUri));
-                                } catch (Exception e) {
-                                    logger.debug("Could not get stream URI for profile {}: {}", profile.getToken(), e.getMessage());
-                                }
-
-                                profilesJson.put(profileJson);
+                                profilesJson.put(buildOnvifProfileJson(device, profile));
                             }
                             deviceJson.put("profiles", profilesJson);
                             deviceJson.put("profileCount", profiles.size());
@@ -1082,7 +1114,7 @@ public class ONVIFRoutes {
 
         } catch (Exception e) {
             logger.error("Error listing devices", e);
-            response.sendError(500, "Error listing devices: " + e.getMessage());
+            response.sendError(500, "Internal server error");
         }
 
         return null;
@@ -1101,16 +1133,20 @@ public class ONVIFRoutes {
             return null;
         }
 
+        if (!isAuthenticated(context)) {
+            sendAuthenticationRequired(response);
+            return null;
+        }
+
         try {
             // Check both registries
-            ONVIFDevice onvifDevice = deviceExtensionPoint.getDevice(deviceName);
-            GenericCameraDevice genericDevice = genericCameraExtensionPoint != null
-                ? genericCameraExtensionPoint.getDevice(deviceName) : null;
-
-            if (onvifDevice == null && genericDevice == null) {
-                response.sendError(404, "Device not found: " + deviceName);
+            DeviceLookup devices = findDevice(deviceName);
+            if (!devices.found()) {
+                response.sendError(404, "Device not found");
                 return null;
             }
+            ONVIFDevice onvifDevice = devices.onvif();
+            GenericCameraDevice genericDevice = devices.generic();
 
             // Use whichever device was found (ONVIF device block follows for backward compatibility)
             if (genericDevice != null && onvifDevice == null) {
@@ -1161,28 +1197,7 @@ public class ONVIFRoutes {
                     if (profiles != null) {
                         JSONArray profilesJson = new JSONArray();
                         for (MediaProfile profile : profiles) {
-                            JSONObject profileJson = new JSONObject();
-                            profileJson.put("token", profile.getToken());
-                            profileJson.put("name", profile.getName());
-                            profileJson.put("width", profile.getWidth());
-                            profileJson.put("height", profile.getHeight());
-                            profileJson.put("frameRate", profile.getFrameRate());
-                            profileJson.put("encoding", profile.getEncoding());
-
-                            try {
-                                String snapshotUri = device.getClient().getSnapshotUri(profile.getToken());
-                                profileJson.put("snapshotUri", device.getAuthenticatedUrl(snapshotUri));
-                            } catch (Exception e) {
-                                logger.debug("Could not get snapshot URI for profile {}: {}", profile.getToken(), e.getMessage());
-                            }
-                            try {
-                                String streamUri = device.getClient().getStreamUri(profile.getToken());
-                                profileJson.put("streamUri", device.getAuthenticatedUrl(streamUri));
-                            } catch (Exception e) {
-                                logger.debug("Could not get stream URI for profile {}: {}", profile.getToken(), e.getMessage());
-                            }
-
-                            profilesJson.put(profileJson);
+                            profilesJson.put(buildOnvifProfileJson(device, profile));
                         }
                         result.put("profiles", profilesJson);
                     }
@@ -1196,7 +1211,7 @@ public class ONVIFRoutes {
 
         } catch (Exception e) {
             logger.error("Error getting device status", e);
-            response.sendError(500, "Error getting device status: " + e.getMessage());
+            response.sendError(500, "Internal server error");
         }
 
         return null;
@@ -1228,6 +1243,11 @@ public class ONVIFRoutes {
      * URL: http://gateway:8088/data/camera-driver/health
      */
     private Object handleHealthCheck(RequestContext context, HttpServletResponse response) throws Exception {
+        if (!isAuthenticated(context)) {
+            sendAuthenticationRequired(response);
+            return null;
+        }
+
         JSONObject result = new JSONObject();
         result.put("status", "ok");
         result.put("service", "camera-driver");
@@ -1342,7 +1362,7 @@ public class ONVIFRoutes {
 
         } catch (Exception e) {
             logger.error("Error generating diagnostics", e);
-            response.sendError(500, "Error generating diagnostics: " + e.getMessage());
+            response.sendError(500, "Internal server error");
         }
 
         return null;
@@ -1362,8 +1382,7 @@ public class ONVIFRoutes {
             return null;
         }
 
-        try {
-            InputStream stream = getClass().getResourceAsStream("/pages/player.html");
+        try (InputStream stream = getClass().getResourceAsStream("/pages/player.html")) {
             if (stream == null) {
                 logger.error("Player page not found at /pages/player.html");
                 response.sendError(404, "Player page not found");
@@ -1374,7 +1393,7 @@ public class ONVIFRoutes {
             response.getWriter().write(html);
         } catch (Exception e) {
             logger.error("Error serving player page", e);
-            response.sendError(500, "Error loading page: " + e.getMessage());
+            response.sendError(500, "Internal server error");
         }
 
         return null;
@@ -1389,11 +1408,7 @@ public class ONVIFRoutes {
     private Object handleConnectionBrowserPage(RequestContext context, HttpServletResponse response) throws Exception {
         logger.debug("Connection browser page request received");
 
-        // NOTE: No custom authentication check needed - Ignition's /data/ routes
-        // require authenticated session by default. The Gateway handles this.
-
-        try {
-            var stream = getClass().getResourceAsStream("/pages/connection-browser.html");
+        try (InputStream stream = getClass().getResourceAsStream("/pages/connection-browser.html")) {
             if (stream == null) {
                 logger.error("Connection browser page not found at /pages/connection-browser.html");
                 response.sendError(404, "Connection browser page not found");
@@ -1404,7 +1419,7 @@ public class ONVIFRoutes {
             response.getWriter().write(html);
         } catch (Exception e) {
             logger.error("Error serving connection browser page", e);
-            response.sendError(500, "Error loading page: " + e.getMessage());
+            response.sendError(500, "Internal server error");
         }
 
         return null;
@@ -1417,7 +1432,9 @@ public class ONVIFRoutes {
     private static final int DEFAULT_LOG_LINES = 100;
     private static final int MAX_LOG_LINES = 500;
     private static final String CAMERA_DRIVER_LOGGER_PREFIX = "com.onvif.driver";
-    private final SimpleDateFormat logDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private static final DateTimeFormatter LOG_DATE_FORMAT =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+            .withZone(ZoneId.systemDefault());
 
     /**
      * Handles gateway log requests by reading from Ignition's system_logs.idb SQLite database.
@@ -1470,7 +1487,7 @@ public class ONVIFRoutes {
 
         } catch (Exception e) {
             logger.error("Error retrieving gateway logs", e);
-            response.sendError(500, "Error retrieving gateway logs: " + e.getMessage());
+            response.sendError(500, "Internal server error");
         }
 
         return null;
@@ -1533,10 +1550,7 @@ public class ONVIFRoutes {
                         String loggerName = rs.getString("logger_name");
                         String level = rs.getString("level_string");
 
-                        String formattedTime;
-                        synchronized (logDateFormat) {
-                            formattedTime = logDateFormat.format(new Date(timestmp));
-                        }
+                        String formattedTime = LOG_DATE_FORMAT.format(java.time.Instant.ofEpochMilli(timestmp));
 
                         // Shorten logger name for display (last segment)
                         String source = loggerName;

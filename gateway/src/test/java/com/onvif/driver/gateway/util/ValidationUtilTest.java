@@ -285,4 +285,119 @@ class ValidationUtilTest {
         assertThat(ValidationUtil.isValidProfileToken("Profile1 ")).isFalse();
         assertThat(ValidationUtil.isValidProfileToken(" Profile1 ")).isFalse();
     }
+
+    // ==================== URL Validation Tests ====================
+
+    @Test
+    void testIsValidUrl_HttpUrl_ReturnsTrue() {
+        assertThat(ValidationUtil.isValidUrl("http://192.168.1.50/snapshot")).isTrue();
+    }
+
+    @Test
+    void testIsValidUrl_HttpsUrl_ReturnsTrue() {
+        assertThat(ValidationUtil.isValidUrl("https://camera.example.com/snapshot")).isTrue();
+    }
+
+    @Test
+    void testIsValidUrl_HttpWithPort_ReturnsTrue() {
+        assertThat(ValidationUtil.isValidUrl("http://192.168.1.50:8080/snapshot.jpg")).isTrue();
+    }
+
+    @Test
+    void testIsValidUrl_HttpsWithPort_ReturnsTrue() {
+        assertThat(ValidationUtil.isValidUrl("https://camera.example.com:443/stream")).isTrue();
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    void testIsValidUrl_NullOrEmpty_ReturnsFalse(String url) {
+        assertThat(ValidationUtil.isValidUrl(url)).isFalse();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "rtsp://camera/stream",     // RTSP — not HTTP/HTTPS
+        "ftp://camera/file",        // FTP — not HTTP/HTTPS
+        "not-a-url",                // No protocol
+        "http://",                  // http:// with no host (length == 7, not > 7)
+        "https://",                 // https:// with no host (length == 8, not > 8)
+        "//camera/stream",          // Protocol-relative URL
+        "camera/snapshot"           // Relative path
+    })
+    void testIsValidUrl_NonHttpUrls_ReturnsFalse(String url) {
+        assertThat(ValidationUtil.isValidUrl(url)).isFalse();
+    }
+
+    @Test
+    void testIsValidUrl_WhitespaceOnly_ReturnsFalse() {
+        assertThat(ValidationUtil.isValidUrl("   ")).isFalse();
+    }
+
+    @Test
+    void testIsValidUrl_IsCaseInsensitiveForProtocol() {
+        // The implementation lowercases before checking — verify upper-case protocols work
+        assertThat(ValidationUtil.isValidUrl("HTTP://camera/snapshot")).isTrue();
+        assertThat(ValidationUtil.isValidUrl("HTTPS://camera/snapshot")).isTrue();
+    }
+
+    // ==================== RTSP URL Validation Tests ====================
+
+    @Test
+    void testIsValidRtspUrl_RtspUrl_ReturnsTrue() {
+        assertThat(ValidationUtil.isValidRtspUrl("rtsp://192.168.1.50:554/stream")).isTrue();
+    }
+
+    @Test
+    void testIsValidRtspUrl_RtspsUrl_ReturnsTrue() {
+        assertThat(ValidationUtil.isValidRtspUrl("rtsps://camera.example.com/stream")).isTrue();
+    }
+
+    @Test
+    void testIsValidRtspUrl_RtspWithPath_ReturnsTrue() {
+        assertThat(ValidationUtil.isValidRtspUrl("rtsp://192.168.1.50:554/Streaming/Channels/101")).isTrue();
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    void testIsValidRtspUrl_NullOrEmpty_ReturnsFalse(String url) {
+        assertThat(ValidationUtil.isValidRtspUrl(url)).isFalse();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "http://camera/snapshot",   // HTTP — not RTSP
+        "https://camera/snapshot",  // HTTPS — not RTSP
+        "rtsp://",                  // rtsp:// with no host (length == 7, not > 7)
+        "rtsps://",                 // rtsps:// with no host (length == 8, not > 8)
+        "not-a-url",                // No protocol
+        "//camera/stream",          // Protocol-relative URL
+        "ftp://camera/file"         // FTP — not RTSP
+    })
+    void testIsValidRtspUrl_NonRtspUrls_ReturnsFalse(String url) {
+        assertThat(ValidationUtil.isValidRtspUrl(url)).isFalse();
+    }
+
+    @Test
+    void testIsValidRtspUrl_WhitespaceOnly_ReturnsFalse() {
+        assertThat(ValidationUtil.isValidRtspUrl("   ")).isFalse();
+    }
+
+    @Test
+    void testIsValidRtspUrl_IsCaseInsensitiveForProtocol() {
+        // The implementation lowercases before checking — verify upper-case protocols work
+        assertThat(ValidationUtil.isValidRtspUrl("RTSP://camera/stream")).isTrue();
+        assertThat(ValidationUtil.isValidRtspUrl("RTSPS://camera/stream")).isTrue();
+    }
+
+    @Test
+    void testIsValidRtspUrl_MinimalValidRtsp() {
+        // Smallest valid RTSP URL: "rtsp://" (7 chars) + at least 1 char = 8 chars total
+        assertThat(ValidationUtil.isValidRtspUrl("rtsp://x")).isTrue();
+    }
+
+    @Test
+    void testIsValidUrl_MinimalValidHttp() {
+        // Smallest valid HTTP URL: "http://" (7 chars) + at least 1 char = 8 chars total
+        assertThat(ValidationUtil.isValidUrl("http://x")).isTrue();
+    }
 }

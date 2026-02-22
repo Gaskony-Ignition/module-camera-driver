@@ -43,6 +43,7 @@ public enum DeviceStatus {
      * @param status the raw status string from device.getStatus()
      */
     public static boolean isActive(String status) {
+        if (status == null) return false;
         return RUNNING.displayName.equals(status) || CONNECTED.displayName.equals(status);
     }
 

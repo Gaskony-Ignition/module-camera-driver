@@ -43,13 +43,18 @@ export function useCameraStream(
             try { mediaSourceRef.current.endOfStream(); } catch (_) {}
         }
         mediaSourceRef.current = null;
+        if (videoRef.current) {
+            const oldSrc = videoRef.current.src;
+            videoRef.current.src = '';
+            if (oldSrc.startsWith('blob:')) URL.revokeObjectURL(oldSrc);
+        }
         if (imgRef.current) {
             const oldSrc = imgRef.current.src;
             imgRef.current.src = '';
             if (oldSrc.startsWith('blob:')) URL.revokeObjectURL(oldSrc);
         }
         setActiveMode(null);
-    }, [imgRef]);
+    }, [imgRef, videoRef]);
 
     const startSnapshot = useCallback(() => {
         if (!deviceName) return;

@@ -11,7 +11,6 @@ import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.http.util.EntityUtils;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -61,6 +60,10 @@ public class Go2RtcManager {
     private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
     private final AtomicInteger restartCount = new AtomicInteger(0);
     private volatile long processStartTime;
+
+    // Health check cache (5-second TTL to avoid hammering the go2rtc API)
+    private volatile long lastHealthCheckTime = 0;
+    private volatile boolean lastHealthCheckResult = false;
 
     public Go2RtcManager(Path dataDir) {
         this(dataDir, DEFAULT_PORT);
@@ -338,16 +341,26 @@ public class Go2RtcManager {
             return false;
         }
 
+        // Return cached result if within 5-second TTL
+        if (System.currentTimeMillis() - lastHealthCheckTime < 5000) {
+            return lastHealthCheckResult;
+        }
+
         // Quick health check via API
         try {
             String url = String.format("http://127.0.0.1:%d/api", port);
             HttpGet request = new HttpGet(url);
             try (CloseableHttpResponse response = httpClient.execute(request)) {
                 EntityUtils.consumeQuietly(response.getEntity());
-                return response.getStatusLine().getStatusCode() < 500;
+                boolean result = response.getStatusLine().getStatusCode() < 500;
+                lastHealthCheckResult = result;
+                lastHealthCheckTime = System.currentTimeMillis();
+                return result;
             }
         } catch (Exception e) {
             logger.debug("go2rtc health check failed: {}", e.getMessage());
+            lastHealthCheckResult = false;
+            lastHealthCheckTime = System.currentTimeMillis();
             return false;
         }
     }

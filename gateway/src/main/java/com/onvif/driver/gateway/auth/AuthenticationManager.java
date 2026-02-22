@@ -168,64 +168,32 @@ public class AuthenticationManager {
     /**
      * Validates credentials against Ignition's gateway authentication system.
      *
-     * IMPLEMENTATION: This is a simplified version. For production use:
-     * 1. Integrate with UserSourceManager to validate against configured user sources
-     * 2. Support multiple authentication realms
-     * 3. Handle LDAP, Active Directory, and other authentication backends
+     * NOT IMPLEMENTED: Basic Auth credential validation is not integrated with
+     * Ignition's UserSourceManager. Use Ignition session authentication or API key
+     * authentication instead.
      *
-     * CURRENT BEHAVIOR: Validates against Gateway-scope authentication.
-     * Session authentication already works correctly via isSessionAuthenticated().
+     * To enable Basic Auth, integrate with Ignition's UserSourceManager:
+     * 1. Validate against gatewayContext.getUserSourceManager()
+     * 2. Support multiple authentication realms (LDAP, Active Directory, etc.)
+     * 3. Handle configured authentication backends
      *
      * @param username The username
      * @param password The password
-     * @return true if credentials are valid, false otherwise
+     * @return false (not implemented - fail-closed for security)
      */
     private boolean validateGatewayCredentials(String username, String password) {
-        // IMPLEMENTATION NOTE:
-        // Ignition's authentication system is complex and varies based on configuration.
-        // The GatewayContext doesn't expose a simple validateUser(username, password) method.
-        //
-        // OPTIONS:
-        // 1. Use session authentication (ALREADY IMPLEMENTED AND WORKING)
-        // 2. Integrate with UserSourceManager (requires deeper SDK knowledge)
-        // 3. Make Basic Auth optional and recommend session auth instead
-        //
-        // CURRENT IMPLEMENTATION:
-        // For now, we validate that username and password are non-empty and meet
-        // minimum security requirements. The primary authentication method should
-        // be Ignition sessions, which already work correctly.
-
         if (username == null || username.trim().isEmpty()) {
             return false;
         }
 
-        if (password == null || password.length() < 4) {
-            logger.warn("Password validation failed - minimum 4 characters required");
+        if (password == null || password.isEmpty()) {
             return false;
         }
 
-        // Log the authentication attempt for auditing
-        logger.info("Basic Auth validation attempted for user: {}", username);
-        logger.warn("Basic Auth validation is simplified - recommend using Ignition session authentication instead");
-
-        // For production, you should:
-        // 1. Validate against gatewayContext.getUserSourceManager()
-        // 2. Support configured authentication realms
-        // 3. Integrate with Ignition's security system
-        //
-        // Example (requires additional research):
-        // try {
-        //     UserSourceManager userSourceManager = gatewayContext.getUserSourceManager();
-        //     // Validate credentials against user source
-        //     // This requires understanding Ignition's internal authentication API
-        // } catch (Exception e) {
-        //     logger.error("Error validating against user source", e);
-        //     return false;
-        // }
-
-        // TEMPORARY: Accept valid-looking credentials
-        // This provides basic validation while recommending session auth
-        return true;
+        logger.warn("Basic Auth credential validation is not fully implemented. " +
+            "Please use Ignition session authentication or API key authentication. " +
+            "To enable Basic Auth, integrate with Ignition's UserSourceManager.");
+        return false;
     }
 
     /**

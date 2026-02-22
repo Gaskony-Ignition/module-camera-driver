@@ -1619,6 +1619,11 @@
          ================================================================ -->
     <script>
         // ================================================================
+        // Constants
+        // ================================================================
+        var API_BASE = '/data/camera-driver';
+
+        // ================================================================
         // State
         // ================================================================
         var devices = [];
@@ -1794,7 +1799,7 @@
         // ================================================================
         async function refreshDashboard() {
             try {
-                var resp = await fetch('/data/camera-driver/health', { credentials: 'include' });
+                var resp = await fetch(API_BASE + '/health', { credentials: 'include' });
                 if (!resp.ok) return;
                 var data = await resp.json();
 
@@ -1824,7 +1829,7 @@
         // ================================================================
         async function loadDevices() {
             try {
-                var resp = await fetch('/data/camera-driver/devices', { credentials: 'include' });
+                var resp = await fetch(API_BASE + '/devices', { credentials: 'include' });
                 if (resp.status === 401) {
                     showCameraError('Authentication required. Please log in to the Ignition Gateway.');
                     return;
@@ -1949,7 +1954,7 @@
         }
 
         function viewSnapshot(deviceName, profileToken) {
-            var url = '/data/camera-driver/snapshot?device=' + encodeURIComponent(deviceName) + '&profile=' + encodeURIComponent(profileToken) + '&t=' + Date.now();
+            var url = API_BASE + '/snapshot?device=' + encodeURIComponent(deviceName) + '&profile=' + encodeURIComponent(profileToken) + '&t=' + Date.now();
             window.open(url, '_blank');
         }
 
@@ -1966,7 +1971,7 @@
             var device = devices.find(function(d) { return d.name === deviceName; });
             if (!device) return;
 
-            var streamUrl = '/data/camera-driver/stream?device=' + encodeURIComponent(deviceName) + '&profile=' + encodeURIComponent(profileToken) + '&fps=10';
+            var streamUrl = API_BASE + '/stream?device=' + encodeURIComponent(deviceName) + '&profile=' + encodeURIComponent(profileToken) + '&fps=10';
             var usesMse = device.go2rtcRegistered;
 
             activeStreamDeviceName = deviceName;
@@ -2156,7 +2161,7 @@
         // ================================================================
         async function fetchDiagnostics() {
             try {
-                var resp = await fetch('/data/camera-driver/diagnostics', { credentials: 'include' });
+                var resp = await fetch(API_BASE + '/diagnostics', { credentials: 'include' });
                 if (!resp.ok) return;
                 var d = await resp.json();
 
@@ -2225,7 +2230,7 @@
                     params += '&level=' + serverLogFilter;
                 }
 
-                var resp = await fetch('/data/camera-driver/logs/gateway?' + params, { credentials: 'include' });
+                var resp = await fetch(API_BASE + '/logs/gateway?' + params, { credentials: 'include' });
                 if (!resp.ok) return;
                 var data = await resp.json();
 
@@ -2441,7 +2446,7 @@
             var img = document.getElementById('grid-snap-' + cellIndex);
             if (!img) return;
 
-            var url = '/data/camera-driver/snapshot?device=' + encodeURIComponent(deviceName) + '&profile=' + encodeURIComponent(profileToken) + '&t=' + Date.now();
+            var url = API_BASE + '/snapshot?device=' + encodeURIComponent(deviceName) + '&profile=' + encodeURIComponent(profileToken) + '&t=' + Date.now();
             img.onload = function() { img.style.display = 'block'; };
             img.onerror = function() { /* silently ignore */ };
             img.src = url;
@@ -2453,7 +2458,7 @@
                 if (!gridCellStreams[cellIndex]) {
                     var snapImg = document.getElementById('grid-snap-' + cellIndex);
                     if (snapImg) {
-                        snapImg.src = '/data/camera-driver/snapshot?device=' + encodeURIComponent(deviceName) + '&profile=' + encodeURIComponent(profileToken) + '&t=' + Date.now();
+                        snapImg.src = API_BASE + '/snapshot?device=' + encodeURIComponent(deviceName) + '&profile=' + encodeURIComponent(profileToken) + '&t=' + Date.now();
                     }
                 }
             }, 30000);
@@ -2480,7 +2485,7 @@
                 profileToken = device.profiles[0].token;
             }
 
-            var streamUrl = '/data/camera-driver/stream?device=' + encodeURIComponent(deviceName) + '&profile=' + encodeURIComponent(profileToken) + '&fps=10';
+            var streamUrl = API_BASE + '/stream?device=' + encodeURIComponent(deviceName) + '&profile=' + encodeURIComponent(profileToken) + '&fps=10';
 
             // Hide snapshot, show video
             var snapImg = document.getElementById('grid-snap-' + cellIndex);
@@ -2658,7 +2663,7 @@
             var profileToken = '';
             if (device.profiles && device.profiles.length > 0) profileToken = device.profiles[0].token;
 
-            var url = '/data/camera-driver/snapshot?device=' + encodeURIComponent(deviceName) + '&profile=' + encodeURIComponent(profileToken) + '&t=' + Date.now();
+            var url = API_BASE + '/snapshot?device=' + encodeURIComponent(deviceName) + '&profile=' + encodeURIComponent(profileToken) + '&t=' + Date.now();
             window.open(url, '_blank');
             addGridEvent(deviceName, 'Snapshot captured');
         }
@@ -2748,7 +2753,7 @@
         // ================================================================
         async function refreshStatusBar() {
             try {
-                var resp = await fetch('/data/camera-driver/health', { credentials: 'include' });
+                var resp = await fetch(API_BASE + '/health', { credentials: 'include' });
                 if (!resp.ok) return;
                 var data = await resp.json();
 

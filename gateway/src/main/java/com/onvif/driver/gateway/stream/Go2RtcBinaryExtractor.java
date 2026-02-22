@@ -157,7 +157,7 @@ public class Go2RtcBinaryExtractor {
     private void setExecutable(Path binaryPath) {
         String os = System.getProperty("os.name", "").toLowerCase();
         if (!os.contains("windows")) {
-            boolean success = binaryPath.toFile().setExecutable(true, false);
+            boolean success = binaryPath.toFile().setExecutable(true, true);
             if (!success) {
                 logger.warn("Failed to set executable permission on: {}", binaryPath);
             }
