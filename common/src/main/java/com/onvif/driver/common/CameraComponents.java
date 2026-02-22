@@ -5,15 +5,18 @@ import com.inductiveautomation.perspective.common.api.BrowserResource;
 import com.inductiveautomation.perspective.common.api.ComponentDescriptor;
 import com.inductiveautomation.perspective.common.api.ComponentDescriptorImpl;
 
-import java.awt.*;
+import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.util.Base64;
 import java.util.Set;
 
 /**
  * Component descriptors for Camera Driver Perspective components.
- * These define how the components appear in the Perspective palette and
- * wire up the client-side React components with server-side property schemas.
+ * Icons are pre-baked 32x32 RGBA PNG images embedded as base64 strings so they
+ * load correctly in both the Designer JVM and the Gateway (headless) JVM without
+ * any dependency on AWT Graphics2D rendering.
  */
 public class CameraComponents {
     public static final String MODULE_ID = "com.onvif.driver.opcua";
@@ -29,9 +32,19 @@ public class CameraComponents {
         new BrowserResource("camera-driver-perspective", BROWSER_RESOURCE_PATH, BrowserResource.ResourceType.JS)
     );
 
-    // Pre-create icons safely — returns null on any failure (headless, AWT, etc.)
-    private static final BufferedImage CAMERA_ICON = safeCreateIcon(CameraComponents::createCameraIcon);
-    private static final BufferedImage GRID_ICON = safeCreateIcon(CameraComponents::createGridIcon);
+    // Pre-baked 32x32 RGBA PNG icons — Catppuccin Mocha blue (#89b4fa)
+    // Generated offline; loaded via ImageIO to avoid Graphics2D/headless issues.
+    private static final String CAMERA_PNG_B64 =
+        "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAf0lEQVR42mNgGAWDDXRu+fUfGx51wPB2AC5L" +
+        "ycWD3gEYaujpAKxqiDFUI6CHYgfgVIPPUlyYVAfgVUOM5fvu/CfaEcSkMaIdALIYHZPiAKIcSSsHEB1NpFhO" +
+        "jCOISdiDOwQGVRoYsFww4OXAoCgJB1VdQNPacBSMglEwCgYSAACCZusLjiV24QAAAABJRU5ErkJggg==";
+
+    private static final String GRID_PNG_B64 =
+        "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAOElEQVR42u3SoREAMAgEQdpPP1SHSRpAQ8Te" +
+        "DAqz4iN+6GTd7qb+AAD7ANkAAIBsAABANgAAsNkDNO856uluKr4AAAAASUVORK5CYII=";
+
+    private static final BufferedImage CAMERA_ICON = loadPng(CAMERA_PNG_B64);
+    private static final BufferedImage GRID_ICON   = loadPng(GRID_PNG_B64);
 
     public static final ComponentDescriptor VIEWER_DESCRIPTOR = ComponentDescriptorImpl.ComponentBuilder.newBuilder()
         .setId(VIEWER_ID)
@@ -57,72 +70,14 @@ public class CameraComponents {
         .setResources(BROWSER_RESOURCES)
         .build();
 
-    @FunctionalInterface
-    private interface IconCreator {
-        BufferedImage create();
-    }
-
-    private static BufferedImage safeCreateIcon(IconCreator creator) {
+    /** Decode a base64-encoded PNG into a BufferedImage. Returns null on any failure. */
+    private static BufferedImage loadPng(String b64) {
         try {
-            return creator.create();
+            byte[] bytes = Base64.getDecoder().decode(b64);
+            return ImageIO.read(new ByteArrayInputStream(bytes));
         } catch (Throwable t) {
-            // AWT/headless issues should never prevent component registration
             return null;
         }
-    }
-
-    private static BufferedImage createCameraIcon() {
-        BufferedImage img = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = img.createGraphics();
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-        Color blue = new Color(97, 175, 239);
-        Color darkBlue = new Color(40, 80, 140);
-        Color lightBlue = new Color(160, 210, 255);
-
-        // Camera body
-        g.setColor(blue);
-        g.fillRoundRect(0, 4, 12, 10, 3, 3);
-
-        // Lens (outer ring + inner highlight)
-        g.setColor(darkBlue);
-        g.fillOval(2, 6, 7, 7);
-        g.setColor(lightBlue);
-        g.fillOval(4, 8, 3, 3);
-
-        // Viewfinder bump on top
-        g.setColor(blue);
-        g.fillRoundRect(2, 2, 5, 3, 1, 1);
-
-        // Video record triangle on right
-        g.setColor(blue);
-        g.fillPolygon(new int[]{12, 16, 12}, new int[]{5, 9, 13}, 3);
-
-        g.dispose();
-        return img;
-    }
-
-    private static BufferedImage createGridIcon() {
-        BufferedImage img = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = img.createGraphics();
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-        Color blue = new Color(97, 175, 239);
-
-        // 4x4 grid of squares (3px cells with 1px gaps)
-        int cellSize = 3;
-        int gap = 1;
-        for (int row = 0; row < 4; row++) {
-            for (int col = 0; col < 4; col++) {
-                int x = col * (cellSize + gap);
-                int y = row * (cellSize + gap);
-                g.setColor(blue);
-                g.fillRect(x, y, cellSize, cellSize);
-            }
-        }
-
-        g.dispose();
-        return img;
     }
 
     private static JsonSchema loadSchema(String resourcePath) {

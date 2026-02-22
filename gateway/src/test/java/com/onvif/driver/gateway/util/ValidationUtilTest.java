@@ -30,6 +30,11 @@ class ValidationUtilTest {
         assertThat(ValidationUtil.isValidDeviceName("Front-Camera")).isTrue();
         assertThat(ValidationUtil.isValidDeviceName("camera-1-main")).isTrue();
 
+        // Valid with spaces (Ignition device names commonly include spaces)
+        assertThat(ValidationUtil.isValidDeviceName("Camera 1")).isTrue();
+        assertThat(ValidationUtil.isValidDeviceName("Front Camera")).isTrue();
+        assertThat(ValidationUtil.isValidDeviceName("Side Entry Camera")).isTrue();
+
         // Valid mixed
         assertThat(ValidationUtil.isValidDeviceName("Camera-1_Main")).isTrue();
         assertThat(ValidationUtil.isValidDeviceName("CAM_123-ABC")).isTrue();
@@ -52,7 +57,6 @@ class ValidationUtilTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-        "Camera 1",           // Space not allowed
         "Camera!",            // Special character
         "Camera@Home",        // @ not allowed
         "Camera#1",           // # not allowed
@@ -177,7 +181,7 @@ class ValidationUtilTest {
 
     @ParameterizedTest
     @NullAndEmptySource
-    @ValueSource(strings = {" ", "Camera 1", "Camera!", "../Camera"})
+    @ValueSource(strings = {" ", "Camera!", "../Camera"})
     void testRequireValidDeviceName_InvalidInput(String input) {
         assertThatThrownBy(() -> ValidationUtil.requireValidDeviceName(input))
             .isInstanceOf(IllegalArgumentException.class)

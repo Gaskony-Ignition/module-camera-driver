@@ -144,8 +144,9 @@ public class ONVIFRoutes {
     private static final AtomicInteger activeSnapshots = new AtomicInteger(0);
     private static final AtomicInteger activeStreams = new AtomicInteger(0);
 
-    /** Maximum number of requests allowed per IP address per minute (rate limiting) */
-    private static final int MAX_REQUESTS_PER_IP = 10;
+    /** Maximum number of requests allowed per IP address per minute (rate limiting).
+     *  Set high enough that Perspective component polling (snapshot every 5s × N cameras) never hits it. */
+    private static final int MAX_REQUESTS_PER_IP = 600;
 
     private static final Map<String, AtomicInteger> requestsPerIP = new ConcurrentHashMap<>();
 

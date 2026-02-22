@@ -9,7 +9,9 @@ package com.onvif.driver.gateway.util;
 public class ValidationUtil {
 
     // Validation patterns
-    private static final String DEVICE_NAME_PATTERN = "[a-zA-Z0-9_-]+";
+    // Device names allow spaces because Ignition device names commonly contain them (e.g. "Side Camera").
+    // Spaces are safe: the name is only used as a map key lookup, never in shell commands or SQL.
+    private static final String DEVICE_NAME_PATTERN = "[a-zA-Z0-9_\\- ]+";
     private static final String PROFILE_TOKEN_PATTERN = "[a-zA-Z0-9_-]+";
     private static final int MAX_DEVICE_NAME_LENGTH = 64;
     private static final int MAX_PROFILE_TOKEN_LENGTH = 64;
@@ -34,6 +36,10 @@ public class ValidationUtil {
      */
     public static boolean isValidDeviceName(String deviceName) {
         if (deviceName == null || deviceName.trim().isEmpty()) {
+            return false;
+        }
+        // Reject leading/trailing spaces even though spaces are allowed within names
+        if (!deviceName.equals(deviceName.trim())) {
             return false;
         }
         if (deviceName.length() > MAX_DEVICE_NAME_LENGTH) {
