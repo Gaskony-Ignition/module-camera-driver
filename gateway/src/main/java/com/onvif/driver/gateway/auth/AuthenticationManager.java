@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -110,21 +111,18 @@ public class AuthenticationManager {
             logger.trace("HTTP session check failed: {}", t.getMessage());
         }
 
-        // Method 1c: Check for Perspective/Designer sessions from localhost.
-        // The Designer's embedded JCEF browser connects from 127.0.0.1/::1 to the gateway.
-        // It doesn't carry standard HTTP session cookies, but if the request originates from
-        // loopback AND there are active Perspective sessions, it's almost certainly a Designer
-        // component request. This is more secure than accepting all requests when any session exists.
+        // Method 1c: Check for Perspective/Designer sessions from private/local networks.
+        // The Designer connects to the gateway from the local network. In Docker deployments,
+        // the request comes from the Docker bridge IP (e.g. 172.17.0.1), not loopback.
+        // If the request originates from a private/internal IP AND there are active Perspective
+        // sessions, it's a Designer or Perspective runtime component request.
         try {
             String remoteAddr = request.getRemoteAddr();
-            boolean isLocal = "127.0.0.1".equals(remoteAddr)
-                           || "0:0:0:0:0:0:0:1".equals(remoteAddr)
-                           || "::1".equals(remoteAddr)
-                           || remoteAddr.equals(request.getLocalAddr());
-            if (isLocal) {
+            logger.debug("Method 1c: remoteAddr={}, localAddr={}", remoteAddr, request.getLocalAddr());
+            if (isPrivateOrLocalIP(remoteAddr, request.getLocalAddr())) {
                 PerspectiveContext pCtx = PerspectiveContext.get(gatewayContext);
                 if (pCtx != null && !pCtx.getSessionMonitor().getSessionInfos().isEmpty()) {
-                    logger.debug("Request authenticated via local origin + active Perspective session");
+                    logger.debug("Request authenticated via private/local IP ({}) + active Perspective session", remoteAddr);
                     return true;
                 }
             }
@@ -200,6 +198,35 @@ public class AuthenticationManager {
             return xRealIP;
         }
         return request.getRemoteAddr();
+    }
+
+    /**
+     * Checks whether an IP address is a private/internal network address or loopback.
+     * Covers: loopback (127.x.x.x, ::1), RFC 1918 (10.x, 172.16-31.x, 192.168.x),
+     * IPv6 link-local (fe80::/10), IPv6 unique local (fc00::/7), and same-machine.
+     *
+     * @param remoteAddr The remote IP address to check
+     * @param localAddr  The local (server) IP address for same-machine comparison
+     * @return true if the IP is private, loopback, or same-machine
+     */
+    static boolean isPrivateOrLocalIP(String remoteAddr, String localAddr) {
+        if (remoteAddr == null || remoteAddr.isEmpty()) {
+            return false;
+        }
+
+        // Same-machine check
+        if (remoteAddr.equals(localAddr)) {
+            return true;
+        }
+
+        try {
+            InetAddress addr = InetAddress.getByName(remoteAddr);
+            // InetAddress covers: loopback (127.x, ::1), link-local (169.254.x, fe80::),
+            // and site-local (10.x, 172.16-31.x, 192.168.x, fc00::/7)
+            return addr.isLoopbackAddress() || addr.isLinkLocalAddress() || addr.isSiteLocalAddress();
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**

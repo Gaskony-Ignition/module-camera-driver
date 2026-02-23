@@ -4,7 +4,7 @@ plugins {
     id("com.github.spotbugs") version "6.0.27" apply false
 }
 
-version = "2.27.0"
+version = "2.28.0"
 group = "com.onvif.driver"
 
 ignitionModule {
