@@ -71,16 +71,30 @@ jobs:
           echo "file=$MODL_FILE" >> $GITHUB_OUTPUT
           echo "Verified signed module: $MODL_FILE"
 
+          # Find unsigned modl file
+          UNSIGNED_FILE=$(find build -maxdepth 1 -name "CameraDriver-*.unsigned.modl" | head -1)
+          if [ -n "$UNSIGNED_FILE" ]; then
+            echo "unsigned_file=$UNSIGNED_FILE" >> $GITHUB_OUTPUT
+            echo "Found unsigned module: $UNSIGNED_FILE"
+          else
+            echo "No unsigned module found (signing-only build)"
+          fi
+
       - name: Create source release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF_NAME: ${{ github.ref_name }}
           MODL_FILE: ${{ steps.modl.outputs.file }}
+          UNSIGNED_FILE: ${{ steps.modl.outputs.unsigned_file }}
         run: |
+          ASSETS=("${MODL_FILE}")
+          if [ -n "$UNSIGNED_FILE" ]; then
+            ASSETS+=("${UNSIGNED_FILE}")
+          fi
           # Delete existing release if present (e.g. created manually)
           gh release delete "${REF_NAME}" --yes 2>/dev/null || true
           gh release create "${REF_NAME}" \
-            "${MODL_FILE}" \
+            "${ASSETS[@]}" \
             --title "Camera Driver ${REF_NAME}" \
             --generate-notes
 
