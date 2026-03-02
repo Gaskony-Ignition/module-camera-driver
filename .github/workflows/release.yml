@@ -64,8 +64,8 @@ jobs:
             ls -la build/
             exit 1
           fi
-          if ! unzip -l "$MODL_FILE" | grep -q "certificates/"; then
-            echo "ERROR: Module appears unsigned (no certificates/ in modl)"
+          if ! unzip -l "$MODL_FILE" | grep -q "certificates.p7b"; then
+            echo "ERROR: Module appears unsigned (no certificates.p7b in modl)"
             exit 1
           fi
           echo "file=$MODL_FILE" >> $GITHUB_OUTPUT
