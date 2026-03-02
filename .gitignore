@@ -24,12 +24,15 @@ bin/
 # macOS
 .DS_Store
 
-# Module signing (uses shared Gaskony keystore)
+# Module signing credentials (never commit)
+gradle.properties
 keystore.jks
 certificates/
 *.p12
+*.pfx
 *.pem
 *.jks
+*.keystore
 *.der
 
 # Logs

@@ -29,16 +29,19 @@ jobs:
         run: |
           SIGNING_DIR="${HOME}/.ignition-signing"
           mkdir -p "$SIGNING_DIR"
-          echo "${{ secrets.SIGNING_KEYSTORE }}" | base64 -d > "$SIGNING_DIR/gaskony-keystore.jks"
-          echo "${{ secrets.SIGNING_CERT }}" | base64 -d > "$SIGNING_DIR/gaskony-cert.pem"
-          # Create gradle.properties with CI signing secrets
+          echo "${SIGNING_KEYSTORE_B64}" | base64 -d > "$SIGNING_DIR/gaskony-keystore.jks"
+          echo "${SIGNING_CERT_B64}" | base64 -d > "$SIGNING_DIR/gaskony-cert.pem"
           {
-            echo "ignition.signing.keystoreFile=$SIGNING_DIR/gaskony-keystore.jks"
-            echo "ignition.signing.keystorePassword=${{ secrets.SIGNING_PASSWORD }}"
+            echo "ignition.signing.keystoreFile=${SIGNING_DIR}/gaskony-keystore.jks"
+            echo "ignition.signing.keystorePassword=${SIGNING_PASSWORD}"
             echo "ignition.signing.certAlias=gaskony-module"
-            echo "ignition.signing.certPassword=${{ secrets.SIGNING_PASSWORD }}"
-            echo "ignition.signing.certFile=$SIGNING_DIR/gaskony-cert.pem"
+            echo "ignition.signing.certPassword=${SIGNING_PASSWORD}"
+            echo "ignition.signing.certFile=${SIGNING_DIR}/gaskony-cert.pem"
           } > gradle.properties
+        env:
+          SIGNING_KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE }}
+          SIGNING_CERT_B64: ${{ secrets.SIGNING_CERT }}
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -52,12 +55,21 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
-      - name: Find .modl file
+      - name: Find and verify signed modl file
         id: modl
         run: |
           MODL_FILE=$(find build -maxdepth 1 -name "CameraDriver-*.modl" ! -name "*.unsigned.modl" | head -1)
+          if [ -z "$MODL_FILE" ]; then
+            echo "ERROR: No signed .modl file found in build/"
+            ls -la build/
+            exit 1
+          fi
+          if ! unzip -l "$MODL_FILE" | grep -q "certificates/"; then
+            echo "ERROR: Module appears unsigned (no certificates/ in modl)"
+            exit 1
+          fi
           echo "file=$MODL_FILE" >> $GITHUB_OUTPUT
-          echo "Found: $MODL_FILE"
+          echo "Verified signed module: $MODL_FILE"
 
       - name: Create source release
         env:
