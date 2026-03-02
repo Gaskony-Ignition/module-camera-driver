@@ -6,12 +6,15 @@ on:
     paths:
       - 'build.gradle.kts'
 
+permissions:
+  contents: write
+
 jobs:
   auto-tag:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
@@ -24,21 +27,26 @@ jobs:
 
       - name: Check if tag already exists
         id: check
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+          if git rev-parse "v${VERSION}" >/dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Tag v${{ steps.version.outputs.version }} already exists"
+            echo "Tag v${VERSION} already exists"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Tag v${{ steps.version.outputs.version }} does not exist - will create"
+            echo "Tag v${VERSION} does not exist - will create"
           fi
 
       - name: Create and push tag
         if: steps.check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.PORTAL_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
-          gh api repos/${{ github.repository }}/git/refs \
-            -f ref="refs/tags/v${{ steps.version.outputs.version }}" \
-            -f sha="${{ github.sha }}"
-          echo "Created tag v${{ steps.version.outputs.version }}"
+          gh api repos/${REPOSITORY}/git/refs \
+            -f ref="refs/tags/v${VERSION}" \
+            -f sha="${COMMIT_SHA}"
+          echo "Created tag v${VERSION}"

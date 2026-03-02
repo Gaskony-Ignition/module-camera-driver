@@ -38,7 +38,8 @@ public final class CorsManager {
         }
 
         // Always allow localhost and loopback for development
-        if (origin.contains("localhost") || origin.contains("127.0.0.1")) {
+        // Use exact prefix matching to prevent bypass via origins like "http://evil.localhost"
+        if (isLocalhostOrigin(origin)) {
             return true;
         }
 
@@ -53,5 +54,17 @@ public final class CorsManager {
         }
 
         return origin.equals(gatewayOrigin);
+    }
+
+    /**
+     * Checks if the origin is a valid localhost or loopback address.
+     * Uses exact prefix matching to prevent bypass via crafted origins
+     * like "http://evil.localhost" or "http://127.0.0.1.attacker.com".
+     */
+    private static boolean isLocalhostOrigin(String origin) {
+        return origin.equals("http://localhost") || origin.startsWith("http://localhost:")
+            || origin.equals("https://localhost") || origin.startsWith("https://localhost:")
+            || origin.equals("http://127.0.0.1") || origin.startsWith("http://127.0.0.1:")
+            || origin.equals("https://127.0.0.1") || origin.startsWith("https://127.0.0.1:");
     }
 }

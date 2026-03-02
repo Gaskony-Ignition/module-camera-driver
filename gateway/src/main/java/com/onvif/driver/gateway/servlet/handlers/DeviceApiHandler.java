@@ -260,13 +260,13 @@ public class DeviceApiHandler extends BaseHandler {
 
         try {
             String snapshotUri = device.getClient().getSnapshotUri(profile.getToken());
-            profileJson.put("snapshotUri", device.getAuthenticatedUrl(snapshotUri));
+            profileJson.put("snapshotUri", snapshotUri);
         } catch (Exception e) {
             logger.debug("Could not get snapshot URI for profile {}: {}", profile.getToken(), e.getMessage());
         }
         try {
             String streamUri = device.getClient().getStreamUri(profile.getToken());
-            profileJson.put("streamUri", device.getAuthenticatedUrl(streamUri));
+            profileJson.put("streamUri", streamUri);
         } catch (Exception e) {
             logger.debug("Could not get stream URI for profile {}: {}", profile.getToken(), e.getMessage());
         }
@@ -282,7 +282,7 @@ public class DeviceApiHandler extends BaseHandler {
         GenericCameraConfig cfg = device.getConfig();
         JSONArray profiles = new JSONArray();
 
-        String rtspUrl = device.getAuthenticatedRtspUrl();
+        String rtspUrl = device.getConfig().cameraConnection().rtspUrl();
         if (rtspUrl != null && !rtspUrl.trim().isEmpty()) {
             JSONObject rtspProfile = new JSONObject();
             rtspProfile.put("token", "rtsp");

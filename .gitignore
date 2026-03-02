@@ -21,6 +21,9 @@ bin/
 # VS Code
 .vscode/
 
+# Claude Code
+.claude/
+
 # macOS
 .DS_Store
 
