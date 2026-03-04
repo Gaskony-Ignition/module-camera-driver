@@ -794,6 +794,67 @@
         .status-dot.alive { background: var(--success); }
         .status-dot.dead { background: var(--error); }
 
+        .stream-details-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .stream-card {
+            background: var(--surface0);
+            border: 1px solid var(--border-default);
+            border-radius: 6px;
+            padding: 10px 12px;
+        }
+
+        .stream-card-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--accent-primary);
+            margin-bottom: 6px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .stream-card-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 2px 0;
+            font-size: 11px;
+        }
+
+        .stream-card-label {
+            color: var(--text-tertiary);
+        }
+
+        .stream-card-value {
+            color: var(--text-primary);
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-weight: 500;
+        }
+
+        .dedup-badge {
+            display: inline-block;
+            font-size: 9px;
+            font-weight: 700;
+            color: var(--accent-peach);
+            background: rgba(250, 179, 135, 0.15);
+            border-radius: 3px;
+            padding: 1px 5px;
+            margin-left: 6px;
+            letter-spacing: 0.04em;
+            vertical-align: middle;
+        }
+
+        .stream-no-data {
+            font-size: 12px;
+            color: var(--text-muted);
+            padding: 8px 0;
+        }
+
         .diag-auto-note {
             font-size: 11px;
             color: var(--text-tertiary);
@@ -1538,6 +1599,10 @@
                                 <div class="diag-row"><span class="diag-label">Active Consumers</span><span class="diag-value" id="diagConsumers">0</span></div>
                             </div>
                             <div class="diag-section">
+                                <div class="diag-section-title">Stream Details</div>
+                                <div id="diagStreamDetails"><span class="stream-no-data">No active streams</span></div>
+                            </div>
+                            <div class="diag-section">
                                 <div class="diag-section-title">Gateway JVM</div>
                                 <div class="diag-row"><span class="diag-label">Heap</span><span style="display:flex;align-items:center;"><span class="diag-value" id="diagHeap">- / -</span><span class="diag-bar-track"><span class="diag-bar-fill green" id="diagHeapBar" style="width:0%"></span></span></span></div>
                                 <div class="diag-row"><span class="diag-label">Threads</span><span class="diag-value" id="diagThreads">-</span></div>
@@ -2097,6 +2162,37 @@
                 document.getElementById('diagStreamsRegistered').textContent = gs.registeredStreams || 0;
                 document.getElementById('diagProducers').textContent = gs.activeProducers || 0;
                 document.getElementById('diagConsumers').textContent = gs.activeConsumers || 0;
+
+                // Render per-stream detail cards
+                var detailsEl = document.getElementById('diagStreamDetails');
+                var streamsArr = gs.streams || [];
+                if (streamsArr.length === 0) {
+                    detailsEl.innerHTML = '<span class="stream-no-data">No active streams</span>';
+                } else {
+                    var html = '<div class="stream-details-grid">';
+                    for (var si = 0; si < streamsArr.length; si++) {
+                        var st = streamsArr[si];
+                        var tracks = '';
+                        if (st.producerTracks && st.producerTracks.length > 0) {
+                            tracks = st.producerTracks.join(', ');
+                        } else {
+                            tracks = '-';
+                        }
+                        var bitrate = (st.bitrateKbps != null && st.bitrateKbps > 0)
+                            ? st.bitrateKbps + ' kbps' : '0 kbps';
+                        var viewers = st.consumers || 0;
+                        var dedupBadge = st.deduplication
+                            ? '<span class="dedup-badge">DEDUP</span>' : '';
+                        html += '<div class="stream-card">'
+                            + '<div class="stream-card-name">' + escapeHtml(st.name || '?') + '</div>'
+                            + '<div class="stream-card-row"><span class="stream-card-label">Codec</span><span class="stream-card-value">' + escapeHtml(tracks) + '</span></div>'
+                            + '<div class="stream-card-row"><span class="stream-card-label">Bitrate</span><span class="stream-card-value">' + bitrate + '</span></div>'
+                            + '<div class="stream-card-row"><span class="stream-card-label">Viewers</span><span class="stream-card-value">' + viewers + dedupBadge + '</span></div>'
+                            + '</div>';
+                    }
+                    html += '</div>';
+                    detailsEl.innerHTML = html;
+                }
 
                 var gw = d.gateway || {};
                 var heapPct = gw.heapPercent >= 0 ? gw.heapPercent : 0;

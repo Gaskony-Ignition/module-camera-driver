@@ -3,8 +3,7 @@ package com.onvif.driver.gateway.servlet.handlers;
 import com.inductiveautomation.ignition.gateway.dataroutes.RequestContext;
 import com.inductiveautomation.ignition.gateway.model.GatewayContext;
 import com.onvif.driver.gateway.auth.AuthenticationManager;
-import com.onvif.driver.gateway.device.ONVIFDeviceExtensionPoint;
-import com.onvif.driver.gateway.device.generic.GenericCameraExtensionPoint;
+import com.onvif.driver.gateway.device.CameraExtensionPoint;
 import com.onvif.driver.gateway.stream.Go2RtcManager;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -24,8 +23,7 @@ import static org.mockito.Mockito.*;
 class SnapshotHandlerTest {
 
     @Mock GatewayContext gatewayContext;
-    @Mock ONVIFDeviceExtensionPoint deviceExtensionPoint;
-    @Mock GenericCameraExtensionPoint genericCameraExtensionPoint;
+    @Mock CameraExtensionPoint cameraExtensionPoint;
     @Mock Go2RtcManager go2RtcManager;
     @Mock AuthenticationManager authManager;
     @Mock RequestContext requestContext;
@@ -38,11 +36,10 @@ class SnapshotHandlerTest {
     void setUp() {
         handler = new SnapshotHandler(
             gatewayContext,
-            deviceExtensionPoint,
-            genericCameraExtensionPoint,
+            cameraExtensionPoint,
             go2RtcManager,
             authManager,
-            "2.13.0"
+            "2.31.0"
         );
     }
 
@@ -52,11 +49,6 @@ class SnapshotHandlerTest {
 
     @Test
     void testHandle_UnauthenticatedRequest_Returns401() throws Exception {
-        // Debug logging in SnapshotHandler.handle() calls requestContext.getRequest() before
-        // the auth check, so we must stub getRequest() even for auth-failure tests.
-        when(requestContext.getRequest()).thenReturn(httpRequest);
-        when(httpRequest.getRequestURL()).thenReturn(new StringBuffer("http://localhost/snapshot"));
-        when(httpRequest.getQueryString()).thenReturn("");
         when(authManager.isAuthenticated(requestContext)).thenReturn(false);
 
         handler.handle(requestContext, response);
@@ -76,9 +68,6 @@ class SnapshotHandlerTest {
         when(httpRequest.getHeader("X-Forwarded-For")).thenReturn(null);
         when(httpRequest.getHeader("X-Real-IP")).thenReturn(null);
         when(httpRequest.getRemoteAddr()).thenReturn("127.0.0.1");
-        // Needed for request URL logging
-        when(httpRequest.getRequestURL()).thenReturn(new StringBuffer("http://localhost/snapshot"));
-        when(httpRequest.getQueryString()).thenReturn("");
         // device parameter is null
         when(requestContext.getParameter("device")).thenReturn(null);
 
@@ -95,9 +84,6 @@ class SnapshotHandlerTest {
         when(httpRequest.getHeader("X-Forwarded-For")).thenReturn(null);
         when(httpRequest.getHeader("X-Real-IP")).thenReturn(null);
         when(httpRequest.getRemoteAddr()).thenReturn("127.0.0.1");
-        // Needed for request URL logging
-        when(httpRequest.getRequestURL()).thenReturn(new StringBuffer("http://localhost/snapshot"));
-        when(httpRequest.getQueryString()).thenReturn("device=<script>alert(1)</script>");
         // Inject a device name with invalid characters (XSS attempt)
         when(requestContext.getParameter("device")).thenReturn("<script>alert(1)</script>");
 

@@ -41,6 +41,11 @@
       "default": true,
       "description": "Show camera name and status overlays on each cell"
     },
+    "showSaveButtons": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show snapshot download buttons on each cell"
+    },
     "gap": {
       "type": "number",
       "default": 2,

@@ -31,4 +31,13 @@ export const API = {
     logsGateway: `${DATA_BASE}/logs/gateway`,
     /** Connection Browser page. */
     connectionBrowser: `${DATA_BASE}/connection-browser`,
+    /** PTZ continuous move — POST with pan/tilt/zoom speeds. */
+    ptzMove: (device: string, pan: number, tilt: number, zoom: number) =>
+        `${DATA_BASE}/ptz/move?device=${encodeURIComponent(device)}&pan=${pan}&tilt=${tilt}&zoom=${zoom}`,
+    /** PTZ stop — POST to halt all movement. */
+    ptzStop: (device: string) =>
+        `${DATA_BASE}/ptz/stop?device=${encodeURIComponent(device)}`,
+    /** PTZ status — GET current position and move status. */
+    ptzStatus: (device: string) =>
+        `${DATA_BASE}/ptz/status?device=${encodeURIComponent(device)}`,
 } as const;

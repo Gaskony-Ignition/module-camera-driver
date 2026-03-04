@@ -3,8 +3,7 @@ package com.onvif.driver.gateway.servlet.handlers;
 import com.inductiveautomation.ignition.gateway.dataroutes.RequestContext;
 import com.inductiveautomation.ignition.gateway.model.GatewayContext;
 import com.onvif.driver.gateway.auth.AuthenticationManager;
-import com.onvif.driver.gateway.device.ONVIFDeviceExtensionPoint;
-import com.onvif.driver.gateway.device.generic.GenericCameraExtensionPoint;
+import com.onvif.driver.gateway.device.CameraExtensionPoint;
 import com.onvif.driver.gateway.stream.Go2RtcManager;
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -17,20 +16,13 @@ import java.nio.charset.StandardCharsets;
 public class PageHandler extends BaseHandler {
 
     public PageHandler(GatewayContext context,
-                       ONVIFDeviceExtensionPoint deviceExtensionPoint,
-                       GenericCameraExtensionPoint genericCameraExtensionPoint,
+                       CameraExtensionPoint cameraExtensionPoint,
                        Go2RtcManager go2RtcManager,
                        AuthenticationManager authManager,
                        String moduleVersion) {
-        super(context, deviceExtensionPoint, genericCameraExtensionPoint, go2RtcManager, authManager, moduleVersion);
+        super(context, cameraExtensionPoint, go2RtcManager, authManager, moduleVersion);
     }
 
-    /**
-     * Handles serving the embeddable video player page.
-     * URL: http://gateway:8088/data/camera-driver/player?device=DeviceName
-     *
-     * Designed to be embedded in Perspective Inline Frame component.
-     */
     public Object handlePlayerPage(RequestContext requestContext, HttpServletResponse response) throws Exception {
         logger.debug("Player page request received");
 
@@ -56,10 +48,6 @@ public class PageHandler extends BaseHandler {
         return null;
     }
 
-    /**
-     * Serves the shared MSE player JavaScript module.
-     * URL: /data/camera-driver/mse-player.js
-     */
     public Object handleMsePlayerJs(RequestContext requestContext, HttpServletResponse response) throws Exception {
         try (InputStream stream = getClass().getResourceAsStream("/pages/mse-player.js")) {
             if (stream == null) {
@@ -78,10 +66,6 @@ public class PageHandler extends BaseHandler {
         return null;
     }
 
-    /**
-     * Handles serving the connection browser HTML page.
-     * URL: http://gateway:8088/data/camera-driver/connection-browser
-     */
     public Object handleConnectionBrowserPage(RequestContext requestContext, HttpServletResponse response) throws Exception {
         logger.debug("Connection browser page request received");
 

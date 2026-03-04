@@ -13,6 +13,8 @@ interface CameraViewerProps extends ComponentProps {
         snapshotInterval: number;
         showOverlay: boolean;
         objectFit: 'contain' | 'cover' | 'fill';
+        showSaveButton: boolean;
+        showPtzControls: boolean;
     };
 }
 
@@ -248,6 +250,131 @@ export function useCameraStream(
     return { status, error, activeMode, retry: start };
 }
 
+/** Downloads a snapshot JPEG for the given device. */
+export function saveSnapshot(
+    deviceName: string,
+    activeMode: 'mse' | 'snapshot' | null,
+    imgRef: React.RefObject<HTMLImageElement | null>
+) {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const filename = `${deviceName}_${timestamp}.jpg`;
+
+    if (activeMode === 'snapshot' && imgRef.current && imgRef.current.src.startsWith('blob:')) {
+        // In snapshot mode, download directly from the existing blob URL
+        const a = document.createElement('a');
+        a.href = imgRef.current.src;
+        a.download = filename;
+        a.click();
+    } else {
+        // In MSE mode or no blob available, fetch a fresh snapshot
+        fetch(API.snapshot(deviceName), { credentials: 'include' })
+            .then(r => r.blob())
+            .then(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
+            })
+            .catch(() => { /* silent */ });
+    }
+}
+
+const ptzStyles = {
+    container: {
+        position: 'absolute' as const,
+        top: 8,
+        right: 8,
+        display: 'flex',
+        flexDirection: 'column' as const,
+        alignItems: 'center',
+        gap: 4,
+        pointerEvents: 'auto' as const,
+    },
+    pad: {
+        display: 'grid',
+        gridTemplateColumns: '32px 32px 32px',
+        gridTemplateRows: '32px 32px 32px',
+        gap: 2,
+    },
+    btn: {
+        width: 32,
+        height: 32,
+        border: 'none',
+        borderRadius: 4,
+        background: 'rgba(0,0,0,0.6)',
+        color: '#fff',
+        fontSize: 14,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        userSelect: 'none' as const,
+        touchAction: 'none' as const,
+    },
+    zoomRow: {
+        display: 'flex',
+        gap: 2,
+    },
+};
+
+function PtzControls({ deviceName }: { deviceName: string }) {
+    const sendMove = (pan: number, tilt: number, zoom: number) => {
+        fetch(API.ptzMove(deviceName, pan, tilt, zoom), {
+            method: 'POST',
+            credentials: 'include',
+        }).catch(() => {});
+    };
+
+    const sendStop = () => {
+        fetch(API.ptzStop(deviceName), {
+            method: 'POST',
+            credentials: 'include',
+        }).catch(() => {});
+    };
+
+    const onStart = (pan: number, tilt: number, zoom: number) => (e: React.MouseEvent | React.TouchEvent) => {
+        e.preventDefault();
+        sendMove(pan, tilt, zoom);
+    };
+
+    const onEnd = (e: React.MouseEvent | React.TouchEvent) => {
+        e.preventDefault();
+        sendStop();
+    };
+
+    const btnProps = (pan: number, tilt: number, zoom: number) => ({
+        onMouseDown: onStart(pan, tilt, zoom),
+        onMouseUp: onEnd,
+        onMouseLeave: onEnd,
+        onTouchStart: onStart(pan, tilt, zoom),
+        onTouchEnd: onEnd,
+    });
+
+    const empty = { width: 32, height: 32 };
+
+    return (
+        <div style={ptzStyles.container}>
+            <div style={ptzStyles.pad}>
+                <div style={empty} />
+                <button style={ptzStyles.btn} {...btnProps(0, 0.5, 0)} title="Tilt Up">{'\u25B2'}</button>
+                <div style={empty} />
+                <button style={ptzStyles.btn} {...btnProps(-0.5, 0, 0)} title="Pan Left">{'\u25C0'}</button>
+                <button style={ptzStyles.btn} onMouseDown={() => sendStop()} title="Stop">{'\u25A0'}</button>
+                <button style={ptzStyles.btn} {...btnProps(0.5, 0, 0)} title="Pan Right">{'\u25B6'}</button>
+                <div style={empty} />
+                <button style={ptzStyles.btn} {...btnProps(0, -0.5, 0)} title="Tilt Down">{'\u25BC'}</button>
+                <div style={empty} />
+            </div>
+            <div style={ptzStyles.zoomRow}>
+                <button style={{ ...ptzStyles.btn, width: 48 }} {...btnProps(0, 0, 0.5)} title="Zoom In">+</button>
+                <button style={{ ...ptzStyles.btn, width: 48 }} {...btnProps(0, 0, -0.5)} title="Zoom Out">{'\u2212'}</button>
+            </div>
+        </div>
+    );
+}
+
 const styles = {
     container: {
         position: 'relative' as const,
@@ -285,6 +412,16 @@ const styles = {
         alignItems: 'center',
         pointerEvents: 'none' as const,
     },
+    saveBtn: {
+        pointerEvents: 'auto' as const,
+        background: 'rgba(0,0,0,0.5)',
+        border: 'none',
+        color: '#fff',
+        fontSize: '11px',
+        padding: '2px 8px',
+        borderRadius: 3,
+        cursor: 'pointer',
+    },
     statusDot: (status: StreamStatus) => ({
         width: 8,
         height: 8,
@@ -318,7 +455,15 @@ const styles = {
 };
 
 function CameraViewerComponent(props: CameraViewerProps) {
-    const { deviceName = '', mode = 'auto', snapshotInterval = 5000, showOverlay = true, objectFit = 'contain' } = props.props;
+    const {
+        deviceName = '',
+        mode = 'auto',
+        snapshotInterval = 5000,
+        showOverlay = true,
+        objectFit = 'contain',
+        showSaveButton = true,
+        showPtzControls = false,
+    } = props.props;
     const emitProps = props.emit({ style: styles.container });
 
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -366,7 +511,20 @@ function CameraViewerComponent(props: CameraViewerProps) {
                         <span style={styles.statusDot(status)} />
                         {deviceName}
                     </span>
+                    {showSaveButton && (
+                        <button
+                            style={styles.saveBtn}
+                            onClick={() => saveSnapshot(deviceName, activeMode, imgRef)}
+                            title="Save snapshot"
+                        >
+                            {'\u2B73'}
+                        </button>
+                    )}
                 </div>
+            )}
+
+            {showPtzControls && deviceName && status === 'streaming' && (
+                <PtzControls deviceName={deviceName} />
             )}
         </div>
     );
@@ -394,6 +552,8 @@ export class CameraViewerMeta implements ComponentMeta {
             snapshotInterval: tree.readNumber('snapshotInterval', 5000),
             showOverlay: tree.readBoolean('showOverlay', true),
             objectFit: tree.readString('objectFit', 'contain') as 'contain' | 'cover' | 'fill',
+            showSaveButton: tree.readBoolean('showSaveButton', true),
+            showPtzControls: tree.readBoolean('showPtzControls', false),
         };
     }
 }

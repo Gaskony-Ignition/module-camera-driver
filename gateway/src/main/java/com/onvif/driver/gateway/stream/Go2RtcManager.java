@@ -56,6 +56,11 @@ public class Go2RtcManager {
     private Thread monitorThread;
     private CloseableHttpClient httpClient;
 
+    private Path ffmpegDir;
+
+    private final java.util.concurrent.ConcurrentHashMap<String, Long> lastPollBytes = new java.util.concurrent.ConcurrentHashMap<>();
+    private volatile long lastPollTimeMs = 0;
+
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
     private final AtomicInteger restartCount = new AtomicInteger(0);
@@ -86,12 +91,22 @@ public class Go2RtcManager {
 
         shuttingDown.set(false);
 
-        // Extract binary
+        // Extract go2rtc binary
         Go2RtcBinaryExtractor extractor = new Go2RtcBinaryExtractor(dataDir);
         binaryPath = extractor.extractIfNeeded();
         if (binaryPath == null) {
             logger.warn("go2rtc binary not available for this platform - streaming will use fallback modes");
             return;
+        }
+
+        // Extract bundled ffmpeg binary (required for snapshot extraction and MJPEG transcoding)
+        FfmpegBinaryExtractor ffmpegExtractor = new FfmpegBinaryExtractor(dataDir);
+        Path ffmpegPath = ffmpegExtractor.extractIfNeeded();
+        if (ffmpegPath != null) {
+            ffmpegDir = ffmpegPath.getParent();
+            logger.info("ffmpeg available at: {}", ffmpegPath);
+        } else {
+            logger.warn("ffmpeg binary not available - snapshot extraction (frame.jpeg) will not work");
         }
 
         // Generate config
@@ -126,6 +141,13 @@ public class Go2RtcManager {
             );
             pb.directory(binaryPath.getParent().toFile());
             pb.redirectErrorStream(true);
+
+            // Add bundled ffmpeg to PATH so go2rtc can find it for transcoding
+            if (ffmpegDir != null) {
+                String currentPath = pb.environment().getOrDefault("PATH", "");
+                pb.environment().put("PATH", ffmpegDir.toAbsolutePath() + ":" + currentPath);
+                logger.debug("Added ffmpeg to go2rtc PATH: {}", ffmpegDir.toAbsolutePath());
+            }
 
             process = pb.start();
             running.set(true);
@@ -332,6 +354,50 @@ public class Go2RtcManager {
     }
 
     /**
+     * Gets the snapshot URL (single JPEG frame) from go2rtc.
+     * Requires ffmpeg to be available on the system PATH.
+     *
+     * @param streamName Stream name
+     * @return Full URL to go2rtc's frame.jpeg endpoint
+     */
+    public String getSnapshotUrl(String streamName) {
+        return String.format("http://127.0.0.1:%d/api/frame.jpeg?src=%s",
+            port,
+            URLEncoder.encode(streamName, StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Fetches a single JPEG frame from go2rtc for the given stream.
+     * Uses go2rtc's /api/frame.jpeg endpoint which requires ffmpeg on the system PATH.
+     *
+     * @param streamName Stream name (must already be registered via addStream)
+     * @return JPEG image bytes, or null if unavailable
+     */
+    public byte[] fetchSnapshot(String streamName) {
+        if (!isAvailable()) {
+            return null;
+        }
+
+        try {
+            String url = getSnapshotUrl(streamName);
+            HttpGet request = new HttpGet(url);
+            try (CloseableHttpResponse response = httpClient.execute(request)) {
+                int statusCode = response.getStatusLine().getStatusCode();
+                if (statusCode == 200 && response.getEntity() != null) {
+                    return EntityUtils.toByteArray(response.getEntity());
+                } else {
+                    EntityUtils.consumeQuietly(response.getEntity());
+                    logger.debug("go2rtc frame.jpeg returned HTTP {} for stream: {}", statusCode, streamName);
+                    return null;
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Failed to fetch snapshot from go2rtc for stream {}: {}", streamName, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
      * Checks if go2rtc is available (process alive and API responding).
      *
      * @return true if go2rtc is running and responsive
@@ -443,6 +509,9 @@ public class Go2RtcManager {
                     int consumers = 0;
                     JSONArray streamDetails = new JSONArray();
 
+                    long now = System.currentTimeMillis();
+                    long timeDeltaMs = (lastPollTimeMs > 0) ? (now - lastPollTimeMs) : 0;
+
                     java.util.Iterator<String> keys = streams.keys();
                     while (keys.hasNext()) {
                         String name = keys.next();
@@ -453,21 +522,87 @@ public class Go2RtcManager {
 
                         if (val instanceof JSONObject) {
                             JSONObject streamObj = (JSONObject) val;
+
+                            // --- Producers ---
+                            int pCount = 0;
+                            Object producerState = JSONObject.NULL;
+                            JSONArray producerTracks = new JSONArray();
+                            long producerRecvBytes = 0;
+
                             if (streamObj.has("producers")) {
                                 Object p = streamObj.get("producers");
-                                int pCount = (p instanceof JSONArray) ? ((JSONArray) p).length() : 0;
-                                producers += pCount;
-                                detail.put("producers", pCount);
+                                if (p instanceof JSONArray) {
+                                    JSONArray pArr = (JSONArray) p;
+                                    pCount = pArr.length();
+                                    if (pCount > 0) {
+                                        Object firstP = pArr.get(0);
+                                        if (firstP instanceof JSONObject) {
+                                            JSONObject fp = (JSONObject) firstP;
+                                            if (fp.has("state")) {
+                                                producerState = fp.get("state");
+                                            }
+                                            if (fp.has("tracks")) {
+                                                Object t = fp.get("tracks");
+                                                if (t instanceof JSONArray) {
+                                                    producerTracks = (JSONArray) t;
+                                                }
+                                            }
+                                            if (fp.has("recv")) {
+                                                producerRecvBytes = fp.getLong("recv");
+                                            }
+                                        }
+                                    }
+                                }
                             }
+                            producers += pCount;
+                            detail.put("producers", pCount);
+                            detail.put("producerState", producerState);
+                            detail.put("producerTracks", producerTracks);
+                            detail.put("producerRecvBytes", producerRecvBytes);
+
+                            // --- Consumers ---
+                            int cCount = 0;
+                            long consumerSendBytes = 0;
+
                             if (streamObj.has("consumers")) {
                                 Object c = streamObj.get("consumers");
-                                int cCount = (c instanceof JSONArray) ? ((JSONArray) c).length() : 0;
-                                consumers += cCount;
-                                detail.put("consumers", cCount);
+                                if (c instanceof JSONArray) {
+                                    JSONArray cArr = (JSONArray) c;
+                                    cCount = cArr.length();
+                                    for (int i = 0; i < cCount; i++) {
+                                        Object ci = cArr.get(i);
+                                        if (ci instanceof JSONObject) {
+                                            JSONObject co = (JSONObject) ci;
+                                            if (co.has("send")) {
+                                                consumerSendBytes += co.getLong("send");
+                                            }
+                                        }
+                                    }
+                                }
                             }
+                            consumers += cCount;
+                            detail.put("consumers", cCount);
+                            detail.put("consumerSendBytes", consumerSendBytes);
+
+                            // --- Bitrate (from producer recv delta) ---
+                            long bitrateKbps = 0;
+                            Long lastRecv = lastPollBytes.get(name);
+                            if (lastRecv != null && timeDeltaMs > 0) {
+                                long delta = producerRecvBytes - lastRecv;
+                                if (delta > 0) {
+                                    bitrateKbps = (delta * 8) / timeDeltaMs;
+                                }
+                            }
+                            lastPollBytes.put(name, producerRecvBytes);
+                            detail.put("bitrateKbps", bitrateKbps);
+
+                            // --- Deduplication ---
+                            detail.put("deduplication", cCount > 1);
                         }
                         streamDetails.put(detail);
                     }
+
+                    lastPollTimeMs = System.currentTimeMillis();
 
                     info.put("registeredStreams", registered);
                     info.put("activeProducers", producers);

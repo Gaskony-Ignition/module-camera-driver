@@ -3,8 +3,7 @@ package com.onvif.driver.gateway.servlet.handlers;
 import com.inductiveautomation.ignition.gateway.dataroutes.RequestContext;
 import com.inductiveautomation.ignition.gateway.model.GatewayContext;
 import com.onvif.driver.gateway.auth.AuthenticationManager;
-import com.onvif.driver.gateway.device.ONVIFDeviceExtensionPoint;
-import com.onvif.driver.gateway.device.generic.GenericCameraExtensionPoint;
+import com.onvif.driver.gateway.device.CameraExtensionPoint;
 import com.onvif.driver.gateway.stream.Go2RtcManager;
 import jakarta.servlet.http.HttpServletResponse;
 import org.json.JSONArray;
@@ -33,24 +32,13 @@ public class GatewayLogHandler extends BaseHandler {
     private static final String CAMERA_DRIVER_LOGGER_PREFIX = "com.onvif.driver";
 
     public GatewayLogHandler(GatewayContext context,
-                              ONVIFDeviceExtensionPoint deviceExtensionPoint,
-                              GenericCameraExtensionPoint genericCameraExtensionPoint,
+                              CameraExtensionPoint cameraExtensionPoint,
                               Go2RtcManager go2RtcManager,
                               AuthenticationManager authManager,
                               String moduleVersion) {
-        super(context, deviceExtensionPoint, genericCameraExtensionPoint, go2RtcManager, authManager, moduleVersion);
+        super(context, cameraExtensionPoint, go2RtcManager, authManager, moduleVersion);
     }
 
-    /**
-     * Handles gateway log requests by reading from Ignition's system_logs.idb SQLite database.
-     * URL: http://gateway:8088/data/camera-driver/logs/gateway
-     *
-     * Query params:
-     *   - lines: Number of entries (default 100, max 500)
-     *   - moduleOnly: If "true", filter by com.onvif.driver logger prefix (default true)
-     *   - after: Only return entries after this event ID (for polling)
-     *   - level: Comma-separated log levels (ERROR,WARN,INFO)
-     */
     public Object handleGatewayLogs(RequestContext requestContext, HttpServletResponse response) throws Exception {
         logger.debug("Gateway logs request received");
 
@@ -62,14 +50,12 @@ public class GatewayLogHandler extends BaseHandler {
         try {
             JSONObject result = new JSONObject();
 
-            // Parse parameters
             int maxLines = parseLogLines(requestContext.getRequest().getParameter("lines"));
             String moduleOnlyParam = requestContext.getRequest().getParameter("moduleOnly");
             boolean moduleOnly = moduleOnlyParam == null || !"false".equalsIgnoreCase(moduleOnlyParam);
             long afterEventId = parseAfterEventId(requestContext.getRequest().getParameter("after"));
             Set<String> levelFilter = parseLevelFilter(requestContext.getRequest().getParameter("level"));
 
-            // Find system_logs.idb
             File logDb = findSystemLogsDb();
             if (logDb == null || !logDb.exists() || !logDb.canRead()) {
                 result.put("success", false);
@@ -80,7 +66,6 @@ public class GatewayLogHandler extends BaseHandler {
                 return null;
             }
 
-            // Read entries from SQLite
             JSONArray entries = readGatewayLogEntries(logDb, maxLines, moduleOnly, afterEventId, levelFilter);
 
             result.put("success", true);
@@ -144,7 +129,6 @@ public class GatewayLogHandler extends BaseHandler {
             }
 
             try (ResultSet rs = stmt.executeQuery()) {
-                // Collect in reverse order (DESC query gives newest first)
                 List<JSONObject> tempList = new ArrayList<>();
                 while (rs.next()) {
                     try {
@@ -155,7 +139,6 @@ public class GatewayLogHandler extends BaseHandler {
                         String loggerName = rs.getString("logger_name");
                         String level = rs.getString("level_string");
 
-                        // Shorten logger name for display (last segment)
                         String source = loggerName;
                         if (loggerName != null && loggerName.contains(".")) {
                             source = loggerName.substring(loggerName.lastIndexOf('.') + 1);
@@ -173,7 +156,6 @@ public class GatewayLogHandler extends BaseHandler {
                     }
                 }
 
-                // Return newest-first (DESC query order preserved)
                 for (JSONObject entry : tempList) {
                     entries.put(entry);
                 }
@@ -188,7 +170,6 @@ public class GatewayLogHandler extends BaseHandler {
     private File findSystemLogsDb() {
         List<File> candidates = new ArrayList<>();
 
-        // Primary: from GatewayContext (this.context is the GatewayContext field from BaseHandler)
         try {
             File logsDir = this.context.getSystemManager().getLogsDir();
             if (logsDir != null) {
@@ -198,7 +179,6 @@ public class GatewayLogHandler extends BaseHandler {
             logger.debug("Could not get logsDir from GatewayContext: {}", e.getMessage());
         }
 
-        // Common Ignition installation paths
         candidates.add(new File("/usr/local/bin/ignition/logs/system_logs.idb"));
         candidates.add(new File("/var/lib/ignition/logs/system_logs.idb"));
         candidates.add(new File("C:/Program Files/Inductive Automation/Ignition/logs/system_logs.idb"));

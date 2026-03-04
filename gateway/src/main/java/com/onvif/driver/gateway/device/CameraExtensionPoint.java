@@ -1,0 +1,126 @@
+package com.onvif.driver.gateway.device;
+
+import com.inductiveautomation.ignition.gateway.config.ValidationErrors.Builder;
+import com.inductiveautomation.ignition.gateway.dataroutes.openapi.SchemaUtil;
+import com.inductiveautomation.ignition.gateway.opcua.server.api.Device;
+import com.inductiveautomation.ignition.gateway.opcua.server.api.DeviceContext;
+import com.inductiveautomation.ignition.gateway.opcua.server.api.DeviceExtensionPoint;
+import com.inductiveautomation.ignition.gateway.opcua.server.api.DeviceProfileConfig;
+import com.inductiveautomation.ignition.gateway.web.nav.ExtensionPointResourceForm;
+import com.inductiveautomation.ignition.gateway.web.nav.WebUiComponent;
+import com.onvif.driver.gateway.stream.Go2RtcManager;
+import com.onvif.driver.gateway.util.ValidationUtil;
+
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+
+/**
+ * Unified extension point for the Camera device type.
+ * Replaces both ONVIFDeviceExtensionPoint and GenericCameraExtensionPoint.
+ * Registers a single "Camera" entry in the device connection dropdown.
+ */
+public class CameraExtensionPoint extends DeviceExtensionPoint<CameraConfig> {
+
+    public static final String TYPE_ID = "com.onvif.driver.Camera";
+
+    private static final DeviceRegistry<CameraDevice> registry = new DeviceRegistry<>();
+
+    private volatile Go2RtcManager go2RtcManager;
+
+    public CameraExtensionPoint() {
+        super(
+            TYPE_ID,
+            "Camera.Meta.DisplayName",
+            "Camera.Meta.Description",
+            CameraConfig.class
+        );
+    }
+
+    public void setGo2RtcManager(Go2RtcManager go2RtcManager) {
+        this.go2RtcManager = go2RtcManager;
+    }
+
+    @Override
+    protected Device createDevice(
+        DeviceContext context,
+        DeviceProfileConfig profileConfig,
+        CameraConfig deviceConfig) {
+
+        return new CameraDevice(context, deviceConfig, go2RtcManager);
+    }
+
+    @Override
+    public Optional<WebUiComponent> getWebUiComponent(ComponentType type) {
+        return Optional.of(
+            new ExtensionPointResourceForm(
+                DeviceExtensionPoint.DEVICE_RESOURCE_TYPE,
+                "Device Connection",
+                TYPE_ID,
+                SchemaUtil.fromType(DeviceProfileConfig.class),
+                SchemaUtil.fromType(CameraConfig.class),
+                Set.of()
+            )
+        );
+    }
+
+    @Override
+    protected void validate(CameraConfig config, Builder errors) {
+        // Validate IP address (required)
+        String ipAddress = config.connection().ipAddress();
+        if (ipAddress == null || ipAddress.trim().isEmpty()) {
+            errors.check(false, "IP address is required");
+        } else {
+            String ipRegex = "^((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$";
+            if (!ipAddress.matches(ipRegex)) {
+                errors.check(false, "Invalid IP address format: " + ipAddress);
+            }
+        }
+
+        // Validate port
+        int port = config.connection().port();
+        if (port < 1 || port > 65535) {
+            errors.check(false, "Port must be between 1 and 65535");
+        }
+
+        // Validate timeout
+        if (config.connection().timeout() < 1) {
+            errors.check(false, "Connection timeout must be at least 1 second");
+        }
+
+        // Validate poll interval (0 = disabled, otherwise >= 1)
+        if (config.advanced().pollInterval() < 0) {
+            errors.check(false, "Poll interval must be 0 (disabled) or at least 1 second");
+        }
+
+        // Validate optional URL overrides
+        String rtspUrl = config.advanced().rtspUrl();
+        if (rtspUrl != null && !rtspUrl.trim().isEmpty() && !ValidationUtil.isValidRtspUrl(rtspUrl)) {
+            errors.check(false, "Invalid RTSP URL format. Must start with rtsp:// or rtsps://");
+        }
+        String snapshotUrl = config.advanced().snapshotUrl();
+        if (snapshotUrl != null && !snapshotUrl.trim().isEmpty() && !ValidationUtil.isValidUrl(snapshotUrl)) {
+            errors.check(false, "Invalid Snapshot URL format. Must start with http:// or https://");
+        }
+        String mjpegUrl = config.advanced().mjpegUrl();
+        if (mjpegUrl != null && !mjpegUrl.trim().isEmpty() && !ValidationUtil.isValidUrl(mjpegUrl)) {
+            errors.check(false, "Invalid MJPEG URL format. Must start with http:// or https://");
+        }
+    }
+
+    public static void registerDevice(String name, CameraDevice device) {
+        registry.register(name, device);
+    }
+
+    public static void unregisterDevice(String name) {
+        registry.unregister(name);
+    }
+
+    public CameraDevice getDevice(String name) {
+        return registry.get(name);
+    }
+
+    public static Map<String, CameraDevice> getAllDevices() {
+        return registry.getAll();
+    }
+}

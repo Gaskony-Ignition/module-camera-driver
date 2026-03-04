@@ -5,12 +5,12 @@ import com.inductiveautomation.ignition.gateway.dataroutes.RouteGroup;
 import com.inductiveautomation.ignition.gateway.model.GatewayContext;
 import com.onvif.driver.common.CameraDriverPaths;
 import com.onvif.driver.gateway.auth.AuthenticationManager;
-import com.onvif.driver.gateway.device.ONVIFDeviceExtensionPoint;
-import com.onvif.driver.gateway.device.generic.GenericCameraExtensionPoint;
+import com.onvif.driver.gateway.device.CameraExtensionPoint;
 import com.onvif.driver.gateway.servlet.handlers.DeviceApiHandler;
 import com.onvif.driver.gateway.servlet.handlers.DiagnosticsHandler;
 import com.onvif.driver.gateway.servlet.handlers.GatewayLogHandler;
 import com.onvif.driver.gateway.servlet.handlers.PageHandler;
+import com.onvif.driver.gateway.servlet.handlers.PtzHandler;
 import com.onvif.driver.gateway.servlet.handlers.SnapshotHandler;
 import com.onvif.driver.gateway.servlet.handlers.StreamHandler;
 import com.onvif.driver.gateway.stream.Go2RtcManager;
@@ -33,21 +33,22 @@ public class ONVIFRoutes {
     private final DiagnosticsHandler diagnosticsHandler;
     private final GatewayLogHandler gatewayLogHandler;
     private final PageHandler pageHandler;
+    private final PtzHandler ptzHandler;
 
     public ONVIFRoutes(GatewayContext context,
-                       ONVIFDeviceExtensionPoint deviceExtensionPoint,
-                       GenericCameraExtensionPoint genericCameraExtensionPoint,
+                       CameraExtensionPoint cameraExtensionPoint,
                        Go2RtcManager go2RtcManager,
                        String moduleVersion) {
         this.authManager = new AuthenticationManager(context);
         logger.info("AuthenticationManager initialized with account lockout and API key support");
 
-        this.snapshotHandler = new SnapshotHandler(context, deviceExtensionPoint, genericCameraExtensionPoint, go2RtcManager, authManager, moduleVersion);
-        this.streamHandler = new StreamHandler(context, deviceExtensionPoint, genericCameraExtensionPoint, go2RtcManager, authManager, moduleVersion);
-        this.deviceApiHandler = new DeviceApiHandler(context, deviceExtensionPoint, genericCameraExtensionPoint, go2RtcManager, authManager, moduleVersion);
-        this.diagnosticsHandler = new DiagnosticsHandler(context, deviceExtensionPoint, genericCameraExtensionPoint, go2RtcManager, authManager, moduleVersion);
-        this.gatewayLogHandler = new GatewayLogHandler(context, deviceExtensionPoint, genericCameraExtensionPoint, go2RtcManager, authManager, moduleVersion);
-        this.pageHandler = new PageHandler(context, deviceExtensionPoint, genericCameraExtensionPoint, go2RtcManager, authManager, moduleVersion);
+        this.snapshotHandler = new SnapshotHandler(context, cameraExtensionPoint, go2RtcManager, authManager, moduleVersion);
+        this.streamHandler = new StreamHandler(context, cameraExtensionPoint, go2RtcManager, authManager, moduleVersion);
+        this.deviceApiHandler = new DeviceApiHandler(context, cameraExtensionPoint, go2RtcManager, authManager, moduleVersion);
+        this.diagnosticsHandler = new DiagnosticsHandler(context, cameraExtensionPoint, go2RtcManager, authManager, moduleVersion);
+        this.gatewayLogHandler = new GatewayLogHandler(context, cameraExtensionPoint, go2RtcManager, authManager, moduleVersion);
+        this.pageHandler = new PageHandler(context, cameraExtensionPoint, go2RtcManager, authManager, moduleVersion);
+        this.ptzHandler = new PtzHandler(context, cameraExtensionPoint, go2RtcManager, authManager, moduleVersion);
     }
 
     /**
@@ -55,7 +56,6 @@ public class ONVIFRoutes {
      */
     public void mountRoutes(RouteGroup routes) {
         logger.info("Mounting camera driver routes...");
-        logger.debug("RouteGroup: {}, class: {}", routes, routes.getClass().getName());
 
         routes.newRoute(CameraDriverPaths.ROUTE_SNAPSHOT)
             .handler(snapshotHandler::handle)
@@ -105,8 +105,6 @@ public class ONVIFRoutes {
             .accessControl(AccessControlStrategy.OPEN_ROUTE)
             .mount();
 
-        // Returns 200 with {authenticated: true/false} — no 401, no WWW-Authenticate header
-        // Used by standalone.html to check auth without triggering browser Basic Auth popup
         routes.newRoute(CameraDriverPaths.ROUTE_AUTH_STATUS)
             .handler(diagnosticsHandler::handleAuthStatus)
             .type(RouteGroup.TYPE_JSON)
@@ -125,19 +123,31 @@ public class ONVIFRoutes {
             .accessControl(AccessControlStrategy.OPEN_ROUTE)
             .mount();
 
+        routes.newRoute(CameraDriverPaths.ROUTE_PTZ_MOVE)
+            .handler(ptzHandler::handleMove)
+            .type(RouteGroup.TYPE_JSON)
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)
+            .mount();
+
+        routes.newRoute(CameraDriverPaths.ROUTE_PTZ_STOP)
+            .handler(ptzHandler::handleStop)
+            .type(RouteGroup.TYPE_JSON)
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)
+            .mount();
+
+        routes.newRoute(CameraDriverPaths.ROUTE_PTZ_STATUS)
+            .handler(ptzHandler::handleStatus)
+            .type(RouteGroup.TYPE_JSON)
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)
+            .mount();
+
         logger.info("Camera driver routes mounted under /data/{}", CameraDriverPaths.MOUNT_ALIAS);
     }
 
-    /**
-     * Gets the AuthenticationManager for programmatic access (e.g., adding API keys).
-     */
     public AuthenticationManager getAuthenticationManager() {
         return authManager;
     }
 
-    /**
-     * Shuts down background resources. Called when module is unloaded.
-     */
     public static void shutdown() {
         RateLimiter.shutdown();
     }

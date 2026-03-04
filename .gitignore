@@ -5,6 +5,12 @@ build/
 !**/src/main/**
 !**/src/test/**
 
+# Extracted bytecode / framework artifacts (never commit)
+/META-INF/
+/com/
+/mounted/
+*.zip
+
 # IntelliJ IDEA
 .idea/
 *.iml

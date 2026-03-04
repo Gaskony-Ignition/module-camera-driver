@@ -1,6 +1,6 @@
 package com.onvif.driver.gateway.onvif;
 
-import com.onvif.driver.gateway.device.ONVIFDeviceConfig.SslValidationMode;
+import com.onvif.driver.gateway.device.CameraConfig.SslValidationMode;
 import com.onvif.driver.gateway.onvif.util.XmlUtil;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -323,6 +323,33 @@ public class ONVIFClient implements Closeable {
             "<tt:Zoom x=\"" + zoom + "\" xmlns:tt=\"http://www.onvif.org/ver10/schema\"/>" +
             "</tptz:Position>" +
             "</tptz:AbsoluteMove>"
+        );
+
+        sendSoapRequest(ptzServiceUrl, soapRequest);
+    }
+
+    /**
+     * Moves PTZ continuously at the given speed until stopped.
+     *
+     * @param profileToken Profile token
+     * @param panSpeed Pan speed (-1.0 to 1.0)
+     * @param tiltSpeed Tilt speed (-1.0 to 1.0)
+     * @param zoomSpeed Zoom speed (-1.0 to 1.0)
+     * @throws IOException if communication fails
+     */
+    public void continuousMove(String profileToken, double panSpeed, double tiltSpeed, double zoomSpeed) throws IOException {
+        if (ptzServiceUrl == null) {
+            throw new IOException("PTZ service not available");
+        }
+
+        String soapRequest = buildSoapEnvelope(
+            "<tptz:ContinuousMove xmlns:tptz=\"http://www.onvif.org/ver20/ptz/wsdl\">" +
+            "<tptz:ProfileToken>" + XmlUtil.escapeXml(profileToken) + "</tptz:ProfileToken>" +
+            "<tptz:Velocity>" +
+            "<tt:PanTilt x=\"" + panSpeed + "\" y=\"" + tiltSpeed + "\" xmlns:tt=\"http://www.onvif.org/ver10/schema\"/>" +
+            "<tt:Zoom x=\"" + zoomSpeed + "\" xmlns:tt=\"http://www.onvif.org/ver10/schema\"/>" +
+            "</tptz:Velocity>" +
+            "</tptz:ContinuousMove>"
         );
 
         sendSoapRequest(ptzServiceUrl, soapRequest);

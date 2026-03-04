@@ -3,8 +3,7 @@ package com.onvif.driver.gateway.servlet.handlers;
 import com.inductiveautomation.ignition.gateway.dataroutes.RequestContext;
 import com.inductiveautomation.ignition.gateway.model.GatewayContext;
 import com.onvif.driver.gateway.auth.AuthenticationManager;
-import com.onvif.driver.gateway.device.ONVIFDeviceExtensionPoint;
-import com.onvif.driver.gateway.device.generic.GenericCameraExtensionPoint;
+import com.onvif.driver.gateway.device.CameraExtensionPoint;
 import com.onvif.driver.gateway.stream.Go2RtcManager;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -26,15 +25,14 @@ import static org.mockito.Mockito.*;
  *
  * Tests focus on auth delegation and error responses because the full
  * handleHealthCheck / handleDiagnostics methods call static methods on
- * ONVIFDeviceExtensionPoint / GenericCameraExtensionPoint which require
- * a live Ignition runtime. The auth path is fully testable without PowerMock.
+ * CameraExtensionPoint which require a live Ignition runtime.
+ * The auth path is fully testable without PowerMock.
  */
 @ExtendWith(MockitoExtension.class)
 class DiagnosticsHandlerTest {
 
     @Mock GatewayContext gatewayContext;
-    @Mock ONVIFDeviceExtensionPoint deviceExtensionPoint;
-    @Mock GenericCameraExtensionPoint genericCameraExtensionPoint;
+    @Mock CameraExtensionPoint cameraExtensionPoint;
     @Mock Go2RtcManager go2RtcManager;
     @Mock AuthenticationManager authManager;
     @Mock RequestContext requestContext;
@@ -47,11 +45,10 @@ class DiagnosticsHandlerTest {
     void setUp() {
         handler = new DiagnosticsHandler(
             gatewayContext,
-            deviceExtensionPoint,
-            genericCameraExtensionPoint,
+            cameraExtensionPoint,
             go2RtcManager,
             authManager,
-            "2.13.0"
+            "2.31.0"
         );
     }
 

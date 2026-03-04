@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { ComponentProps, ComponentMeta, PropertyTree, SizeObject } from '@inductiveautomation/perspective-client';
-import { useCameraStream } from './CameraViewer';
+import { useCameraStream, saveSnapshot } from './CameraViewer';
 import { StreamMode } from '../types';
 import { CAMERA_THEME } from '../theme';
 
@@ -14,6 +14,7 @@ interface CameraGridProps extends ComponentProps {
         mode: StreamMode;
         snapshotInterval: number;
         showOverlays: boolean;
+        showSaveButtons: boolean;
         gap: number;
     };
 }
@@ -54,6 +55,16 @@ const cellStyles = {
         justifyContent: 'space-between',
         alignItems: 'center',
         pointerEvents: 'none' as const,
+    },
+    saveBtn: {
+        pointerEvents: 'auto' as const,
+        background: 'rgba(0,0,0,0.5)',
+        border: 'none',
+        color: '#fff',
+        fontSize: '10px',
+        padding: '1px 6px',
+        borderRadius: 3,
+        cursor: 'pointer',
     },
     statusDot: (streaming: boolean) => ({
         width: 6,
@@ -97,11 +108,12 @@ const cellStyles = {
     },
 };
 
-function CameraCell({ deviceName, mode, snapshotInterval, showOverlay }: {
+function CameraCell({ deviceName, mode, snapshotInterval, showOverlay, showSaveButton }: {
     deviceName: string;
     mode: StreamMode;
     snapshotInterval: number;
     showOverlay: boolean;
+    showSaveButton: boolean;
 }) {
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const imgRef = useRef<HTMLImageElement | null>(null);
@@ -140,6 +152,15 @@ function CameraCell({ deviceName, mode, snapshotInterval, showOverlay }: {
                         <span style={cellStyles.statusDot(true)} />
                         {deviceName}
                     </span>
+                    {showSaveButton && (
+                        <button
+                            style={cellStyles.saveBtn}
+                            onClick={() => saveSnapshot(deviceName, activeMode, imgRef)}
+                            title="Save snapshot"
+                        >
+                            {'\u2B73'}
+                        </button>
+                    )}
                 </div>
             )}
         </div>
@@ -154,6 +175,7 @@ function CameraGridComponent(props: CameraGridProps) {
         mode = 'auto',
         snapshotInterval = 5000,
         showOverlays = true,
+        showSaveButtons = true,
         gap = 2,
     } = props.props;
 
@@ -184,6 +206,7 @@ function CameraGridComponent(props: CameraGridProps) {
                         mode={mode}
                         snapshotInterval={snapshotInterval}
                         showOverlay={showOverlays}
+                        showSaveButton={showSaveButtons}
                     />
                 ) : (
                     <div style={cellStyles.placeholder}>Empty</div>
@@ -218,6 +241,7 @@ export class CameraGridMeta implements ComponentMeta {
             mode: tree.readString('mode', 'auto') as StreamMode,
             snapshotInterval: tree.readNumber('snapshotInterval', 5000),
             showOverlays: tree.readBoolean('showOverlays', true),
+            showSaveButtons: tree.readBoolean('showSaveButtons', true),
             gap: tree.readNumber('gap', 2),
         };
     }

@@ -3,8 +3,7 @@ package com.onvif.driver.gateway.servlet.handlers;
 import com.inductiveautomation.ignition.gateway.dataroutes.RequestContext;
 import com.inductiveautomation.ignition.gateway.model.GatewayContext;
 import com.onvif.driver.gateway.auth.AuthenticationManager;
-import com.onvif.driver.gateway.device.ONVIFDeviceExtensionPoint;
-import com.onvif.driver.gateway.device.generic.GenericCameraExtensionPoint;
+import com.onvif.driver.gateway.device.CameraExtensionPoint;
 import com.onvif.driver.gateway.stream.Go2RtcManager;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,8 +22,7 @@ import static org.mockito.Mockito.*;
 class PageHandlerTest {
 
     @Mock GatewayContext gatewayContext;
-    @Mock ONVIFDeviceExtensionPoint deviceExtensionPoint;
-    @Mock GenericCameraExtensionPoint genericCameraExtensionPoint;
+    @Mock CameraExtensionPoint cameraExtensionPoint;
     @Mock Go2RtcManager go2RtcManager;
     @Mock AuthenticationManager authManager;
     @Mock RequestContext requestContext;
@@ -36,11 +34,10 @@ class PageHandlerTest {
     void setUp() {
         handler = new PageHandler(
             gatewayContext,
-            deviceExtensionPoint,
-            genericCameraExtensionPoint,
+            cameraExtensionPoint,
             go2RtcManager,
             authManager,
-            "2.13.0"
+            "2.31.0"
         );
     }
 

@@ -4,11 +4,8 @@ import com.inductiveautomation.ignition.gateway.dataroutes.RequestContext;
 import com.inductiveautomation.ignition.gateway.model.GatewayContext;
 import com.onvif.driver.common.DeviceStatus;
 import com.onvif.driver.gateway.auth.AuthenticationManager;
-import com.onvif.driver.gateway.device.ONVIFDevice;
-import com.onvif.driver.gateway.device.ONVIFDeviceExtensionPoint;
-import com.onvif.driver.gateway.device.generic.GenericCameraConfig;
-import com.onvif.driver.gateway.device.generic.GenericCameraDevice;
-import com.onvif.driver.gateway.device.generic.GenericCameraExtensionPoint;
+import com.onvif.driver.gateway.device.CameraDevice;
+import com.onvif.driver.gateway.device.CameraExtensionPoint;
 import com.onvif.driver.gateway.onvif.DeviceInformation;
 import com.onvif.driver.gateway.onvif.MediaProfile;
 import com.onvif.driver.gateway.stream.Go2RtcManager;
@@ -26,18 +23,13 @@ import java.util.Map;
 public class DeviceApiHandler extends BaseHandler {
 
     public DeviceApiHandler(GatewayContext context,
-                            ONVIFDeviceExtensionPoint deviceExtensionPoint,
-                            GenericCameraExtensionPoint genericCameraExtensionPoint,
+                            CameraExtensionPoint cameraExtensionPoint,
                             Go2RtcManager go2RtcManager,
                             AuthenticationManager authManager,
                             String moduleVersion) {
-        super(context, deviceExtensionPoint, genericCameraExtensionPoint, go2RtcManager, authManager, moduleVersion);
+        super(context, cameraExtensionPoint, go2RtcManager, authManager, moduleVersion);
     }
 
-    /**
-     * Handles listing all devices.
-     * URL: http://gateway:8088/data/camera-driver/devices
-     */
     public Object handleListDevices(RequestContext requestContext, HttpServletResponse response) throws Exception {
         logger.debug("List devices request received");
 
@@ -50,23 +42,25 @@ public class DeviceApiHandler extends BaseHandler {
             JSONObject result = new JSONObject();
             JSONArray devices = new JSONArray();
 
-            Map<String, ONVIFDevice> allDevices = ONVIFDeviceExtensionPoint.getAllDevices();
-            for (Map.Entry<String, ONVIFDevice> entry : allDevices.entrySet()) {
-                ONVIFDevice device = entry.getValue();
+            Map<String, CameraDevice> allDevices = CameraExtensionPoint.getAllDevices();
+            for (Map.Entry<String, CameraDevice> entry : allDevices.entrySet()) {
+                CameraDevice device = entry.getValue();
 
-                // Skip disabled devices — they have no active configuration
                 if (DeviceStatus.DISABLED.displayName().equalsIgnoreCase(device.getStatus())) {
                     continue;
                 }
 
                 JSONObject deviceJson = new JSONObject();
                 deviceJson.put("name", entry.getKey());
-                deviceJson.put("type", "onvif");
+                deviceJson.put("type", device.isOnvifAvailable() ? "onvif" : "generic");
                 deviceJson.put("status", device.getStatus());
+                deviceJson.put("onvifAvailable", device.isOnvifAvailable());
+                deviceJson.put("hasPTZ", device.hasPTZ());
+                deviceJson.put("go2rtcRegistered", device.isGo2RtcStreamRegistered());
 
-                // Try to get additional info from the device's client
-                try {
-                    if (device.getClient() != null) {
+                // ONVIF device info
+                if (device.isOnvifAvailable() && device.getClient() != null) {
+                    try {
                         DeviceInformation info = device.getClient().getDeviceInformation();
                         if (info != null) {
                             deviceJson.put("manufacturer", info.manufacturer());
@@ -84,52 +78,33 @@ public class DeviceApiHandler extends BaseHandler {
                             deviceJson.put("profiles", profilesJson);
                             deviceJson.put("profileCount", profiles.size());
                         }
+                    } catch (Exception e) {
+                        logger.debug("Could not get additional info for device {}: {}", entry.getKey(), e.getMessage());
+                        try { deviceJson.put("infoError", true); } catch (Exception ignored) {}
                     }
-                    deviceJson.put("go2rtcRegistered", device.isGo2RtcStreamRegistered());
-                } catch (Exception e) {
-                    logger.debug("Could not get additional info for device {}: {}", entry.getKey(), e.getMessage());
-                    try { deviceJson.put("infoError", true); } catch (Exception ignored) {}
-                }
-
-                devices.put(deviceJson);
-            }
-
-            // Include generic cameras
-            if (genericCameraExtensionPoint != null) {
-                Map<String, GenericCameraDevice> genericDevices = GenericCameraExtensionPoint.getAllDevices();
-                for (Map.Entry<String, GenericCameraDevice> entry : genericDevices.entrySet()) {
-                    GenericCameraDevice device = entry.getValue();
-
-                    // Skip disabled devices — they have no active configuration
-                    if (DeviceStatus.DISABLED.displayName().equalsIgnoreCase(device.getStatus())) {
-                        continue;
+                } else {
+                    // Non-ONVIF device — show effective (discovered or override) URLs
+                    String rtspUrl = device.getEffectiveRtspUrl();
+                    if (rtspUrl != null && !rtspUrl.trim().isEmpty()) {
+                        deviceJson.put("rtspUrl", rtspUrl);
+                    }
+                    String snapshotUrl = device.getEffectiveSnapshotUrl();
+                    if (snapshotUrl != null && !snapshotUrl.trim().isEmpty()) {
+                        deviceJson.put("snapshotUrl", snapshotUrl);
+                    }
+                    String mjpegUrl = device.getEffectiveMjpegUrl();
+                    if (mjpegUrl != null && !mjpegUrl.trim().isEmpty()) {
+                        deviceJson.put("mjpegUrl", mjpegUrl);
                     }
 
-                    JSONObject deviceJson = new JSONObject();
-                    deviceJson.put("name", entry.getKey());
-                    deviceJson.put("type", "generic");
-                    deviceJson.put("status", device.getStatus());
-
-                    GenericCameraConfig cfg = device.getConfig();
-                    if (cfg.cameraConnection().rtspUrl() != null) {
-                        deviceJson.put("rtspUrl", cfg.cameraConnection().rtspUrl());
-                    }
-                    if (cfg.cameraConnection().snapshotUrl() != null) {
-                        deviceJson.put("snapshotUrl", cfg.cameraConnection().snapshotUrl());
-                    }
-                    if (cfg.cameraConnection().mjpegUrl() != null) {
-                        deviceJson.put("mjpegUrl", cfg.cameraConnection().mjpegUrl());
-                    }
-                    deviceJson.put("go2rtcRegistered", device.isGo2RtcStreamRegistered());
-
-                    JSONArray genericProfiles = buildGenericCameraProfiles(device);
+                    JSONArray genericProfiles = buildGenericProfiles(device);
                     if (genericProfiles.length() > 0) {
                         deviceJson.put("profiles", genericProfiles);
                         deviceJson.put("profileCount", genericProfiles.length());
                     }
-
-                    devices.put(deviceJson);
                 }
+
+                devices.put(deviceJson);
             }
 
             result.put("success", true);
@@ -148,10 +123,6 @@ public class DeviceApiHandler extends BaseHandler {
         return null;
     }
 
-    /**
-     * Handles getting status of a specific device (ONVIF or Generic Camera).
-     * URL: http://gateway:8088/data/camera-driver/device/:name/status
-     */
     public Object handleDeviceStatus(RequestContext requestContext, HttpServletResponse response) throws Exception {
         logger.debug("Device status request received");
 
@@ -167,49 +138,24 @@ public class DeviceApiHandler extends BaseHandler {
         }
 
         try {
-            // Check both registries
-            DeviceLookup devices = findDevice(deviceName);
-            if (!devices.found()) {
+            CameraDevice device = findDevice(deviceName);
+            if (device == null) {
                 response.sendError(404, "Device not found");
                 return null;
             }
-            ONVIFDevice onvifDevice = devices.onvif();
-            GenericCameraDevice genericDevice = devices.generic();
-
-            // Use whichever device was found (ONVIF device block follows for backward compatibility)
-            if (genericDevice != null && onvifDevice == null) {
-                // Return generic camera status
-                JSONObject result = new JSONObject();
-                result.put("success", true);
-                result.put("name", deviceName);
-                result.put("type", "generic");
-                result.put("status", genericDevice.getStatus());
-                result.put("go2rtcRegistered", genericDevice.isGo2RtcStreamRegistered());
-                result.put("timestamp", System.currentTimeMillis());
-
-                JSONArray genericProfiles = buildGenericCameraProfiles(genericDevice);
-                if (genericProfiles.length() > 0) {
-                    result.put("profiles", genericProfiles);
-                    result.put("profileCount", genericProfiles.length());
-                }
-
-                response.setContentType("application/json");
-                response.getWriter().write(result.toString());
-                return null;
-            }
-
-            // ONVIF device (original behavior)
-            ONVIFDevice device = onvifDevice;
 
             JSONObject result = new JSONObject();
             result.put("success", true);
             result.put("name", deviceName);
+            result.put("type", device.isOnvifAvailable() ? "onvif" : "generic");
             result.put("status", device.getStatus());
+            result.put("onvifAvailable", device.isOnvifAvailable());
+            result.put("hasPTZ", device.hasPTZ());
+            result.put("go2rtcRegistered", device.isGo2RtcStreamRegistered());
             result.put("timestamp", System.currentTimeMillis());
 
-            // Add detailed info if available
-            try {
-                if (device.getClient() != null) {
+            if (device.isOnvifAvailable() && device.getClient() != null) {
+                try {
                     DeviceInformation info = device.getClient().getDeviceInformation();
                     if (info != null) {
                         JSONObject deviceInfo = new JSONObject();
@@ -229,9 +175,15 @@ public class DeviceApiHandler extends BaseHandler {
                         }
                         result.put("profiles", profilesJson);
                     }
+                } catch (Exception e) {
+                    logger.debug("Could not get detailed info for device {}: {}", deviceName, e.getMessage());
                 }
-            } catch (Exception e) {
-                logger.debug("Could not get detailed info for device {}: {}", deviceName, e.getMessage());
+            } else {
+                JSONArray genericProfiles = buildGenericProfiles(device);
+                if (genericProfiles.length() > 0) {
+                    result.put("profiles", genericProfiles);
+                    result.put("profileCount", genericProfiles.length());
+                }
             }
 
             response.setContentType("application/json");
@@ -245,11 +197,7 @@ public class DeviceApiHandler extends BaseHandler {
         return null;
     }
 
-    /**
-     * Builds a JSON object for a single ONVIF MediaProfile, including snapshot and stream URIs.
-     * Single source of truth for the /devices and /device/:name/status endpoints.
-     */
-    private JSONObject buildOnvifProfileJson(ONVIFDevice device, MediaProfile profile) throws Exception {
+    private JSONObject buildOnvifProfileJson(CameraDevice device, MediaProfile profile) throws Exception {
         JSONObject profileJson = new JSONObject();
         profileJson.put("token", profile.getToken());
         profileJson.put("name", profile.getName());
@@ -274,26 +222,20 @@ public class DeviceApiHandler extends BaseHandler {
         return profileJson;
     }
 
-    /**
-     * Builds the synthetic profiles JSON array for a Generic Camera device.
-     * Single source of truth for the /devices and /device/:name/status endpoints.
-     */
-    private JSONArray buildGenericCameraProfiles(GenericCameraDevice device) throws Exception {
-        GenericCameraConfig cfg = device.getConfig();
+    private JSONArray buildGenericProfiles(CameraDevice device) throws Exception {
         JSONArray profiles = new JSONArray();
 
-        String rtspUrl = device.getConfig().cameraConnection().rtspUrl();
+        // Use effective (discovered or override) URLs, not just config overrides
+        String rtspUrl = device.getEffectiveRtspUrl();
         if (rtspUrl != null && !rtspUrl.trim().isEmpty()) {
             JSONObject rtspProfile = new JSONObject();
             rtspProfile.put("token", "rtsp");
             rtspProfile.put("name", "RTSP Stream");
             rtspProfile.put("encoding", "H.264");
             rtspProfile.put("streamUri", rtspUrl);
-            int fps = cfg.streamSettings() != null ? cfg.streamSettings().defaultFps() : 15;
-            rtspProfile.put("frameRate", fps);
             profiles.put(rtspProfile);
         }
-        String snapshotUrl = cfg.cameraConnection().snapshotUrl();
+        String snapshotUrl = device.getEffectiveSnapshotUrl();
         if (snapshotUrl != null && !snapshotUrl.trim().isEmpty()) {
             JSONObject snapshotProfile = new JSONObject();
             snapshotProfile.put("token", "snapshot");
@@ -301,7 +243,7 @@ public class DeviceApiHandler extends BaseHandler {
             snapshotProfile.put("encoding", "JPEG");
             profiles.put(snapshotProfile);
         }
-        String mjpegUrl = cfg.cameraConnection().mjpegUrl();
+        String mjpegUrl = device.getEffectiveMjpegUrl();
         if (mjpegUrl != null && !mjpegUrl.trim().isEmpty()) {
             JSONObject mjpegProfile = new JSONObject();
             mjpegProfile.put("token", "mjpeg");

@@ -1,6 +1,6 @@
 package com.onvif.driver.gateway.onvif;
 
-import com.onvif.driver.gateway.device.ONVIFDeviceConfig.SslValidationMode;
+import com.onvif.driver.gateway.device.CameraConfig.SslValidationMode;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.StatusLine;
@@ -394,7 +394,7 @@ class ONVIFClientTest {
         );
 
         // 2. Test connection (optional)
-        boolean connected = testClient.testConnection();
+        testClient.testConnection();
 
         // 3. Get device information
         // DeviceInformation info = testClient.getDeviceInformation();

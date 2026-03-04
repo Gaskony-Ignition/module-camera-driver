@@ -118,13 +118,109 @@ val downloadGo2Rtc by tasks.registering {
     }
 }
 
-// Add go2rtc binaries to resources when the download task runs
+// ffmpeg static binary download task
+// Downloads platform-specific static ffmpeg binaries for bundling.
+// Required by go2rtc for JPEG snapshot extraction and MJPEG transcoding.
+val ffmpegOutputDir = layout.buildDirectory.dir("ffmpeg-binaries/ffmpeg")
+
+val downloadFfmpeg by tasks.registering {
+    description = "Downloads static ffmpeg binaries for bundling in the module"
+    group = "build"
+
+    outputs.dir(ffmpegOutputDir)
+
+    doLast {
+        val outputDir = ffmpegOutputDir.get().asFile
+        outputDir.mkdirs()
+
+        // Linux amd64 - download from johnvansickle.com static builds
+        val linuxAmd64File = File(outputDir, "ffmpeg_linux_amd64")
+        if (!linuxAmd64File.exists()) {
+            logger.lifecycle("Downloading static ffmpeg binary: linux amd64")
+            val tarFile = File(outputDir, "ffmpeg-amd64.tar.xz")
+            try {
+                ant.invokeMethod("get", mapOf(
+                    "src" to "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz",
+                    "dest" to tarFile,
+                    "skipexisting" to "true"
+                ))
+                // Extract just the ffmpeg binary from the tarball
+                exec {
+                    commandLine("bash", "-c",
+                        "tar -xf '${tarFile.absolutePath}' -C '${outputDir.absolutePath}' --wildcards '*/ffmpeg' --strip-components=1")
+                }
+                File(outputDir, "ffmpeg").renameTo(linuxAmd64File)
+                tarFile.delete()
+            } catch (e: Exception) {
+                logger.warn("Failed to download linux amd64 ffmpeg: ${e.message}. Snapshot extraction will not be available.")
+                tarFile.delete()
+            }
+        }
+
+        // Linux arm64
+        val linuxArm64File = File(outputDir, "ffmpeg_linux_arm64")
+        if (!linuxArm64File.exists()) {
+            logger.lifecycle("Downloading static ffmpeg binary: linux arm64")
+            val tarFile = File(outputDir, "ffmpeg-arm64.tar.xz")
+            try {
+                ant.invokeMethod("get", mapOf(
+                    "src" to "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-arm64-static.tar.xz",
+                    "dest" to tarFile,
+                    "skipexisting" to "true"
+                ))
+                exec {
+                    commandLine("bash", "-c",
+                        "tar -xf '${tarFile.absolutePath}' -C '${outputDir.absolutePath}' --wildcards '*/ffmpeg' --strip-components=1")
+                }
+                File(outputDir, "ffmpeg").renameTo(linuxArm64File)
+                tarFile.delete()
+            } catch (e: Exception) {
+                logger.warn("Failed to download linux arm64 ffmpeg: ${e.message}. Snapshot extraction will not be available.")
+                tarFile.delete()
+            }
+        }
+
+        // Windows amd64
+        val windowsFile = File(outputDir, "ffmpeg_windows_amd64.exe")
+        if (!windowsFile.exists()) {
+            logger.lifecycle("Downloading static ffmpeg binary: windows amd64")
+            val zipFile = File(outputDir, "ffmpeg-win64.zip")
+            try {
+                ant.invokeMethod("get", mapOf(
+                    "src" to "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
+                    "dest" to zipFile,
+                    "skipexisting" to "true"
+                ))
+                ant.invokeMethod("unzip", mapOf("src" to zipFile, "dest" to outputDir))
+                // Find the extracted ffmpeg.exe (nested in a version-named folder)
+                val extracted = outputDir.walkTopDown().find { it.name == "ffmpeg.exe" && it.parentFile.name == "bin" }
+                if (extracted != null) {
+                    extracted.renameTo(windowsFile)
+                } else {
+                    logger.warn("ffmpeg.exe not found in extracted ZIP")
+                }
+                // Clean up extracted folders and zip
+                outputDir.listFiles()?.filter { it.isDirectory }?.forEach { it.deleteRecursively() }
+                zipFile.delete()
+            } catch (e: Exception) {
+                logger.warn("Failed to download windows ffmpeg: ${e.message}. Snapshot extraction will not be available on Windows.")
+                zipFile.delete()
+            }
+        }
+    }
+}
+
+// Add go2rtc and ffmpeg binaries to resources when download tasks run
 sourceSets {
     main {
         resources {
             // go2rtc binaries are placed in build/go2rtc-binaries/go2rtc/ by downloadGo2Rtc
             // They end up at classpath: go2rtc/go2rtc_linux_amd64 etc.
             srcDir(layout.buildDirectory.dir("go2rtc-binaries"))
+
+            // ffmpeg binaries are placed in build/ffmpeg-binaries/ffmpeg/ by downloadFfmpeg
+            // They end up at classpath: ffmpeg/ffmpeg_linux_amd64 etc.
+            srcDir(layout.buildDirectory.dir("ffmpeg-binaries"))
 
             // Include web-ui webpack output (perspective.js, connectionBrowser.js) in gateway.jar
             // so they're served via getMountedResourceFolder() at /res/camera-driver/*
@@ -134,7 +230,7 @@ sourceSets {
 }
 
 tasks.named<ProcessResources>("processResources") {
-    dependsOn(downloadGo2Rtc)
+    dependsOn(downloadGo2Rtc, downloadFfmpeg)
     // Inject the Gradle project version into module.properties at build time.
     // Single source of truth: build.gradle.kts → module.properties → ONVIFModuleHook
     filesMatching("module.properties") {
