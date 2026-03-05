@@ -37,6 +37,7 @@ jobs:
             echo "ignition.signing.certAlias=gaskony-module"
             echo "ignition.signing.certPassword=${SIGNING_PASSWORD}"
             echo "ignition.signing.certFile=${SIGNING_DIR}/gaskony-cert.pem"
+            echo "org.gradle.jvmargs=-Xmx4g"
           } > gradle.properties
         env:
           SIGNING_KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE }}

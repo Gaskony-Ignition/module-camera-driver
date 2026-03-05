@@ -42,7 +42,7 @@ export function useCameraStream(
             intervalRef.current = null;
         }
         if (mediaSourceRef.current && mediaSourceRef.current.readyState === 'open') {
-            try { mediaSourceRef.current.endOfStream(); } catch (_) {}
+            try { mediaSourceRef.current.endOfStream(); } catch (e) { /* expected if already ended */ }
         }
         mediaSourceRef.current = null;
         if (videoRef.current) {
@@ -179,7 +179,7 @@ export function useCameraStream(
         try {
             const reader = response.body!.getReader();
 
-            while (true) {
+            for (;;) {
                 const { done, value } = await reader.read();
                 if (done) break;
 
@@ -215,7 +215,7 @@ export function useCameraStream(
                             await new Promise<void>(r => sourceBuffer.addEventListener('updateend', () => r(), { once: true }));
                         }
                     }
-                } catch (_) {}
+                } catch (e) { /* buffer trim is best-effort */ }
             }
 
             if (fallbackToSnapshot) { startSnapshot(); return; }
@@ -324,14 +324,14 @@ function PtzControls({ deviceName }: { deviceName: string }) {
         fetch(API.ptzMove(deviceName, pan, tilt, zoom), {
             method: 'POST',
             credentials: 'include',
-        }).catch(() => {});
+        }).catch(() => { /* fire-and-forget PTZ command */ });
     };
 
     const sendStop = () => {
         fetch(API.ptzStop(deviceName), {
             method: 'POST',
             credentials: 'include',
-        }).catch(() => {});
+        }).catch(() => { /* fire-and-forget PTZ stop */ });
     };
 
     const onStart = (pan: number, tilt: number, zoom: number) => (e: React.MouseEvent | React.TouchEvent) => {
