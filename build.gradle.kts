@@ -13,7 +13,7 @@ configure<org.owasp.dependencycheck.gradle.extension.DependencyCheckExtension> {
     analyzers.assemblyEnabled = false
 }
 
-version = "2.33.0"
+version = "2.34.0"
 group = "com.onvif.driver"
 
 ignitionModule {
