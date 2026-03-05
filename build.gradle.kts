@@ -2,6 +2,15 @@ plugins {
     base
     id("io.ia.sdk.modl") version "0.4.0"
     id("com.github.spotbugs") version "6.0.27" apply false
+    id("org.owasp.dependencycheck") version "12.1.0" apply false
+}
+
+// ── OWASP Dependency Check ──────────────────────────────────────────────────
+apply(plugin = "org.owasp.dependencycheck")
+configure<org.owasp.dependencycheck.gradle.extension.DependencyCheckExtension> {
+    failBuildOnCVSS = 7.0f
+    formats = listOf("HTML", "JSON")
+    analyzers.assemblyEnabled = false
 }
 
 version = "2.33.0"
