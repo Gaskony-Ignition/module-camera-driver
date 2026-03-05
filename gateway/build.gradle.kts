@@ -40,20 +40,20 @@ dependencies {
     testRuntimeOnly(libs.ignition.driver.api)
 
     // Test dependencies (v2.1.0)
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.1")
-    testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.1")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.1")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.11.3")
+    testImplementation("org.junit.jupiter:junit-jupiter-params:5.11.3")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.11.3")
 
     // Mockito for mocking
-    testImplementation("org.mockito:mockito-core:5.8.0")
-    testImplementation("org.mockito:mockito-junit-jupiter:5.8.0")
+    testImplementation("org.mockito:mockito-core:5.18.0")
+    testImplementation("org.mockito:mockito-junit-jupiter:5.18.0")
 
     // AssertJ for fluent assertions
-    testImplementation("org.assertj:assertj-core:3.25.1")
+    testImplementation("org.assertj:assertj-core:3.27.7")
 
     // SLF4J for test logging
-    testImplementation("org.slf4j:slf4j-api:2.0.9")
-    testRuntimeOnly("org.slf4j:slf4j-simple:2.0.9")
+    testImplementation("org.slf4j:slf4j-api:2.0.17")
+    testRuntimeOnly("org.slf4j:slf4j-simple:2.0.17")
 }
 
 // go2rtc binary download task

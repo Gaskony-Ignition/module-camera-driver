@@ -14,12 +14,12 @@ dependencies {
     compileOnly(libs.perspective.common)
 
     // Test dependencies
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.1")
-    testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.1")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.1")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.11.3")
+    testImplementation("org.junit.jupiter:junit-jupiter-params:5.11.3")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.11.3")
 
     // AssertJ for fluent assertions
-    testImplementation("org.assertj:assertj-core:3.25.1")
+    testImplementation("org.assertj:assertj-core:3.27.7")
 }
 
 tasks.test {

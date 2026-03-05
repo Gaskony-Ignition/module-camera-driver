@@ -1,8 +1,8 @@
 plugins {
     base
-    id("io.ia.sdk.modl") version "0.4.0"
-    id("com.github.spotbugs") version "6.0.27" apply false
-    id("org.owasp.dependencycheck") version "12.1.0" apply false
+    id("io.ia.sdk.modl") version "0.5.0"
+    id("com.github.spotbugs") version "6.4.8" apply false
+    id("org.owasp.dependencycheck") version "12.2.0" apply false
 }
 
 // ── OWASP Dependency Check ──────────────────────────────────────────────────
@@ -64,7 +64,7 @@ subprojects {
             apply(plugin = "com.github.spotbugs")
 
             configure<CheckstyleExtension> {
-                toolVersion = "10.21.4"
+                toolVersion = "10.26.1"
                 configFile = rootProject.file("config/checkstyle/checkstyle.xml")
                 isIgnoreFailures = true
             }
