@@ -17,7 +17,7 @@ val projectOutput: String by extra("$buildDir/generated-resources/")
 
 // Node.js configuration
 node {
-    version.set("20.18.0")
+    version.set("22.16.0")
     yarnVersion.set("1.22.18")
     npmVersion.set("8.5.5")
     download.set(true)
