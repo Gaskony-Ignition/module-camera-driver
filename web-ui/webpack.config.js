@@ -29,6 +29,7 @@ module.exports = (webpackConfigEnv = {}, argv = {}) => {
       new ESLintPlugin({
         files: "./src/**/*.{ts,tsx,js,jsx}",
         failOnError: false,
+        configType: "flat",
       }),
     ],
     resolve: {
