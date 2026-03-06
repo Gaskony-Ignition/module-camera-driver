@@ -8,16 +8,17 @@ pluginManagement {
         gradlePluginPortal()
         mavenCentral()
         maven {
-            url = uri("https://nexus.inductiveautomation.com/repository/public")
+            url = uri("https://nexus.inductiveautomation.com/repository/public/")
         }
     }
 }
 
 dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
         mavenCentral()
         maven {
-            url = uri("https://nexus.inductiveautomation.com/repository/public")
+            url = uri("https://nexus.inductiveautomation.com/repository/public/")
         }
     }
 }

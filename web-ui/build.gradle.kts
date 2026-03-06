@@ -66,9 +66,9 @@ val webpack by tasks.registering(Exec::class) {
 
     workingDir = project.projectDir
     commandLine = if (System.getProperty("os.name").lowercase().contains("windows")) {
-        listOf("cmd", "/c", "npm", "run", "build:dev")
+        listOf("cmd", "/c", "npm", "run", "build")
     } else {
-        listOf("npm", "run", "build:dev")
+        listOf("npm", "run", "build")
     }
 
     dependsOn(npmInstall)

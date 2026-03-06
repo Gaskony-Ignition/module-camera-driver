@@ -99,7 +99,13 @@ jobs:
             --title "Camera Driver ${REF_NAME}" \
             --generate-notes
 
+      - name: Check Portal Token
+        id: portal
+        run: |
+          if [ -n "${{ secrets.PORTAL_TOKEN }}" ]; then echo "available=true" >> $GITHUB_OUTPUT; else echo "available=false" >> $GITHUB_OUTPUT; fi
+
       - name: Create portal release
+        if: steps.portal.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ secrets.PORTAL_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
@@ -130,6 +136,7 @@ jobs:
           **Requires:** Ignition 8.3+ | Java 17"
 
       - name: Update portal README
+        if: steps.portal.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ secrets.PORTAL_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
