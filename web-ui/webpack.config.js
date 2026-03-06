@@ -16,14 +16,14 @@ module.exports = (webpackConfigEnv = {}, argv = {}) => {
           use: ["style-loader", "css-loader", "sass-loader"],
         },
         {
-          test: /\.[tj]sx?$|\.d\.ts$/,
-          use: ["ts-loader", "babel-loader"],
+          test: /\.[tj]sx?$/,
+          use: [{ loader: "ts-loader", options: { transpileOnly: true } }],
           exclude: /node_modules/,
           parser: { system: false },
         },
       ],
     },
-    devtool: "source-map",
+    devtool: mode === "production" ? false : "source-map",
     plugins: [
       new ForkTsCheckerWebpackPlugin(),
       new ESLintPlugin({

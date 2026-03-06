@@ -1,4 +1,3 @@
-import React from "react";
 import "./_styles.scss";
 import { API } from "../../api/paths";
 

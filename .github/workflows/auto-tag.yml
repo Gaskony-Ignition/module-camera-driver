@@ -41,7 +41,7 @@ jobs:
       - name: Create and push tag
         if: steps.check.outputs.exists == 'false'
         env:
-          GH_TOKEN: ${{ secrets.PORTAL_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
           REPOSITORY: ${{ github.repository }}
           COMMIT_SHA: ${{ github.sha }}
