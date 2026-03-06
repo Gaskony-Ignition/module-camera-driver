@@ -75,6 +75,11 @@ subprojects {
                 reportLevel.set(com.github.spotbugs.snom.Confidence.MEDIUM)
                 excludeFilter.set(rootProject.file("config/spotbugs/exclude.xml"))
             }
+
+            // Disable SpotBugs on test code — enforce only on production sources
+            tasks.matching { it.name == "spotbugsTest" }.configureEach {
+                enabled = false
+            }
         }
     }
 }
