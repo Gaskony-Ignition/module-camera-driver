@@ -36,6 +36,8 @@ public class AuthenticationManager {
 
     private static final Logger logger = LoggerFactory.getLogger(AuthenticationManager.class);
 
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
     /** Maximum number of consecutive invalid API-key submissions before an IP is locked out. */
     private static final int MAX_FAILED_ATTEMPTS = 5;
 
@@ -318,7 +320,7 @@ public class AuthenticationManager {
     private StoredApiKey hashApiKeyWithSalt(String apiKey, String username) {
         try {
             byte[] salt = new byte[16];
-            new SecureRandom().nextBytes(salt);
+            SECURE_RANDOM.nextBytes(salt);
             String saltHex = bytesToHex(salt);
 
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -390,9 +392,8 @@ public class AuthenticationManager {
      * @return A new secure API key
      */
     public static String generateApiKey() {
-        SecureRandom random = new SecureRandom();
         byte[] bytes = new byte[32]; // 256 bits
-        random.nextBytes(bytes);
+        SECURE_RANDOM.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 

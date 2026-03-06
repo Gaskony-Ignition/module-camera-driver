@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!--
+        Intentional hardcoded paths: fallback candidates for locating
+        Ignition's system_logs.idb when GatewayContext does not provide
+        a logs directory.
+    -->
+    <Match>
+        <Class name="com.onvif.driver.gateway.servlet.handlers.GatewayLogHandler" />
+        <Method name="findSystemLogsDb" />
+        <Bug pattern="DMI_HARDCODED_ABSOLUTE_FILENAME" />
+    </Match>
+
+    <!--
+        Dynamic SQL is safe here: the query is built from fixed literals
+        with only bind-parameter placeholders; user input never enters
+        the SQL string directly.
+    -->
+    <Match>
+        <Class name="com.onvif.driver.gateway.servlet.handlers.GatewayLogHandler" />
+        <Bug pattern="SQL_PREPARED_STATEMENT_GENERATED_FROM_NONCONSTANT_STRING" />
+    </Match>
+
+    <!--
+        EI_EXPOSE_REP on getAuthenticationManager(): authManager is an
+        internal object shared intentionally within the module; returning
+        a defensive copy is not appropriate here.
+    -->
+    <Match>
+        <Class name="com.onvif.driver.gateway.servlet.ONVIFRoutes" />
+        <Method name="getAuthenticationManager" />
+        <Bug pattern="EI_EXPOSE_REP" />
+    </Match>
+
+    <!--
+        Catching base Exception in module hook code is intentional -
+        module lifecycle methods must not propagate unexpected exceptions.
+    -->
+    <Match>
+        <Class name="com.onvif.driver.gateway.ONVIFModuleHook" />
+        <Method name="loadModuleVersion" />
+        <Bug pattern="REC_CATCH_EXCEPTION" />
+    </Match>
+
+    <!--
+        ValidationUtil's private constructor intentionally throws
+        UnsupportedOperationException to prevent instantiation.
+        This is a standard utility class pattern; there is no
+        finalizer attack risk.
+    -->
+    <Match>
+        <Class name="com.onvif.driver.gateway.util.ValidationUtil" />
+        <Bug pattern="CT_CONSTRUCTOR_THROW" />
+    </Match>
+
+    <!--
+        Catching base Exception in getStreamInfo() is intentional:
+        the go2rtc REST API may throw various exceptions (JSON parse,
+        HTTP errors, etc.) and we want to degrade gracefully.
+    -->
+    <Match>
+        <Class name="com.onvif.driver.gateway.stream.Go2RtcManager" />
+        <Method name="getStreamInfo" />
+        <Bug pattern="REC_CATCH_EXCEPTION" />
+    </Match>
+
+    <!--
+        EI_EXPOSE_REP2: Storing mutable objects passed to constructors
+        and setters is intentional for internal module wiring. These
+        objects are owned by the module lifecycle; defensive copies
+        are unnecessary and would break object identity.
+    -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP2" />
+        <Or>
+            <Class name="com.onvif.driver.gateway.device.generic.GenericCameraAddressSpaceBuilder" />
+            <Class name="com.onvif.driver.gateway.device.CameraExtensionPoint" />
+            <Class name="com.onvif.driver.gateway.device.AddressSpaceBuilder" />
+            <Class name="com.onvif.driver.gateway.device.ONVIFPoller" />
+            <Class name="com.onvif.driver.gateway.device.CameraDevice" />
+        </Or>
+    </Match>
+</FindBugsFilter>

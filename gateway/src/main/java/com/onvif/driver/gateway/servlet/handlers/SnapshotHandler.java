@@ -140,7 +140,7 @@ public class SnapshotHandler extends BaseHandler {
                             (snapshotBytes[1] & 0xFF) == 0xD8 &&
                             (snapshotBytes[2] & 0xFF) == 0xFF;
 
-            String contentStart = new String(snapshotBytes, 0, Math.min(100, snapshotBytes.length));
+            String contentStart = new String(snapshotBytes, 0, Math.min(100, snapshotBytes.length), java.nio.charset.StandardCharsets.UTF_8);
             boolean isHtml = contentStart.toLowerCase().contains("<!doctype") ||
                             contentStart.toLowerCase().contains("<html");
 

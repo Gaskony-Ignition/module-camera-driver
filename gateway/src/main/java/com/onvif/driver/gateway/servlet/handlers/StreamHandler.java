@@ -306,11 +306,11 @@ public class StreamHandler extends BaseHandler {
     }
 
     private void writeMjpegFrame(OutputStream output, byte[] frame) throws IOException {
-        output.write(("--" + BOUNDARY + "\r\n").getBytes());
-        output.write("Content-Type: image/jpeg\r\n".getBytes());
-        output.write(("Content-Length: " + frame.length + "\r\n\r\n").getBytes());
+        output.write(("--" + BOUNDARY + "\r\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        output.write("Content-Type: image/jpeg\r\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        output.write(("Content-Length: " + frame.length + "\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
         output.write(frame);
-        output.write("\r\n".getBytes());
+        output.write("\r\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
         output.flush();
     }
 

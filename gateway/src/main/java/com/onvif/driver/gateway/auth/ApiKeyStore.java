@@ -80,7 +80,10 @@ public class ApiKeyStore {
             if (logsDir != null) {
                 File gatewayHome = logsDir.getParentFile();
                 File cameraDriverDir = new File(gatewayHome, "data" + File.separator + "camera-driver");
-                cameraDriverDir.mkdirs();
+                if (!cameraDriverDir.mkdirs() && !cameraDriverDir.isDirectory()) {
+                    logger.warn("Failed to create directory: {}", cameraDriverDir.getAbsolutePath());
+                    return null;
+                }
                 return new File(cameraDriverDir, "api-keys.json");
             }
         } catch (Exception e) {

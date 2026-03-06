@@ -187,7 +187,8 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
                 return props.getProperty("module.version", "unknown");
             }
         } catch (Exception e) {
-            // Non-fatal
+            LoggerFactory.getLogger(ONVIFModuleHook.class)
+                .debug("Could not load module.properties: {}", e.getMessage());
         }
         return "unknown";
     }

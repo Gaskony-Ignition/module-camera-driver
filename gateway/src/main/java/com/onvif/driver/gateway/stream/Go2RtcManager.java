@@ -52,7 +52,7 @@ public class Go2RtcManager {
     private final int port;
 
     private Path binaryPath;
-    private Process process;
+    private volatile Process process;
     private Thread monitorThread;
     private CloseableHttpClient httpClient;
 
@@ -139,7 +139,10 @@ public class Go2RtcManager {
                 binaryPath.toAbsolutePath().toString(),
                 "-config", configPath.toAbsolutePath().toString()
             );
-            pb.directory(binaryPath.getParent().toFile());
+            Path parentDir = binaryPath.getParent();
+            if (parentDir != null) {
+                pb.directory(parentDir.toFile());
+            }
             pb.redirectErrorStream(true);
 
             // Add bundled ffmpeg to PATH so go2rtc can find it for transcoding

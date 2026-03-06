@@ -70,9 +70,10 @@ subprojects {
             }
 
             configure<com.github.spotbugs.snom.SpotBugsExtension> {
-                ignoreFailures.set(true)
+                ignoreFailures.set(false)
                 effort.set(com.github.spotbugs.snom.Effort.MAX)
                 reportLevel.set(com.github.spotbugs.snom.Confidence.MEDIUM)
+                excludeFilter.set(rootProject.file("config/spotbugs/exclude.xml"))
             }
         }
     }

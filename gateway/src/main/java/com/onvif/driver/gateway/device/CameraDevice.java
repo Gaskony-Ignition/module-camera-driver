@@ -123,7 +123,7 @@ public class CameraDevice extends ManagedAddressSpaceWithLifecycle implements De
     private String effectiveSnapshotUrl;
     private String effectiveMjpegUrl;
 
-    private boolean go2RtcStreamRegistered = false;
+    private volatile boolean go2RtcStreamRegistered = false;
 
     public CameraDevice(DeviceContext context, CameraConfig config, Go2RtcManager go2RtcManager) {
         super(context.getServer());
@@ -586,7 +586,9 @@ public class CameraDevice extends ManagedAddressSpaceWithLifecycle implements De
         if (onvifClient != null) {
             try {
                 onvifClient.close();
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                logger.debug("Error closing ONVIF client: {}", e.getMessage());
+            }
             onvifClient = null;
         }
     }
@@ -611,7 +613,7 @@ public class CameraDevice extends ManagedAddressSpaceWithLifecycle implements De
         if (mediaProfiles != null && !mediaProfiles.isEmpty()) {
             onvifAddressSpaceBuilder.buildMediaProfiles(mediaProfiles);
         }
-        if (hasPTZ && mediaProfiles != null && !mediaProfiles.isEmpty()) {
+        if (hasPTZ && !mediaProfiles.isEmpty()) {
             try {
                 String profileToken = mediaProfiles.get(0).getToken();
                 PTZStatus initialStatus = onvifClient.getPTZStatus(profileToken);
