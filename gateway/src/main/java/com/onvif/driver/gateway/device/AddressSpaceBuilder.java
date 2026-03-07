@@ -316,7 +316,7 @@ public class AddressSpaceBuilder {
             logger.debug("Added variable: {} = {}", name, value);
 
         } catch (Exception e) {
-            logger.error("Failed to add variable node: " + name, e);
+            logger.error("Failed to add variable node: {}", name, e);
         }
     }
 
@@ -490,7 +490,7 @@ public class AddressSpaceBuilder {
                 logger.debug("Node not found in cache: {}", nodePath);
             }
         } catch (Exception e) {
-            logger.error("Failed to update variable: " + nodePath, e);
+            logger.error("Failed to update variable: {}", nodePath, e);
         }
     }
 
@@ -542,7 +542,7 @@ public class AddressSpaceBuilder {
             logger.debug("Added writable variable: {} (write handler requires OPC-UA Methods for full integration)", name);
 
         } catch (Exception e) {
-            logger.error("Failed to add writable node: " + name, e);
+            logger.error("Failed to add writable node: {}", name, e);
         }
     }
 

@@ -111,3 +111,7 @@ tasks.register("syncVersion") {
         logger.lifecycle("syncVersion: all files set to $ver")
     }
 }
+
+tasks.named("assembleModlStructure") {
+    dependsOn("syncVersion")
+}

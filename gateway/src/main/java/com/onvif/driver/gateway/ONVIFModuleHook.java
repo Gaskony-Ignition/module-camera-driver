@@ -32,7 +32,7 @@ import java.util.Properties;
  */
 public class ONVIFModuleHook extends AbstractDeviceModuleHook {
 
-    private final Logger logger = LoggerFactory.getLogger(getClass());
+    private static final Logger logger = LoggerFactory.getLogger(ONVIFModuleHook.class);
     private GatewayContext context;
     private CameraExtensionPoint cameraExtensionPoint;
     private Go2RtcManager go2RtcManager;

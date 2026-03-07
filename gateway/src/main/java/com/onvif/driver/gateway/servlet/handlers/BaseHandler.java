@@ -18,7 +18,7 @@ import java.io.IOException;
  */
 public abstract class BaseHandler {
 
-    protected final Logger logger = LoggerFactory.getLogger(getClass());
+    protected static final Logger logger = LoggerFactory.getLogger(BaseHandler.class);
     protected static final boolean REQUIRE_AUTHENTICATION = true;
 
     protected final GatewayContext context;

@@ -58,7 +58,7 @@ import java.util.Map;
  */
 public class CameraDevice extends ManagedAddressSpaceWithLifecycle implements Device {
 
-    private final Logger logger = LoggerFactory.getLogger(getClass());
+    private static final Logger logger = LoggerFactory.getLogger(CameraDevice.class);
 
     // ── Probe configuration ──
 

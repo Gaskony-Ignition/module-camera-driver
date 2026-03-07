@@ -102,7 +102,7 @@ public class GenericCameraAddressSpaceBuilder {
                 logger.trace("Updated {} to {}", nodePath, value);
             }
         } catch (Exception e) {
-            logger.error("Failed to update variable: " + nodePath, e);
+            logger.error("Failed to update variable: {}", nodePath, e);
         }
     }
 
@@ -217,7 +217,7 @@ public class GenericCameraAddressSpaceBuilder {
             nodeCache.put(nodePath, variableNode);
 
         } catch (Exception e) {
-            logger.error("Failed to add variable node: " + name, e);
+            logger.error("Failed to add variable node: {}", name, e);
         }
     }
 
