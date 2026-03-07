@@ -21,7 +21,6 @@ ignitionModule {
     name.set("Camera Driver")
     id.set("com.onvif.driver.opcua")
     moduleVersion.set(project.version.toString())
-    license.set("license.html")
     moduleDescription.set("Multi-protocol camera driver supporting ONVIF, RTSP, MJPEG, and snapshot URL connections to IP cameras with bundled go2rtc streaming")
     requiredIgnitionVersion.set("8.3.0")
     freeModule.set(true)
@@ -106,8 +105,6 @@ tasks.register("syncVersion") {
             Regex("""(?m)^\*\*Document Version\*\*:\s*[\d.]+"""), "**Document Version**: ${ver}")
         sync(file("CLAUDE.md"),
             Regex("""CameraDriver-[\d.]+\.modl"""), "CameraDriver-${ver}.modl")
-        sync(file("license.html"),
-            Regex("""(?<=<strong>Version:</strong> )[0-9.]+"""), ver)
         logger.lifecycle("syncVersion: all files set to $ver")
     }
 }
