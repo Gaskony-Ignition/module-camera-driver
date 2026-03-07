@@ -1,8 +1,3 @@
-rootProject.name = "camera-driver"
-
-// Enable type-safe project accessors
-enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
-
 pluginManagement {
     repositories {
         gradlePluginPortal()
@@ -23,9 +18,8 @@ dependencyResolutionManagement {
     }
 }
 
-include(
-    ":common",
-    ":designer",
-    ":gateway",
-    ":web-ui"
-)
+enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
+
+rootProject.name = "camera-driver"
+
+include(":common", ":designer", ":gateway", ":web-ui")

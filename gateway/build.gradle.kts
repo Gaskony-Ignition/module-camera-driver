@@ -18,14 +18,14 @@ dependencies {
     compileOnly(libs.perspective.gateway)
 
     // HTTP client for ONVIF communication
-    modlImplementation("org.apache.httpcomponents:httpclient:4.5.14")
-    modlImplementation("org.apache.httpcomponents:httpcore:4.4.16")
+    modlImplementation(libs.httpclient)
+    modlImplementation(libs.httpcore)
 
     // JSON support for configuration (provided by Ignition at runtime)
-    compileOnly("com.google.code.gson:gson:2.11.0")
+    compileOnly(libs.gson)
 
     // Jakarta Servlet API (provided by Ignition 8.3)
-    compileOnly("jakarta.servlet:jakarta.servlet-api:5.0.0")
+    compileOnly(libs.jakarta.servlet)
 
     // Include web-ui component bundle
     modlImplementation(projects.webUi)
@@ -39,21 +39,21 @@ dependencies {
     testCompileOnly(libs.ignition.driver.api)
     testRuntimeOnly(libs.ignition.driver.api)
 
-    // Test dependencies (v2.1.0)
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.11.3")
-    testImplementation("org.junit.jupiter:junit-jupiter-params:5.11.3")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.11.3")
+    // Test dependencies
+    testImplementation(libs.junit.jupiter.api)
+    testImplementation(libs.junit.jupiter.params)
+    testRuntimeOnly(libs.junit.jupiter.engine)
 
     // Mockito for mocking
-    testImplementation("org.mockito:mockito-core:5.18.0")
-    testImplementation("org.mockito:mockito-junit-jupiter:5.18.0")
+    testImplementation(libs.mockito.core)
+    testImplementation(libs.mockito.junit.jupiter)
 
     // AssertJ for fluent assertions
-    testImplementation("org.assertj:assertj-core:3.27.7")
+    testImplementation(libs.assertj.core)
 
     // SLF4J for test logging
-    testImplementation("org.slf4j:slf4j-api:2.0.17")
-    testRuntimeOnly("org.slf4j:slf4j-simple:2.0.17")
+    testImplementation(libs.slf4j.api)
+    testRuntimeOnly(libs.slf4j.simple)
 }
 
 // go2rtc binary download task
@@ -242,12 +242,14 @@ tasks.test {
     useJUnitPlatform()
     testLogging {
         events("passed", "skipped", "failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
         showStandardStreams = false
-        showExceptions = true
-        showCauses = true
-        showStackTraces = true
     }
     finalizedBy(tasks.jacocoTestReport)
+}
+
+jacoco {
+    toolVersion = "0.8.11"
 }
 
 tasks.jacocoTestReport {
@@ -255,10 +257,12 @@ tasks.jacocoTestReport {
     reports {
         xml.required.set(true)
         html.required.set(true)
+        csv.required.set(false)
     }
 }
 
 tasks.jacocoTestCoverageVerification {
+    dependsOn(tasks.jacocoTestReport)
     violationRules {
         rule {
             limit {

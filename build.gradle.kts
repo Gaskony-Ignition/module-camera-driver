@@ -13,8 +13,13 @@ configure<org.owasp.dependencycheck.gradle.extension.DependencyCheckExtension> {
     analyzers.assemblyEnabled = false
 }
 
-version = "2.34.0"
-group = "com.onvif.driver"
+version = "2.34.1"
+group = "com.gaskony"
+
+allprojects {
+    version = rootProject.version
+    group = "com.gaskony"
+}
 
 ignitionModule {
     fileName.set("CameraDriver-${project.version}")
@@ -57,28 +62,26 @@ ignitionModule {
 
 // ── Static analysis ──────────────────────────────────────────────────────────
 subprojects {
-    afterEvaluate {
-        if (plugins.hasPlugin("java") || plugins.hasPlugin("java-library")) {
-            apply(plugin = "checkstyle")
-            apply(plugin = "com.github.spotbugs")
+    plugins.withType<JavaPlugin> {
+        apply(plugin = "checkstyle")
+        apply(plugin = "com.github.spotbugs")
 
-            configure<CheckstyleExtension> {
-                toolVersion = "10.26.1"
-                configFile = rootProject.file("config/checkstyle/checkstyle.xml")
-                isIgnoreFailures = true
-            }
+        configure<CheckstyleExtension> {
+            toolVersion = "10.26.1"
+            configFile = rootProject.file("config/checkstyle/checkstyle.xml")
+            isIgnoreFailures = true
+        }
 
-            configure<com.github.spotbugs.snom.SpotBugsExtension> {
-                ignoreFailures.set(false)
-                effort.set(com.github.spotbugs.snom.Effort.MAX)
-                reportLevel.set(com.github.spotbugs.snom.Confidence.MEDIUM)
-                excludeFilter.set(rootProject.file("config/spotbugs/exclude.xml"))
-            }
+        configure<com.github.spotbugs.snom.SpotBugsExtension> {
+            ignoreFailures.set(false)
+            effort.set(com.github.spotbugs.snom.Effort.MAX)
+            reportLevel.set(com.github.spotbugs.snom.Confidence.MEDIUM)
+            excludeFilter.set(rootProject.file("config/spotbugs/exclude.xml"))
+        }
 
-            // Disable SpotBugs on test code — enforce only on production sources
-            tasks.matching { it.name == "spotbugsTest" }.configureEach {
-                enabled = false
-            }
+        // Disable SpotBugs on test code — enforce only on production sources
+        tasks.matching { it.name == "spotbugsTest" }.configureEach {
+            enabled = false
         }
     }
 }

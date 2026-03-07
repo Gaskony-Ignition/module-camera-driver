@@ -1,7 +1,5 @@
 const path = require("path");
 const webpack = require("webpack");
-const ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin");
-const ESLintPlugin = require("eslint-webpack-plugin");
 
 module.exports = (webpackConfigEnv = {}, argv = {}) => {
   const { mode = "development" } = argv;
@@ -17,21 +15,14 @@ module.exports = (webpackConfigEnv = {}, argv = {}) => {
         },
         {
           test: /\.[tj]sx?$/,
-          use: [{ loader: "ts-loader", options: { transpileOnly: true } }],
+          use: [{ loader: "ts-loader", options: { configFile: 'tsconfig.webpack.json' } }],
           exclude: /node_modules/,
           parser: { system: false },
         },
       ],
     },
     devtool: mode === "production" ? false : "source-map",
-    plugins: [
-      new ForkTsCheckerWebpackPlugin(),
-      new ESLintPlugin({
-        files: "./src/**/*.{ts,tsx,js,jsx}",
-        failOnError: false,
-        configType: "flat",
-      }),
-    ],
+    plugins: [],
     resolve: {
       modules: ["node_modules"],
       extensions: [".js", ".jsx", ".scss", ".css", ".ts", ".tsx", ".d.ts"],

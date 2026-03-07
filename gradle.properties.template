@@ -1,14 +1,13 @@
-# Ignition SDK version
-ignition.sdk.version=8.3.0
-
 # Gaskony Module Signing Configuration
-# Uses shared keystore for consistent vendor name across all Gaskony modules
-ignition.signing.keystoreFile=/path/to/your/gaskony-keystore.jks
-ignition.signing.keystorePassword=YOUR_PASSWORD_HERE
-ignition.signing.certAlias=gaskony-module
-ignition.signing.certPassword=YOUR_PASSWORD_HERE
-ignition.signing.certFile=/path/to/your/gaskony-cert.pem
 
-# Gradle daemon settings
-org.gradle.daemon=true
-org.gradle.jvmargs=-Xmx2048M
+# Keystore configuration
+ignition.signing.keystoreFile=YOUR_KEYSTORE_PATH_HERE
+ignition.signing.keystorePassword=YOUR_PASSWORD_HERE
+
+# Certificate configuration
+ignition.signing.certAlias=YOUR_CERT_ALIAS_HERE
+ignition.signing.certPassword=YOUR_PASSWORD_HERE
+
+# Certificate file (self-signed, exported from keystore)
+# For self-signed modules, certFile can point to the public certificate
+ignition.signing.certFile=YOUR_CERT_FILE_PATH_HERE

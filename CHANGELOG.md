@@ -5,6 +5,17 @@ All notable changes to the Ignition Camera Driver module will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.34.1] - 2026-03-07
+
+### Cross-module standardisation (Round 4)
+
+#### Changed
+- Gradle group changed from `com.onvif.driver` to `com.gaskony` (aligns all 5 modules)
+- Add `allprojects` block for consistent version/group propagation to subprojects
+- Add `allowImportingTsExtensions: false` to `tsconfig.webpack.json` (matches AT, Git, Python3)
+- Remove vestigial `prettier` devDependency (no `.prettierrc` existed)
+- Standardise ESLint rule order to `no-unused-vars`, `no-explicit-any`, `ban-ts-comment` (matches AT, Git, Python3)
+
 ## [2.6.8] - 2026-02-10
 
 ### Fixed
