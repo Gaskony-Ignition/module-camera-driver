@@ -1,5 +1,7 @@
 # Claude Context - Ignition Camera Driver Module
 
+This file contains module-specific instructions. Shared standards are in `/modules/CLAUDE.md` and `/modules/.claude/skills/`.
+
 ## Project Overview
 
 **Name**: Ignition Camera Driver Module

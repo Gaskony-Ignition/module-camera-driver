@@ -57,3 +57,8 @@ certificates/
 *.jar
 !gradle-wrapper.jar
 web-ui/node_modules/
+
+# Windows WSL metadata (must never be committed)
+*:Zone.Identifier
+*Zone.Identifier*
+*.Zone.Identifier
