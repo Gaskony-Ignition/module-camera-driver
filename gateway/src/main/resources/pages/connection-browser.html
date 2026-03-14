@@ -1326,17 +1326,25 @@
 
         .toast {
             position: fixed;
-            bottom: 40px;
+            bottom: 24px;
             left: 50%;
             transform: translateX(-50%);
-            background: var(--sidebar-active);
-            color: var(--text-primary);
+            background: rgba(166, 227, 161, 0.2);
+            border: 1px solid rgba(166, 227, 161, 0.4);
+            color: var(--accent-secondary);
             padding: 8px 20px;
             border-radius: 6px;
             font-size: 12px;
-            z-index: 9999;
+            z-index: 1100;
             box-shadow: 0 4px 16px rgba(0,0,0,0.5);
             animation: toastIn 0.25s ease-out;
+            pointer-events: auto;
+        }
+
+        .toast.error {
+            background: rgba(243, 139, 168, 0.2);
+            border: 1px solid rgba(243, 139, 168, 0.4);
+            color: var(--accent-error);
         }
 
         .error-msg {
@@ -1365,7 +1373,7 @@
            Content Scrollbar
            ================================================================ */
         .app-wrapper .app-content-area::-webkit-scrollbar { width: 8px; }
-        .app-wrapper .app-content-area::-webkit-scrollbar-track { background: var(--bg-primary); }
+        .app-wrapper .app-content-area::-webkit-scrollbar-track { background: var(--bg-secondary); }
         .app-wrapper .app-content-area::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 4px; }
         .app-wrapper .app-content-area::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
 
@@ -1484,7 +1492,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 9999;
+            z-index: 1000;
         }
 
         .grid-group-modal {
@@ -3038,9 +3046,8 @@
 
         function showToast(msg, isError) {
             var toast = document.createElement('div');
-            toast.className = 'toast';
-            toast.textContent = msg;
-            if (isError) toast.style.background = 'var(--error)';
+            toast.className = 'toast' + (isError ? ' error' : '');
+            toast.innerHTML = msg + '<span class="toast-close" onclick="this.parentElement.remove()" style="margin-left:10px;cursor:pointer;opacity:0.6">&times;</span>';
             document.body.appendChild(toast);
             setTimeout(function() { toast.remove(); }, 2000);
         }
