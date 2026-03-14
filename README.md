@@ -14,7 +14,7 @@ For cameras that provide direct RTSP, MJPEG, or snapshot HTTP URLs but may not s
 
 ## Current Status
 
-**Version**: 2.34.2 | **Status**: Production Ready
+**Version**: 2.34.3 | **Status**: Production Ready
 
 ### Supported Connection Types
 
@@ -39,12 +39,12 @@ For cameras that provide direct RTSP, MJPEG, or snapshot HTTP URLs but may not s
 ```bash
 cd /modules/ignition-module-camera-driver
 ./gradlew clean build
-# Output: build/CameraDriver-2.34.2.modl
+# Output: build/CameraDriver-2.34.3.modl
 ```
 
 ### 2. Install
 ```bash
-docker cp build/CameraDriver-2.34.2.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
+docker cp build/CameraDriver-2.34.3.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
 docker restart ignition-gateway
 ```
 
