@@ -6,16 +6,86 @@
     <title>Camera Player</title>
     <style>
         :root {
+            /* Background palette - Catppuccin Mocha */
             --bg-primary:   #11111b;
             --bg-secondary: #181825;
-            --border:       #313244;
-            --text-primary: #cdd6f4;
-            --text-muted:   #a6adc8;
-            --accent:       #89b4fa;
-            --accent-hover: #b4d0ff;
-            --error:        #f38ba8;
-            --success:      #a6e3a1;
-            --font-sans:    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --bg-tertiary:  #1e1e2e;
+            --bg-hover:     #313244;
+            --bg-active:    #45475a;
+
+            /* Text colours */
+            --text-primary:   #cdd6f4;
+            --text-secondary: #bac2de;
+            --text-muted:     #6c7086;
+            --text-inverse:   #11111b;
+
+            /* Accent colours */
+            --accent-primary: #89b4fa;
+            --accent-primary-hover: #b4d0fb;
+            --accent-secondary: #a6e3a1;
+            --accent-peach:  #fab387;
+            --accent-info:   #89dceb;
+            --accent-warning: #f9e2af;
+
+            /* Status colours */
+            --success:        #a6e3a1;
+            --error:          #f38ba8;
+            --warning:        #f9e2af;
+            --info:           #89b4fa;
+
+            /* Borders */
+            --border-default: #313244;
+            --border-light:   #45475a;
+            --border-focus:   #89b4fa;
+            --border-accent:  rgba(137, 180, 250, 0.12);
+
+            /* Spacing */
+            --spacing-xs: 4px;
+            --spacing-sm: 8px;
+            --spacing-md: 16px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+
+            /* Typography */
+            --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
+            --font-size-xs:   10px;
+            --font-size-sm:   11px;
+            --font-size-base: 13px;
+            --font-size-md:   14px;
+            --font-size-lg:   16px;
+            --font-size-xl:   18px;
+
+            /* Radius */
+            --radius-sm: 4px;
+            --radius-md: 6px;
+            --radius-lg: 8px;
+
+            /* Shadows */
+            --shadow-sm:    0 1px 3px rgba(0, 0, 0, 0.3);
+            --shadow-md:    0 4px 6px rgba(0, 0, 0, 0.4);
+            --shadow-lg:    0 10px 20px rgba(0, 0, 0, 0.5);
+            --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.25);
+
+            /* Transitions */
+            --transition-fast:   0.15s ease;
+            --transition-normal: 0.25s ease;
+            --transition-slow:   0.35s ease;
+
+            /* Z-Index */
+            --z-base:           1;
+            --z-dropdown:       100;
+            --z-sidebar:        200;
+            --z-overlay:        500;
+            --z-modal-backdrop: 1000;
+            --z-modal:          1001;
+            --z-toast:          1100;
+            --z-tooltip:        1300;
+
+            /* UI Chrome */
+            --header-gradient: linear-gradient(135deg, rgba(137, 180, 250, 0.06) 0%, rgba(137, 180, 250, 0.02) 40%, transparent 70%);
+            --overlay-muted:  #585b70;
+            --modal-backdrop: rgba(0, 0, 0, 0.6);
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -51,8 +121,8 @@
         .spinner {
             width: 32px;
             height: 32px;
-            border: 3px solid var(--border);
-            border-top-color: var(--accent);
+            border: 3px solid var(--border-default);
+            border-top-color: var(--accent-primary);
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin-bottom: 12px;
@@ -76,7 +146,7 @@
         .retry-btn {
             margin-top: 12px;
             padding: 8px 20px;
-            background: var(--accent);
+            background: var(--accent-primary);
             color: white;
             border: none;
             border-radius: 4px;
@@ -84,7 +154,7 @@
             cursor: pointer;
         }
 
-        .retry-btn:hover { background: var(--accent-hover); }
+        .retry-btn:hover { background: var(--accent-primary-hover); }
     </style>
 </head>
 <body>

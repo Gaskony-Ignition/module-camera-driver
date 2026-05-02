@@ -17,7 +17,6 @@ module.exports = (webpackConfigEnv = {}, argv = {}) => {
           test: /\.[tj]sx?$/,
           use: [{ loader: "ts-loader", options: { configFile: 'tsconfig.webpack.json' } }],
           exclude: /node_modules/,
-          parser: { system: false },
         },
       ],
     },
@@ -25,19 +24,22 @@ module.exports = (webpackConfigEnv = {}, argv = {}) => {
     plugins: [],
     resolve: {
       modules: ["node_modules"],
-      extensions: [".js", ".jsx", ".scss", ".css", ".ts", ".tsx", ".d.ts"],
+      extensions: [".ts", ".tsx", ".js", ".jsx", ".scss", ".css", ".d.ts"],
     },
   };
 
-  // Connection Browser: SystemJS for Ignition gateway config page
+  // Connection Browser: UMD for Ignition gateway config page
   const connectionBrowserConfig = {
     ...commonConfig,
     entry: {
-      connectionBrowser: [path.join(__dirname, "src/pages/ConnectionBrowser/index.ts")],
+      CameraConnectionBrowser: path.join(__dirname, "src/index.ts"),
     },
     output: {
-      library: { type: "system" },
-      filename: "[name].js",
+      library: "[name]",
+      libraryTarget: "umd",
+      umdNamedDefine: true,
+      globalObject: 'this',
+      filename: "connectionBrowser.js",
       publicPath: "",
       path: path.resolve(__dirname, "build/generated-resources/mounted/"),
     },

@@ -1,0 +1,96 @@
+/* ==========================================================================
+   Status Bar - Fixed bottom bar with CPU/RAM + camera stats
+   Scoped to .app-wrapper
+   ========================================================================== */
+
+.app-wrapper .global-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  padding: 0 12px;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border-default);
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  user-select: none;
+  z-index: var(--z-base);
+}
+
+.app-wrapper .global-status-bar-left,
+.app-wrapper .global-status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.app-wrapper .global-status-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+}
+
+.app-wrapper .global-status-bar-item strong {
+  color: var(--text-tertiary);
+}
+
+.app-wrapper .global-status-bar-item svg {
+  opacity: 0.7;
+}
+
+.app-wrapper .global-status-bar-separator {
+  color: var(--border-light);
+  margin: 0 2px;
+  user-select: none;
+}
+
+/* CPU/RAM metric with mini progress bar */
+.app-wrapper .gsb-metric {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+}
+
+.app-wrapper .gsb-bar {
+  width: 48px;
+  height: 4px;
+  background: var(--bg-active);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.app-wrapper .gsb-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width var(--transition-slow);
+}
+
+.app-wrapper .gsb-value {
+  font-size: 10px;
+  color: var(--text-secondary);
+  min-width: 32px;
+  text-align: right;
+}
+
+/* Snapshot/stream mini gauge bars */
+.app-wrapper .gsb-mini-bar {
+  display: inline-flex;
+  width: 48px;
+  height: 4px;
+  background: var(--border-default);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.app-wrapper .gsb-mini-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width var(--transition-normal);
+}

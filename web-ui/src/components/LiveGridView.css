@@ -1,0 +1,326 @@
+/* ==========================================================================
+   Live Grid View — multi-camera Frigate-style grid with overlays
+   Scoped to .app-wrapper
+   ========================================================================== */
+
+.app-wrapper .live-grid-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Toolbar card */
+.app-wrapper .grid-toolbar-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.app-wrapper .grid-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.app-wrapper .grid-toolbar-spacer {
+  flex: 1;
+}
+
+.app-wrapper .grid-select {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.app-wrapper .grid-select:focus { border-color: var(--accent-primary); outline: none; }
+
+/* Grid container card */
+.app-wrapper .grid-container-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+/* Camera grid container */
+.app-wrapper .camera-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.app-wrapper .camera-grid.grid-1x1 { grid-template-columns: 1fr; }
+.app-wrapper .camera-grid.grid-2x2 { grid-template-columns: 1fr 1fr; }
+.app-wrapper .camera-grid.grid-3x3 { grid-template-columns: 1fr 1fr 1fr; }
+.app-wrapper .camera-grid.grid-4x4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+/* Individual grid cell */
+.app-wrapper .grid-cell {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  position: relative;
+  aspect-ratio: 16 / 9;
+  display: flex;
+  flex-direction: column;
+  transition: border-color var(--transition-fast);
+}
+
+.app-wrapper .grid-cell:hover { border-color: var(--accent-primary); }
+
+.app-wrapper .grid-cell-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--card-border);
+  min-height: 30px;
+}
+
+.app-wrapper .grid-cell-header select {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  font-size: 11px;
+  font-family: inherit;
+  max-width: 150px;
+}
+
+.app-wrapper .grid-cell-header select:focus { border-color: var(--accent-primary); outline: none; }
+
+.app-wrapper .grid-cell-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.app-wrapper .grid-cell-actions button {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+}
+
+.app-wrapper .grid-cell-actions button:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* Grid cell body (video/image area) */
+.app-wrapper .grid-cell-body {
+  flex: 1;
+  position: relative;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.app-wrapper .grid-cell-body img,
+.app-wrapper .grid-cell-body video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.app-wrapper .grid-cell-empty {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* Grid overlays */
+.app-wrapper .grid-overlay-name {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--modal-backdrop);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.app-wrapper .grid-overlay-status {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.app-wrapper .grid-overlay-status.running { background: var(--accent-secondary-bg); color: var(--success); }
+.app-wrapper .grid-overlay-status.error { background: var(--accent-error-bg); color: var(--error); }
+.app-wrapper .grid-overlay-status.offline { background: var(--overlay-dark); color: var(--text-tertiary); }
+
+.app-wrapper .grid-overlay-type {
+  position: absolute;
+  bottom: 6px;
+  left: 8px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #fff;
+  background: var(--overlay-dark);
+  padding: 1px 6px;
+  border-radius: 3px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.app-wrapper .grid-live-badge {
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--success);
+  background: var(--modal-backdrop);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  z-index: 2;
+}
+
+.app-wrapper .grid-live-badge .live-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--success);
+  border-radius: 50%;
+  animation: cam-grid-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes cam-grid-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.app-wrapper .grid-offline-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--overlay-dark);
+  color: var(--text-tertiary);
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 3;
+}
+
+/* Event log below grid */
+.app-wrapper .grid-event-log {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  padding: 10px 14px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.app-wrapper .grid-event-log-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.app-wrapper .grid-events-empty {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.app-wrapper .grid-event {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  padding: 2px 0;
+}
+
+.app-wrapper .grid-event-time {
+  color: var(--text-tertiary);
+  margin-right: 8px;
+}
+
+.app-wrapper .grid-event-camera {
+  color: var(--accent-primary);
+  margin-right: 4px;
+}
+
+/* Grid Group Modal */
+.app-wrapper .grid-group-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--modal-backdrop);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal-backdrop, 1000);
+}
+
+.app-wrapper .grid-group-modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  padding: 24px;
+  width: 380px;
+  max-width: 90vw;
+}
+
+.app-wrapper .grid-group-modal h3 {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.app-wrapper .grid-group-modal label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.app-wrapper .grid-group-modal .modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 700px) {
+  .app-wrapper .camera-grid.grid-3x3 { grid-template-columns: 1fr 1fr; }
+  .app-wrapper .camera-grid.grid-4x4 { grid-template-columns: 1fr 1fr; }
+}

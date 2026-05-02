@@ -13,7 +13,7 @@ configure<org.owasp.dependencycheck.gradle.extension.DependencyCheckExtension> {
     analyzers.assemblyEnabled = false
 }
 
-version = "2.34.6"
+version = "2.34.13"
 group = "com.gaskony"
 
 allprojects {
@@ -98,6 +98,8 @@ tasks.register("syncVersion") {
             val updated = text.replace(pattern, replacement)
             if (updated != text) { f.writeText(updated); logger.lifecycle("  synced ${f.name} → $ver") }
         }
+        sync(file("web-ui/package.json"),
+            Regex(""""version":\s*"[^"]+""""), """"version": "$ver"""")
         sync(file("README.md"),
             Regex("""(?m)^\*\*Version\*\*:\s*[\d.]+"""), "**Version**: ${ver}")
         sync(file("README.md"),

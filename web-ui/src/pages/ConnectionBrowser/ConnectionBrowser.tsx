@@ -1,26 +1,11 @@
-import "./_styles.scss";
-import { API } from "../../api/paths";
+import App from '../../App'
 
 /**
- * Connection Browser component
- * Embeds the HTML-based connection browser interface in an iframe.
- *
- * The key prop on the iframe is critical — without it, when multiple modules
- * register structurally identical iframe-based pages, React's reconciler
- * reuses the iframe DOM element instead of recreating it, causing the page
- * to appear "stuck" when navigating between modules.
+ * Connection Browser component — renders the full React Camera Driver UI.
+ * Previously wrapped connection-browser.html in an iframe; now renders
+ * the React app directly for consistency with all other modules.
  */
-const ConnectionBrowserPage = () => {
-  return (
-    <div className="connection-browser-container">
-      <iframe
-        key="camera-connection-browser"
-        src={API.connectionBrowser}
-        className="connection-browser-iframe"
-        title="Camera Connection Browser"
-      />
-    </div>
-  );
-};
+export default function ConnectionBrowserPage() {
+  return <App />
+}
 
-export default ConnectionBrowserPage;

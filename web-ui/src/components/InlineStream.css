@@ -1,0 +1,154 @@
+/* ==========================================================================
+   InlineStream - Inline video/MJPEG stream viewer
+   Scoped to .app-wrapper to prevent Gateway UI pollution
+   ========================================================================== */
+
+.app-wrapper .inline-stream-wrapper {
+  margin: 10px 0;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.app-wrapper .inline-stream-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--card-border);
+}
+
+.app-wrapper .live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: var(--accent-secondary-bg);
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--success);
+}
+
+.app-wrapper .live-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--success);
+  border-radius: 50%;
+  animation: live-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.app-wrapper .stream-container {
+  width: 100%;
+  background: var(--bg-primary);
+  aspect-ratio: 16 / 9;
+  position: relative;
+}
+
+.app-wrapper .stream-container img,
+.app-wrapper .stream-container video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.app-wrapper .stream-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  gap: 10px;
+}
+
+.app-wrapper .stream-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--error);
+  font-size: 13px;
+  text-align: center;
+  padding: 20px;
+}
+
+.app-wrapper .stream-uris {
+  padding: 8px 12px;
+  border-top: 1px solid var(--card-border);
+}
+
+.app-wrapper .uri-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.app-wrapper .uri-row:last-child {
+  margin-bottom: 0;
+}
+
+.app-wrapper .uri-label-tag {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.app-wrapper .uri-value {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.app-wrapper .copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  border: none;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.app-wrapper .copy-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.app-wrapper .loading-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--card-border);
+  border-radius: 50%;
+  border-top-color: var(--accent-primary);
+  animation: stream-spin 0.75s linear infinite;
+}
+
+@keyframes stream-spin {
+  to { transform: rotate(360deg); }
+}
