@@ -16,6 +16,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove vestigial `prettier` devDependency (no `.prettierrc` existed)
 - Standardise ESLint rule order to `no-unused-vars`, `no-explicit-any`, `ban-ts-comment` (matches AT, Git, Python3)
 
+---
+
+## [2.34.13] - 2026-05-05
+
+### Changed
+- Refactor route handlers onto a unified `AccessControl` helper (Gateway session + localhost / private-IP) shared with the other 4 modules (P3-CD).
+
+---
+
+## [2.34.12] - 2026-05-05
+
+### Performance
+- SDK-compliant device lifecycle: probe + connect work moved off the Gateway startup thread; ONVIF discovery now runs async with bounded executor and per-device timeouts (P2-CD-1, P2-CD-2).
+
+### Security
+- Harden `.gitignore` to deny `gradle.properties`, `sign.properties`, `*.jks`, `*.keystore`, and broad `.env.*` patterns; allowlist for templates/examples and public-key suffixes (B3-autonomous).
+
+---
+
+## [2.34.11] - 2026-05-05
+
+### Fixed
+- Functional PTZ via Milo's `AttributeFilter`: PTZ writes were silently dropped because the PTZ continuous-move call was issued from the wrong execution context. Routed through `AttributeFilter` so writes are honoured (C10).
+
+---
+
+## [2.34.10] - 2026-05-05
+
+### Security
+- Default ONVIF SSL/TLS validation mode is now `STRICT`. `TRUST_FIRST_USE` and `INSECURE` remain available but require explicit configuration (C5).
+
+---
+
+## [2.34.9] - 2026-05-05
+
+### Security
+- Close authentication bypass on snapshot/stream/devices HTTP endpoints. All endpoints now go through Gateway session auth + Basic auth + API key auth before any device proxy is invoked (B1).
+
+---
+
+## [2.34.8] - 2026-03-12
+
+### Changed
+- Rebuild the React web UI on component architecture (shared layout shell, page-level routes, normalised CSS scopes) and normalise line endings to LF.
+
+---
+
+## [2.34.7] - 2026-03-14
+
+### Changed
+- Standardise the shimmer animation to percentage-based positioning so it scales cleanly at every viewport width.
+
+---
+
+## [2.34.6] - 2026-03-14
+
+### Changed
+- Standardise CSS values (spacing, radius, shadow tokens, transition timings) across the module UI per the cross-module variable contract.
+
+---
+
+## [2.34.5] - 2026-03-14
+
+### Added
+- Replace browser `prompt()` with a styled modal; add error-state retry buttons on connection failures.
+
+---
+
+## [2.34.4] - 2026-03-14
+
+### Added
+- Authentication overlay screen for the Gateway WebUI; fix section-header font sizes to match the cross-module typography scale.
+
+---
+
+## [2.34.3] - 2026-03-13
+
+### Changed
+- Cross-module UI standardisation v2.34.2: align typography, spacing, accent colours, and component shells with AT, Git, PLC, Python3.
+
+---
+
+## [2.34.2] - 2026-03-07
+
+### Changed
+- Wire `syncVersion` task into the build, fix logger declarations to `private static final Logger logger`, switch all log messages to SLF4J `{}` placeholders, add `lucide-react` icon library.
+- Update version references throughout docs to 2.34.0; remove unnecessary helper files; remove the `license.set` block and `license.html` syncVersion reference (Round-5 cleanup).
+
 ## [2.6.8] - 2026-02-10
 
 ### Fixed
