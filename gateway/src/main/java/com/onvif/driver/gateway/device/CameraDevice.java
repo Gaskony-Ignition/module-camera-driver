@@ -62,7 +62,18 @@ public class CameraDevice extends ManagedAddressSpaceWithLifecycle implements De
 
     // ── Probe configuration ──
 
-    private static final int PROBE_TIMEOUT_MS = 3000;
+    /**
+     * Per-path probe timeout (TCP connect, RTSP DESCRIBE, HTTP request).
+     *
+     * Lowered from 3000 ms to 1000 ms as part of P2-CD-2
+     * (see /modules/.review/FINAL_REVIEW.md §5 P2 and
+     * reports/xc-performance.md). The probe ladder iterates ~22 paths per
+     * camera, so the timeout dominates worst-case startup latency. A 1 s
+     * timeout is plenty for cameras on a LAN; unreachable hosts now fail
+     * fast, and the probe runs on a background thread anyway (so a slow
+     * camera never blocks device startup).
+     */
+    private static final int PROBE_TIMEOUT_MS = 1000;
     private static final int RTSP_DEFAULT_PORT = 554;
 
     private static final String[] COMMON_RTSP_PATHS = {
@@ -153,16 +164,36 @@ public class CameraDevice extends ManagedAddressSpaceWithLifecycle implements De
             return;
         }
 
+        // P2-CD-2: register and return immediately. Probing/ONVIF/address-space
+        // build can take seconds-to-tens-of-seconds (especially on unreachable
+        // cameras); doing it synchronously serialises every device's transition
+        // to RUNNING and stalls the OPC-UA driver subsystem with N cameras.
+        //
+        // We register the device early so handlers can find it during probing,
+        // mark the status DISCOVERING (tags surface as Bad_NotConnected until
+        // the address space is built — Milo behaviour for missing nodes), and
+        // submit the probe work to the shared bounded camera-probe-N executor.
+        // See /modules/.review/FINAL_REVIEW.md §5 P2 and xc-performance.md.
+        CameraExtensionPoint.registerDevice(context.getName(), this);
+        deviceStatus = DeviceStatus.DISCOVERING.displayName();
+        logger.info("Device registered (status DISCOVERING — probing on background thread): {}",
+            context.getName());
+
+        CameraExtensionPoint.getProbeExecutor().submit(this::performStartupAsync);
+    }
+
+    /**
+     * Background entry point for {@link #performStartup()}. Catches any
+     * exception so a probe failure can't kill the executor thread, and
+     * updates {@link #deviceStatus} accordingly.
+     */
+    private void performStartupAsync() {
         try {
             performStartup();
         } catch (Exception e) {
             deviceStatus = "Error: " + e.getMessage();
             logger.error("Failed to start Camera device: {}", context.getName(), e);
         }
-
-        // Register after startup attempt (connected or error state)
-        CameraExtensionPoint.registerDevice(context.getName(), this);
-        logger.info("Device registered in registry: {}", context.getName());
     }
 
     private void performStartup() throws Exception {

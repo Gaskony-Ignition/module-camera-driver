@@ -25,6 +25,9 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Module hook for the Camera Driver.
@@ -37,26 +40,38 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
     private CameraExtensionPoint cameraExtensionPoint;
     private Go2RtcManager go2RtcManager;
 
+    /**
+     * Daemon executor used to launch go2rtc off the Gateway lifecycle thread.
+     *
+     * Per /modules/.review/FINAL_REVIEW.md §5 P2 (P2-CD-1): the previous build
+     * called {@code go2RtcManager.start()} from {@link #setup(GatewayContext)},
+     * which violates the SDK contract — {@code setup()} performs ~30 MB of
+     * binary extraction (with SHA-256 hashing), spawns a subprocess, and slept
+     * 1 s waiting for readiness. {@code setup()} must only register extension
+     * points; even {@code startup()} must not block the lifecycle thread.
+     *
+     * The launch is now deferred to a single-threaded daemon executor kicked
+     * off from {@link #startup(LicenseState)}; {@code shutdown()} drains the
+     * executor with a short timeout before stopping the manager.
+     */
+    private ExecutorService go2RtcStartExecutor;
+
     @Override
     public void setup(GatewayContext context) {
         this.context = context;
 
+        // setup() is restricted to extension-point registration and other
+        // non-blocking initialisation. See P2-CD-1 — go2rtc startup is
+        // deferred to startup() on a daemon thread.
         Path dataDir = context.getSystemManager().getDataDir().toPath();
         this.go2RtcManager = new Go2RtcManager(dataDir);
-
-        try {
-            go2RtcManager.start();
-            logger.info("go2rtc manager started in setup (available: {})", go2RtcManager.isAvailable());
-        } catch (Exception e) {
-            logger.warn("Failed to start go2rtc in setup - RTSP streaming will use fallback modes: {}", e.getMessage());
-        }
 
         if (this.cameraExtensionPoint == null) {
             this.cameraExtensionPoint = new CameraExtensionPoint();
         }
         this.cameraExtensionPoint.setGo2RtcManager(go2RtcManager);
 
-        logger.info("Camera Driver module setup complete");
+        logger.info("Camera Driver module setup complete (go2rtc launch deferred to startup)");
 
         // Register WebUI component for connection browser
         try {
@@ -102,7 +117,30 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
             logger.debug("Perspective component registration skipped: {}", t.getMessage());
         }
 
-        logger.info("Camera Driver module started successfully");
+        // Launch go2rtc on a daemon thread so startup() returns promptly.
+        // See P2-CD-1 in /modules/.review/FINAL_REVIEW.md.
+        go2RtcStartExecutor = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "CameraDriver-go2rtc-startup");
+            t.setDaemon(true);
+            return t;
+        });
+        go2RtcStartExecutor.submit(this::startGo2RtcAsync);
+
+        logger.info("Camera Driver module started successfully (go2rtc launch in background)");
+    }
+
+    /**
+     * Launches go2rtc on the dedicated start executor. Any failure is logged —
+     * RTSP streaming will fall back to MJPEG/snapshot polling and the device
+     * remains usable.
+     */
+    private void startGo2RtcAsync() {
+        try {
+            go2RtcManager.start();
+            logger.info("go2rtc manager started asynchronously (available: {})", go2RtcManager.isAvailable());
+        } catch (Exception e) {
+            logger.warn("Failed to start go2rtc - RTSP streaming will use fallback modes: {}", e.getMessage());
+        }
     }
 
     @Override
@@ -148,6 +186,24 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
 
         SnapshotHandler.resetCounters();
         StreamHandler.resetCounters();
+
+        // Drain the go2rtc start executor — if startGo2RtcAsync is still in-flight
+        // (e.g., extraction, process spawn) we wait briefly so stop() has a fully
+        // initialised manager to act on. Bounded so a stuck launch can't block
+        // module shutdown indefinitely.
+        if (go2RtcStartExecutor != null) {
+            go2RtcStartExecutor.shutdown();
+            try {
+                if (!go2RtcStartExecutor.awaitTermination(3, TimeUnit.SECONDS)) {
+                    logger.warn("go2rtc start executor did not finish within 3s — forcing shutdown");
+                    go2RtcStartExecutor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                go2RtcStartExecutor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+            go2RtcStartExecutor = null;
+        }
 
         if (go2RtcManager != null) {
             try {

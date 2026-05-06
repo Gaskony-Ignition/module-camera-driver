@@ -14,6 +14,10 @@ import com.onvif.driver.gateway.util.ValidationUtil;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Unified extension point for the Camera device type.
@@ -25,6 +29,35 @@ public class CameraExtensionPoint extends DeviceExtensionPoint<CameraConfig> {
     public static final String TYPE_ID = "com.onvif.driver.Camera";
 
     private static final DeviceRegistry<CameraDevice> registry = new DeviceRegistry<>();
+
+    /**
+     * Bounded executor used by {@link CameraDevice} to perform RTSP / HTTP /
+     * ONVIF probing on a background thread.
+     *
+     * Per /modules/.review/FINAL_REVIEW.md §5 P2 (P2-CD-2) and
+     * {@code reports/xc-performance.md}: the previous build executed the
+     * synchronous probe ladder (~22 paths × 3 s) inline on the device-startup
+     * thread. With N cameras + any unreachable host, OPC-UA device readiness
+     * was delayed by tens of seconds (worst case ~90 s per camera).
+     *
+     * Each device now submits its probe work here; {@code onStartup} returns
+     * immediately with status {@code DISCOVERING}, then transitions to
+     * {@code RUNNING} when the probe task finishes. Threads are named
+     * {@code camera-probe-N} so they're identifiable in jstack output.
+     *
+     * The pool is bounded to 4 threads so that a Gateway with many unreachable
+     * cameras can't spawn one probe-thread per camera.
+     */
+    private static final ExecutorService PROBE_EXECUTOR = Executors.newFixedThreadPool(4, new ThreadFactory() {
+        private final AtomicInteger counter = new AtomicInteger(0);
+
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread t = new Thread(r, "camera-probe-" + counter.incrementAndGet());
+            t.setDaemon(true);
+            return t;
+        }
+    });
 
     private volatile Go2RtcManager go2RtcManager;
 
@@ -122,5 +155,13 @@ public class CameraExtensionPoint extends DeviceExtensionPoint<CameraConfig> {
 
     public static Map<String, CameraDevice> getAllDevices() {
         return registry.getAll();
+    }
+
+    /**
+     * Shared bounded executor for camera startup probes.
+     * See {@link #PROBE_EXECUTOR} javadoc for rationale (P2-CD-2).
+     */
+    public static ExecutorService getProbeExecutor() {
+        return PROBE_EXECUTOR;
     }
 }
