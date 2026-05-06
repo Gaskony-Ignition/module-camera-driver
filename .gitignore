@@ -35,6 +35,8 @@ bin/
 
 # Module signing credentials (never commit)
 gradle.properties
+sign.properties
+sign.props
 keystore.jks
 certificates/
 *.p12
@@ -43,6 +45,19 @@ certificates/
 *.jks
 *.keystore
 *.der
+*.key
+
+# Environment files — broad deny with explicit allowlist
+.env
+.env.*
+!.env.example
+!.env.template
+!.env.*.example
+!.env.*.template
+
+# Public-only key material may still be committed if explicitly suffixed
+!*.public.key
+!*.pub.pem
 
 # Logs
 *.log
