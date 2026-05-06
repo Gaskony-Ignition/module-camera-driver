@@ -4,6 +4,7 @@ import PageHeader from './PageHeader'
 import { API_ENDPOINTS } from '../constants/api'
 import { apiFetch, apiGet } from '../utils/apiClient'
 import { formatUptime } from '../utils/format'
+import { useVisibilityAwarePolling } from '../hooks/useVisibilityAwarePolling'
 import type {
   DiagnosticsData,
   StreamingInfo,
@@ -44,8 +45,7 @@ function DiagnosticsView() {
   const lastEventIdRef = useRef<number>(0)
   const logBodyRef = useRef<HTMLDivElement>(null)
 
-  const diagTimerRef = useRef<number | null>(null)
-  const logsTimerRef = useRef<number | null>(null)
+  // Note: polling timers are managed by useVisibilityAwarePolling below.
 
   // -- Diagnostics fetch ---------------------------------------------------
 
@@ -102,25 +102,10 @@ function DiagnosticsView() {
     }
   }, [moduleLogs, logAutoScroll])
 
-  // -- Diagnostics polling -------------------------------------------------
+  // -- Polling (Sprint 3 perf: pauses when tab hidden) ---------------------
 
-  useEffect(() => {
-    fetchDiagnostics()
-    diagTimerRef.current = window.setInterval(() => fetchDiagnostics(), DIAG_POLL_MS)
-    return () => {
-      if (diagTimerRef.current !== null) clearInterval(diagTimerRef.current)
-    }
-  }, [fetchDiagnostics])
-
-  // -- Log polling ---------------------------------------------------------
-
-  useEffect(() => {
-    fetchLogs()
-    logsTimerRef.current = window.setInterval(() => fetchLogs(), LOG_POLL_MS)
-    return () => {
-      if (logsTimerRef.current !== null) clearInterval(logsTimerRef.current)
-    }
-  }, [fetchLogs])
+  useVisibilityAwarePolling(() => fetchDiagnostics(), DIAG_POLL_MS)
+  useVisibilityAwarePolling(fetchLogs, LOG_POLL_MS)
 
   // -- Filtered logs -------------------------------------------------------
 
