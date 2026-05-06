@@ -2,6 +2,7 @@ package com.onvif.driver.gateway.servlet.handlers;
 
 import com.inductiveautomation.ignition.gateway.dataroutes.RequestContext;
 import com.inductiveautomation.ignition.gateway.model.GatewayContext;
+import com.onvif.driver.gateway.auth.AccessControl;
 import com.onvif.driver.gateway.auth.AuthenticationManager;
 import com.onvif.driver.gateway.device.CameraDevice;
 import com.onvif.driver.gateway.device.CameraExtensionPoint;
@@ -48,12 +49,44 @@ public abstract class BaseHandler {
 
     /**
      * Checks if the request has valid authentication.
+     *
+     * <p>Retained for backward compatibility with existing handlers.
+     * New code should prefer {@link #requireAuthenticated(RequestContext, HttpServletResponse)}
+     * (the P3-CD shared-pattern entry point), which both checks and writes
+     * the 401 in a single call.</p>
      */
     protected boolean isAuthenticated(RequestContext requestContext) {
         if (!REQUIRE_AUTHENTICATION) {
             return true;
         }
         return authManager.isAuthenticated(requestContext);
+    }
+
+    /**
+     * Validates that the request is authenticated and writes a 401 if not.
+     *
+     * <p>This is the P3-CD migration entry point — see
+     * {@link AccessControl#requireAuthenticated} and
+     * /modules/.review/FINAL_REVIEW.md §5 P3. Returns {@code true} if the
+     * caller can proceed; {@code false} if the 401 has already been
+     * written and the caller should return without further work.</p>
+     *
+     * @param requestContext the route request context
+     * @param response       the response to write the 401 to on failure
+     * @return {@code true} when authenticated, {@code false} otherwise
+     */
+    protected boolean requireAuthenticated(RequestContext requestContext,
+                                           HttpServletResponse response) throws IOException {
+        return AccessControl.requireAuthenticated(authManager, requestContext, response);
+    }
+
+    /**
+     * Validates that the request is authenticated AND has administrator
+     * authority. See {@link AccessControl#requireAdministrator}.
+     */
+    protected boolean requireAdministrator(RequestContext requestContext,
+                                           HttpServletResponse response) throws IOException {
+        return AccessControl.requireAdministrator(authManager, requestContext, response);
     }
 
     /**

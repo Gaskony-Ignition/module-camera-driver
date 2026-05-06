@@ -29,10 +29,8 @@ public class PtzHandler extends BaseHandler {
     }
 
     public Object handleMove(RequestContext requestContext, HttpServletResponse response) throws Exception {
-        if (!isAuthenticated(requestContext)) {
-            if (!response.isCommitted()) {
-                sendAuthenticationRequired(response);
-            }
+        // P3-CD: shared AccessControl pattern.
+        if (!requireAuthenticated(requestContext, response)) {
             return null;
         }
         if (!RateLimiter.checkRateLimit(requestContext.getRequest(), response)) {
@@ -68,10 +66,8 @@ public class PtzHandler extends BaseHandler {
     }
 
     public Object handleStop(RequestContext requestContext, HttpServletResponse response) throws Exception {
-        if (!isAuthenticated(requestContext)) {
-            if (!response.isCommitted()) {
-                sendAuthenticationRequired(response);
-            }
+        // P3-CD: shared AccessControl pattern.
+        if (!requireAuthenticated(requestContext, response)) {
             return null;
         }
         if (!RateLimiter.checkRateLimit(requestContext.getRequest(), response)) {
@@ -99,10 +95,8 @@ public class PtzHandler extends BaseHandler {
     }
 
     public Object handleStatus(RequestContext requestContext, HttpServletResponse response) throws Exception {
-        if (!isAuthenticated(requestContext)) {
-            if (!response.isCommitted()) {
-                sendAuthenticationRequired(response);
-            }
+        // P3-CD: shared AccessControl pattern.
+        if (!requireAuthenticated(requestContext, response)) {
             return null;
         }
         if (!RateLimiter.checkRateLimit(requestContext.getRequest(), response)) {

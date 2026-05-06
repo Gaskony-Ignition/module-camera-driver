@@ -33,8 +33,8 @@ public class DeviceApiHandler extends BaseHandler {
     public Object handleListDevices(RequestContext requestContext, HttpServletResponse response) throws Exception {
         logger.debug("List devices request received");
 
-        if (!isAuthenticated(requestContext)) {
-            sendAuthenticationRequired(response);
+        // P3-CD: shared AccessControl pattern.
+        if (!requireAuthenticated(requestContext, response)) {
             return null;
         }
 
@@ -132,8 +132,8 @@ public class DeviceApiHandler extends BaseHandler {
             return null;
         }
 
-        if (!isAuthenticated(requestContext)) {
-            sendAuthenticationRequired(response);
+        // P3-CD: shared AccessControl pattern.
+        if (!requireAuthenticated(requestContext, response)) {
             return null;
         }
 

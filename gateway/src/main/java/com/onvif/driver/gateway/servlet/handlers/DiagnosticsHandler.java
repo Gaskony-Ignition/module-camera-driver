@@ -30,8 +30,8 @@ public class DiagnosticsHandler extends BaseHandler {
     }
 
     public Object handleHealthCheck(RequestContext requestContext, HttpServletResponse response) throws Exception {
-        if (!isAuthenticated(requestContext)) {
-            sendAuthenticationRequired(response);
+        // P3-CD: shared AccessControl pattern.
+        if (!requireAuthenticated(requestContext, response)) {
             return null;
         }
 
@@ -86,8 +86,8 @@ public class DiagnosticsHandler extends BaseHandler {
     public Object handleDiagnostics(RequestContext requestContext, HttpServletResponse response) throws Exception {
         logger.debug("Diagnostics request received");
 
-        if (!isAuthenticated(requestContext)) {
-            sendAuthenticationRequired(response);
+        // P3-CD: shared AccessControl pattern.
+        if (!requireAuthenticated(requestContext, response)) {
             return null;
         }
 

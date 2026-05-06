@@ -42,10 +42,8 @@ public class SnapshotHandler extends BaseHandler {
     public Object handle(RequestContext requestContext, HttpServletResponse response) throws Exception {
         logger.debug("Snapshot request received");
 
-        if (!isAuthenticated(requestContext)) {
-            if (!response.isCommitted()) {
-                sendAuthenticationRequired(response);
-            }
+        // P3-CD: shared AccessControl pattern.
+        if (!requireAuthenticated(requestContext, response)) {
             return null;
         }
 

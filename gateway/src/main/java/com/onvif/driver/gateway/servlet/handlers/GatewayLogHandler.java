@@ -42,8 +42,11 @@ public class GatewayLogHandler extends BaseHandler {
     public Object handleGatewayLogs(RequestContext requestContext, HttpServletResponse response) throws Exception {
         logger.debug("Gateway logs request received");
 
-        if (!isAuthenticated(requestContext)) {
-            sendAuthenticationRequired(response);
+        // P3-CD: shared AccessControl pattern. Note: this endpoint returns
+        // gateway-wide log content (Camera-tagged + optionally global) and
+        // could in future be elevated to requireAdministrator(...) once role
+        // gating is implemented (see SPRINT2_PLAN.md).
+        if (!requireAuthenticated(requestContext, response)) {
             return null;
         }
 

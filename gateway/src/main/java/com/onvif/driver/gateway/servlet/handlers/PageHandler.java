@@ -26,8 +26,8 @@ public class PageHandler extends BaseHandler {
     public Object handlePlayerPage(RequestContext requestContext, HttpServletResponse response) throws Exception {
         logger.debug("Player page request received");
 
-        if (!isAuthenticated(requestContext)) {
-            sendAuthenticationRequired(response);
+        // P3-CD: shared AccessControl pattern (was: isAuthenticated + sendAuthenticationRequired).
+        if (!requireAuthenticated(requestContext, response)) {
             return null;
         }
 
@@ -68,6 +68,16 @@ public class PageHandler extends BaseHandler {
 
     public Object handleConnectionBrowserPage(RequestContext requestContext, HttpServletResponse response) throws Exception {
         logger.debug("Connection browser page request received");
+
+        // P3-CD: this route was previously open. The security review flagged
+        // it as a HIGH finding (mod-camera-driver.md line 76-81) — every other
+        // page handler enforces authentication and the omission here let an
+        // unauthenticated caller fingerprint that the Camera Driver module
+        // is installed (and load the SPA shell). Now gated through the
+        // shared AccessControl helper.
+        if (!requireAuthenticated(requestContext, response)) {
+            return null;
+        }
 
         try (InputStream stream = getClass().getResourceAsStream("/pages/connection-browser.html")) {
             if (stream == null) {
