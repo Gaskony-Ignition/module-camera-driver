@@ -122,11 +122,25 @@ public class ONVIFClient implements Closeable {
      * @throws Exception if SSL context creation fails
      */
     private SSLContext createSSLContext(SslValidationMode mode) throws Exception {
+        // SECURITY (C5 — /modules/.review/FINAL_REVIEW.md §4): the default for any
+        // unknown / unset mode is now STRICT. INSECURE must be requested explicitly
+        // by the operator via the device-config form; every poll cycle additionally
+        // emits a WARN while INSECURE is active (see ONVIFPoller.poll()).
+        if (mode == null) {
+            mode = SslValidationMode.STRICT;
+        }
         switch (mode) {
-            case STRICT:
-                // Use system default trust store - full validation
-                logger.info("Using STRICT SSL validation - full certificate validation");
-                return SSLContext.getDefault();
+            case INSECURE:
+                // Explicit opt-in: accept all certificates. Deployment-time decision only —
+                // intended for self-signed cameras on isolated networks.
+                logger.warn(
+                    "ONVIFClient configured with INSECURE SSL validation for {} — "
+                        + "accepting any certificate. Do NOT use in production; switch to STRICT.",
+                    deviceUrl);
+                TrustStrategy acceptingTrustStrategy = (X509Certificate[] chain, String authType) -> true;
+                return SSLContextBuilder.create()
+                    .loadTrustMaterial(null, acceptingTrustStrategy)
+                    .build();
 
             case TRUST_FIRST_USE:
                 // TRUST_FIRST_USE mode is not implemented
@@ -138,15 +152,24 @@ public class ONVIFClient implements Closeable {
                     "Planned for future release."
                 );
 
-            case INSECURE:
+            case STRICT:
             default:
-                // Accept all certificates (common in camera deployments with self-signed certs)
-                logger.warn("Using INSECURE SSL validation - accepting any certificate (NOT recommended for production)");
-                TrustStrategy acceptingTrustStrategy = (X509Certificate[] chain, String authType) -> true;
-                return SSLContextBuilder.create()
-                    .loadTrustMaterial(null, acceptingTrustStrategy)
-                    .build();
+                // SECURE DEFAULT — full certificate-chain and hostname validation against
+                // the JVM's system trust store. Any unknown enum value also lands here.
+                logger.info("Using STRICT SSL validation - full certificate validation");
+                return SSLContext.getDefault();
         }
+    }
+
+    /**
+     * Returns true if this client is configured to bypass SSL/TLS certificate
+     * validation (INSECURE mode). Callers (e.g. ONVIFPoller) use this to emit a
+     * recurring WARN while the unsafe mode is active.
+     *
+     * @return true when SSL validation is disabled, false otherwise.
+     */
+    public boolean isInsecureSslMode() {
+        return sslValidationMode == SslValidationMode.INSECURE;
     }
 
     /**

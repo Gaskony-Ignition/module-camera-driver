@@ -124,6 +124,15 @@ public class ONVIFPoller {
      * Polls the device for updates.
      */
     private void poll() {
+        // SECURITY (C5): re-emit a WARN every poll cycle while the ONVIF client
+        // is configured with INSECURE SSL validation. Surfacing the unsafe mode
+        // continuously prevents it from going unnoticed across long-running
+        // gateways, per /modules/.review/FINAL_REVIEW.md §4 C5.
+        if (client != null && client.isInsecureSslMode()) {
+            logger.warn("ONVIF poll cycle running with INSECURE SSL validation — "
+                + "certificate hostname verification is disabled. Switch the device's "
+                + "SSL Validation Mode to STRICT for production.");
+        }
         try {
             Map<String, Object> updates = new HashMap<>();
 

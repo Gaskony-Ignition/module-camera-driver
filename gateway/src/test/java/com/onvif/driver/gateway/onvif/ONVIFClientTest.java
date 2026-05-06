@@ -113,7 +113,38 @@ class ONVIFClientTest {
         );
 
         assertThat(testClient).isNotNull();
+        // C5 regression: default (null) must NOT enable INSECURE SSL.
+        assertThat(testClient.isInsecureSslMode())
+            .as("Null/default SSL mode must resolve to STRICT, not INSECURE — see /modules/.review/FINAL_REVIEW.md §4 C5")
+            .isFalse();
         testClient.close();
+    }
+
+    @Test
+    void testIsInsecureSslMode_StrictMode_ReturnsFalse() throws IOException {
+        // C5 regression: explicitly STRICT must report not-insecure.
+        ONVIFClient strict = new ONVIFClient(
+            "192.168.1.100", 443, "admin", "password", true, 5,
+            SslValidationMode.STRICT);
+        try {
+            assertThat(strict.isInsecureSslMode()).isFalse();
+        } finally {
+            strict.close();
+        }
+    }
+
+    @Test
+    void testIsInsecureSslMode_InsecureMode_ReturnsTrue() throws IOException {
+        // C5 regression: explicit opt-in to INSECURE must be detectable, so
+        // ONVIFPoller can emit a per-cycle WARN while the unsafe mode is active.
+        ONVIFClient insecure = new ONVIFClient(
+            "192.168.1.100", 443, "admin", "password", true, 5,
+            SslValidationMode.INSECURE);
+        try {
+            assertThat(insecure.isInsecureSslMode()).isTrue();
+        } finally {
+            insecure.close();
+        }
     }
 
     // ==================== Device Information Tests ====================

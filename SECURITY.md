@@ -125,13 +125,20 @@ SSL/TLS certificate validation is **configurable** per device:
 ```
 Validation Modes:
 - STRICT: Full certificate validation (production recommended)
-- TRUST_FIRST_USE: Accept and pin self-signed on first connection
+- TRUST_FIRST_USE: Accept and pin self-signed on first connection (NOT IMPLEMENTED — selecting it raises IllegalArgumentException)
 - INSECURE: Accept any certificate (development only)
 ```
 
-**Default**: INSECURE mode for backward compatibility (this will change to STRICT in v3.0.0)
+**Default**: STRICT (changed from INSECURE in 2.34.x — see `/modules/.review/FINAL_REVIEW.md` §4 C5).
 
-**Why configurable?**: Many IP cameras use self-signed certificates. The INSECURE mode should only be used in trusted network environments.
+`ONVIFClient.createSSLContext()` now treats any unknown / unset mode as STRICT and only relaxes validation when the operator has explicitly selected INSECURE. While INSECURE is active:
+
+- The constructor logs a WARN at client creation, naming the device URL.
+- `ONVIFPoller.poll()` re-emits a WARN every poll cycle (default interval 5 s) so the unsafe state is surfaced continuously in Gateway logs.
+
+`NoopHostnameVerifier` and the trust-all `X509TrustManager` continue to back the INSECURE path; switching the default does not change INSECURE's semantics, only its opt-in posture.
+
+**Why configurable?**: Many IP cameras ship with self-signed certificates. INSECURE is intended for closed networks during initial bring-up; production deployments should provision proper certificates and use STRICT.
 
 ### Gateway Communication
 
