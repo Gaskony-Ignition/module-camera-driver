@@ -64,8 +64,22 @@ certificates/
 
 # Temporary files
 *.tmp
+*.bak
+*.backup
 *.swp
+*.swo
 *~
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Java heap dumps
+*.hprof
+hs_err_pid*
+
+# Note: package-lock.json is NOT ignored - it's required for reproducible CI builds
 
 # Build outputs
 *.modl
