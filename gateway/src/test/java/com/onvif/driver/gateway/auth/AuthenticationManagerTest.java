@@ -1,6 +1,8 @@
 package com.onvif.driver.gateway.auth;
 
+import com.inductiveautomation.ignition.gateway.dataroutes.RequestContext;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -519,6 +521,115 @@ class AuthenticationManagerTest {
 
         // After a successful auth the lockout entry must be cleaned up.
         assertThat(lockoutMap).doesNotContainKey(clientIP);
+    }
+
+    // -----------------------------------------------------------------------
+    // B1 regression — isAuthenticated() must require a real "user" attribute
+    // on the HTTP session, not merely a non-null session.
+    // See /modules/.review/FINAL_REVIEW.md §3 (B1).
+    // -----------------------------------------------------------------------
+
+    /**
+     * Builds a mock RequestContext returning an HttpServletRequest whose session
+     * is configured per the supplied callback. The mock has no API-key headers
+     * and no proxy headers, so isAuthenticated() falls through to the session
+     * check (Method 1b) and then to API-key (Method 2 — returns false).
+     *
+     * WebUiSession.find() (Method 1a) throws inside the try/catch when called
+     * with a bare mock; the implementation logs a trace and proceeds — so this
+     * harness exercises Method 1b end-to-end.
+     */
+    private RequestContext buildMockRequestContext(HttpSession session) {
+        // Use lenient strictness: depending on the path through isAuthenticated()
+        // (Method 1a may short-circuit, or the API-key path may not be reached),
+        // some of these stubs are unused — that's expected and not a test bug.
+        HttpServletRequest req = mock(HttpServletRequest.class);
+        lenient().when(req.getSession(false)).thenReturn(session);
+        // No API key — query param and header both null.
+        lenient().when(req.getParameter("apiKey")).thenReturn(null);
+        lenient().when(req.getHeader("X-API-Key")).thenReturn(null);
+        lenient().when(req.getHeader("X-Forwarded-For")).thenReturn(null);
+        lenient().when(req.getHeader("X-Real-IP")).thenReturn(null);
+        lenient().when(req.getRemoteAddr()).thenReturn("192.168.1.10");
+        lenient().when(req.getLocalAddr()).thenReturn("192.168.1.1");
+
+        RequestContext ctx = mock(RequestContext.class);
+        lenient().when(ctx.getRequest()).thenReturn(req);
+        return ctx;
+    }
+
+    @Test
+    void testIsAuthenticated_SessionWithNoUserAttribute_RejectedB1Regression() {
+        // REGRESSION: Pre-fix, the code returned `true` for any non-null session
+        // (`request.getSession(false) != null`). An attacker could mint a JSESSIONID
+        // by hitting any other Gateway servlet and reuse the cookie. Post-fix,
+        // the session must additionally carry a "user" attribute populated by the
+        // Ignition login flow.
+        HttpSession session = mock(HttpSession.class);
+        when(session.getAttribute("user")).thenReturn(null);
+
+        RequestContext ctx = buildMockRequestContext(session);
+
+        boolean result = authManager.isAuthenticated(ctx);
+
+        assertThat(result)
+                .as("A session without a 'user' attribute (e.g. anonymous JSESSIONID minted by another servlet) must NOT be treated as authenticated")
+                .isFalse();
+    }
+
+    @Test
+    void testIsAuthenticated_SessionWithUserAttribute_Accepted() {
+        HttpSession session = mock(HttpSession.class);
+        // Any non-null user attribute represents an authenticated Ignition session.
+        when(session.getAttribute("user")).thenReturn("alice");
+
+        RequestContext ctx = buildMockRequestContext(session);
+
+        boolean result = authManager.isAuthenticated(ctx);
+
+        assertThat(result)
+                .as("A session with a populated 'user' attribute must be accepted")
+                .isTrue();
+    }
+
+    @Test
+    void testIsAuthenticated_NoSession_Rejected() {
+        // No session at all — must be rejected.
+        RequestContext ctx = buildMockRequestContext(null);
+
+        boolean result = authManager.isAuthenticated(ctx);
+
+        assertThat(result)
+                .as("A request with no session and no API key must be rejected")
+                .isFalse();
+    }
+
+    @Test
+    void testIsAuthenticated_PrivateIpWithEmptySession_Rejected() {
+        // REGRESSION (deleted Method 1c): Pre-fix, a request from any RFC1918
+        // address with any active Perspective session anywhere on the gateway
+        // was treated as authenticated. That heuristic has been deleted entirely.
+        HttpSession session = mock(HttpSession.class);
+        lenient().when(session.getAttribute("user")).thenReturn(null);
+
+        HttpServletRequest req = mock(HttpServletRequest.class);
+        lenient().when(req.getSession(false)).thenReturn(session);
+        lenient().when(req.getParameter("apiKey")).thenReturn(null);
+        lenient().when(req.getHeader("X-API-Key")).thenReturn(null);
+        lenient().when(req.getHeader("X-Forwarded-For")).thenReturn(null);
+        lenient().when(req.getHeader("X-Real-IP")).thenReturn(null);
+        // RFC1918 source — used to be enough under the old Method 1c.
+        lenient().when(req.getRemoteAddr()).thenReturn("10.0.0.5");
+        lenient().when(req.getLocalAddr()).thenReturn("10.0.0.1");
+
+        RequestContext ctx = mock(RequestContext.class);
+        lenient().when(ctx.getRequest()).thenReturn(req);
+
+        boolean result = authManager.isAuthenticated(ctx);
+
+        assertThat(result)
+                .as("A private-IP request with no authenticated session must NOT be authenticated (Method 1c deleted)")
+                .isFalse();
     }
 
     @Test

@@ -3,13 +3,11 @@ package com.onvif.driver.gateway.auth;
 import com.inductiveautomation.ignition.gateway.dataroutes.RequestContext;
 import com.inductiveautomation.ignition.gateway.model.GatewayContext;
 import com.inductiveautomation.ignition.gateway.web.session.WebUiSession;
-import com.inductiveautomation.perspective.gateway.api.PerspectiveContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
-import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -56,11 +54,9 @@ public class AuthenticationManager {
     // Using a UUID key allows O(1) removal during iteration without a reverse-lookup map.
     private final Map<String, StoredApiKey> apiKeys = new ConcurrentHashMap<>();
 
-    private final GatewayContext gatewayContext;
     private final ApiKeyStore keyStore;
 
     public AuthenticationManager(GatewayContext gatewayContext) {
-        this.gatewayContext = gatewayContext;
         this.keyStore = new ApiKeyStore(gatewayContext);
         // Load persisted keys into the in-memory map on startup
         Map<String, ApiKeyStore.PersistedKey> persisted = this.keyStore.load();
@@ -97,40 +93,27 @@ public class AuthenticationManager {
             logger.trace("WebUiSession check failed: {}", t.getMessage());
         }
 
-        // Method 1b: Check for valid HTTP session (Perspective Designer/runtime sessions)
-        // Perspective components run in an authenticated browser context but use a different
-        // session type than WebUiSession. If a valid HTTP session exists, the user was
-        // authenticated through Ignition's session management (Designer login, Perspective
-        // login, etc.) and the session cookie was set during that authentication flow.
+        // Method 1b: Check for valid HTTP session with an authenticated "user" attribute.
+        //
+        // SECURITY: Per /modules/.review/FINAL_REVIEW.md §3 (B1) and `xc-security.md`,
+        // earlier versions returned `true` whenever `request.getSession(false) != null` —
+        // an attacker could mint an unauthenticated `JSESSIONID` by hitting any other
+        // gateway servlet and reuse the cookie. The fix matches the pattern used by the
+        // AI Terminal / PLC Emulator / Git modules: only treat the session as valid when
+        // the Ignition login flow has populated the `user` attribute.
+        //
+        // The previous "Method 1c" (private-IP heuristic + any active Perspective session
+        // anywhere on the gateway) has been deleted entirely. "Private IP and someone else
+        // is logged in" is not authentication.
         HttpServletRequest request = requestContext.getRequest();
         try {
             HttpSession httpSession = request.getSession(false);
-            if (httpSession != null) {
-                logger.debug("Request authenticated via HTTP session (Perspective/Designer)");
+            if (httpSession != null && httpSession.getAttribute("user") != null) {
+                logger.debug("Request authenticated via HTTP session (user attribute present)");
                 return true;
             }
         } catch (Throwable t) {
             logger.trace("HTTP session check failed: {}", t.getMessage());
-        }
-
-        // Method 1c: Check for Perspective/Designer sessions from private/local networks.
-        // The Designer connects to the gateway from the local network. In Docker deployments,
-        // the request comes from the Docker bridge IP (e.g. 172.17.0.1), not loopback.
-        // If the request originates from a private/internal IP AND there are active Perspective
-        // sessions, it's a Designer or Perspective runtime component request.
-        try {
-            String remoteAddr = request.getRemoteAddr();
-            logger.debug("Method 1c: remoteAddr={}, localAddr={}", remoteAddr, request.getLocalAddr());
-            if (isPrivateOrLocalIP(remoteAddr, request.getLocalAddr())) {
-                PerspectiveContext pCtx = PerspectiveContext.get(gatewayContext);
-                if (pCtx != null && !pCtx.getSessionMonitor().getSessionInfos().isEmpty()) {
-                    logger.debug("Request authenticated via private/local IP ({}) + active Perspective session", remoteAddr);
-                    return true;
-                }
-            }
-        } catch (Throwable t) {
-            // Perspective module not loaded — skip this auth method
-            logger.trace("Perspective session check skipped: {}", t.getMessage());
         }
 
         // Method 2: Check for API key
@@ -200,35 +183,6 @@ public class AuthenticationManager {
             return xRealIP;
         }
         return request.getRemoteAddr();
-    }
-
-    /**
-     * Checks whether an IP address is a private/internal network address or loopback.
-     * Covers: loopback (127.x.x.x, ::1), RFC 1918 (10.x, 172.16-31.x, 192.168.x),
-     * IPv6 link-local (fe80::/10), IPv6 unique local (fc00::/7), and same-machine.
-     *
-     * @param remoteAddr The remote IP address to check
-     * @param localAddr  The local (server) IP address for same-machine comparison
-     * @return true if the IP is private, loopback, or same-machine
-     */
-    static boolean isPrivateOrLocalIP(String remoteAddr, String localAddr) {
-        if (remoteAddr == null || remoteAddr.isEmpty()) {
-            return false;
-        }
-
-        // Same-machine check
-        if (remoteAddr.equals(localAddr)) {
-            return true;
-        }
-
-        try {
-            InetAddress addr = InetAddress.getByName(remoteAddr);
-            // InetAddress covers: loopback (127.x, ::1), link-local (169.254.x, fe80::),
-            // and site-local (10.x, 172.16-31.x, 192.168.x, fc00::/7)
-            return addr.isLoopbackAddress() || addr.isLinkLocalAddress() || addr.isSiteLocalAddress();
-        } catch (Exception e) {
-            return false;
-        }
     }
 
     /**
