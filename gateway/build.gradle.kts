@@ -266,7 +266,10 @@ tasks.jacocoTestCoverageVerification {
     violationRules {
         rule {
             limit {
-                minimum = "0.10".toBigDecimal()
+                // Coverage floor — set to current measured value minus 1% so any
+                // regression beyond that 1% headroom fails the build. Real instruction
+                // coverage (per persisted JaCoCo XML at the time of writing) is ~15%.
+                minimum = "0.14".toBigDecimal()
             }
         }
     }

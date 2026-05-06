@@ -133,7 +133,11 @@ class CameraProbeAsyncTest {
         for (int i = 0; i < 5; i++) {
             executor.submit(() -> {
                 try {
-                    // Long enough that the real probe work can't race the timing assertion
+                    // intentional fixed delay — this sleep is *inside* the submitted task
+                    // to simulate slow probe work. The outer assertion measures how fast
+                    // submission returns, which proves the work is asynchronous. Replacing
+                    // the inner sleep with Awaitility would make the simulated work
+                    // instantaneous and invalidate the test.
                     Thread.sleep(500);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();

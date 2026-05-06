@@ -138,7 +138,10 @@ class ONVIFAuthTest {
     @Test
     void testGenerateUsernameToken_TimestampIsRecent() throws InterruptedException {
         String token1 = ONVIFAuth.generateUsernameToken("admin", "password");
-        Thread.sleep(100); // Sleep for 100ms
+        // intentional fixed delay — testing that two tokens generated at different
+        // wall-clock instants have observably different timestamps. The whole point is
+        // that real time advanced; Awaitility would defeat the test's purpose.
+        Thread.sleep(100);
         String token2 = ONVIFAuth.generateUsernameToken("admin", "password");
 
         // Extract timestamps
