@@ -13,6 +13,7 @@ import org.eclipse.milo.opcua.sdk.server.nodes.UaMethodNode;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaNode;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaNodeContext;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaVariableNode;
+import org.eclipse.milo.opcua.sdk.server.nodes.filters.AttributeFilters;
 import org.eclipse.milo.opcua.stack.core.Identifiers;
 import org.eclipse.milo.opcua.stack.core.NodeIds;
 import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
@@ -27,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /**
@@ -409,7 +411,38 @@ public class AddressSpaceBuilder {
     }
 
     /**
+     * Identifies which PTZ axis a writable Set* node controls.
+     *
+     * Used by {@link #addPtzWritableNode} to translate a single-axis OPC-UA
+     * write into a SOAP {@code AbsoluteMove(pan, tilt, zoom)} request. The
+     * other axes are filled in from the most recent values held by
+     * {@link #ptzAxisState}.
+     */
+    enum PtzAxis { PAN, TILT, ZOOM }
+
+    /**
+     * Holds the most recently written/read values per PTZ axis. The
+     * {@code AttributeFilter} installed by {@link #addPtzWritableNode}
+     * combines the just-written axis with the cached values for the others
+     * so SOAP {@code AbsoluteMove(pan, tilt, zoom)} sees a coherent triple.
+     *
+     * Volatile reads are not enough for triple-coordination, so we use a
+     * single {@link AtomicReference} containing an immutable snapshot.
+     */
+    private final AtomicReference<double[]> ptzAxisState =
+        new AtomicReference<>(new double[]{0.0, 0.0, 0.0});
+
+    /**
      * Builds PTZ section with control nodes.
+     *
+     * <p>C10 (per /modules/.review/FINAL_REVIEW.md §4 — Sprint 1 chose option (b),
+     * Sprint 2 upgrades to option (a) per C10-followup): the PTZ writable
+     * nodes ({@code SetPan} / {@code SetTilt} / {@code SetZoom}) are now
+     * declared {@code READ_WRITE} and have a Milo {@code AttributeFilter}
+     * installed via {@link AttributeFilters#setValue(java.util.function.BiConsumer)}.
+     * When a client writes a value, the filter intercepts the write, updates
+     * the per-axis cache, and issues a SOAP {@code AbsoluteMove} via
+     * {@link ONVIFClient#absoluteMove(String, double, double, double)}.</p>
      */
     public void buildPTZ(PTZStatus initialStatus, String profileToken) {
         logger.info("Building PTZ address space");
@@ -433,6 +466,12 @@ public class AddressSpaceBuilder {
             Reference.Direction.INVERSE
         ));
 
+        // Seed the per-axis cache from initial status so the first write to
+        // any single axis produces a valid (pan, tilt, zoom) triple.
+        ptzAxisState.set(new double[]{
+            initialStatus.getPan(), initialStatus.getTilt(), initialStatus.getZoom()
+        });
+
         // Add status nodes (read-only)
         addVariableNode(ptzFolder, "Pan", initialStatus.getPan());
         addVariableNode(ptzFolder, "Tilt", initialStatus.getTilt());
@@ -440,38 +479,147 @@ public class AddressSpaceBuilder {
         addVariableNode(ptzFolder, "MoveStatus", initialStatus.getMoveStatus());
         addVariableNode(ptzFolder, "LastUpdate", initialStatus.getTimestamp());
 
-        // Add control nodes (writable)
-        addWritableNode(ptzFolder, "SetPan", 0.0, (value) -> {
-            try {
-                double pan = ((Number) value).doubleValue();
-                PTZStatus current = onvifClient.getPTZStatus(profileToken);
-                onvifClient.absoluteMove(profileToken, pan, current.getTilt(), current.getZoom());
-            } catch (Exception e) {
-                logger.error("Failed to set pan", e);
-            }
+        // C10-followup: writable PTZ nodes with real SOAP wiring.
+        addPtzWritableNode(ptzFolder, "SetPan",  PtzAxis.PAN,  profileToken);
+        addPtzWritableNode(ptzFolder, "SetTilt", PtzAxis.TILT, profileToken);
+        addPtzWritableNode(ptzFolder, "SetZoom", PtzAxis.ZOOM, profileToken);
+
+        logger.info("PTZ address space created with READ_WRITE Set* nodes wired to "
+            + "ONVIF AbsoluteMove via Milo AttributeFilter — see C10-followup");
+    }
+
+    /**
+     * Adds a READ_WRITE PTZ control node ({@code SetPan} / {@code SetTilt} /
+     * {@code SetZoom}). Installs a Milo {@code AttributeFilter} that translates
+     * a write into a SOAP {@code AbsoluteMove} call on {@link #onvifClient}.
+     *
+     * <p>This is the C10-followup wiring (per /modules/.review/FINAL_REVIEW.md
+     * §4 and the C10 fix report). Pre-Sprint-1, these nodes were declared
+     * {@code READ_WRITE} but no filter was installed — writes silently
+     * no-op'd. Sprint 1 dropped them to {@code READ_ONLY} (option b) so
+     * clients got {@code Bad_NotWritable} instead of a silent success.
+     * Sprint 2 (this method) restores {@code READ_WRITE} with a real
+     * filter.</p>
+     *
+     * <p>The filter:
+     * <ol>
+     *   <li>Extracts the new axis value from the written {@code DataValue}.</li>
+     *   <li>Clamps to ONVIF's normalised range {@code [-1.0, 1.0]}.</li>
+     *   <li>Updates {@link #ptzAxisState} with the new triple.</li>
+     *   <li>Calls {@link ONVIFClient#absoluteMove(String, double, double, double)}.</li>
+     * </ol></p>
+     */
+    private void addPtzWritableNode(UaFolderNode parent, String name, PtzAxis axis, String profileToken) {
+        try {
+            UaVariableNode variableNode = new UaVariableNode.UaVariableNodeBuilder(nodeContext)
+                .setNodeId(deviceContext.nodeId(parent.getBrowseName().getName() + "/" + name))
+                .setBrowseName(deviceContext.qualifiedName(name))
+                .setDisplayName(LocalizedText.english(name))
+                .setDataType(Identifiers.Double)
+                .setTypeDefinition(Identifiers.BaseDataVariableType)
+                .setAccessLevel(AccessLevel.READ_WRITE)
+                .setUserAccessLevel(AccessLevel.READ_WRITE)
+                .build();
+
+            // Seed initial value from the per-axis cache.
+            double initial = ptzAxisState.get()[axis.ordinal()];
+            variableNode.setValue(new DataValue(new Variant(initial)));
+
+            // Install the AttributeFilter that translates writes into SOAP
+            // AbsoluteMove. The lambda runs on the OPC-UA write thread.
+            //
+            // The actual logic lives in handlePtzWrite(...) so it can be unit
+            // tested without Milo on the classpath; the lambda is a thin
+            // adapter that pulls the raw value out of the DataValue.
+            variableNode.getFilterChain().addLast(AttributeFilters.setValue((ctx, dataValue) -> {
+                Object raw = dataValue == null || dataValue.getValue() == null
+                    ? null : dataValue.getValue().getValue();
+                handlePtzWrite(name, axis, profileToken, raw, onvifClient, ptzAxisState);
+            }));
+
+            addNodeCallback.accept(variableNode);
+
+            parent.addComponent(variableNode);
+            variableNode.addReference(new Reference(
+                variableNode.getNodeId(),
+                NodeIds.HasComponent,
+                parent.getNodeId().expanded(),
+                Reference.Direction.INVERSE
+            ));
+
+            String nodePath = parent.getBrowseName().getName() + "/" + name;
+            nodeCache.put(nodePath, variableNode);
+
+            logger.debug("Added READ_WRITE PTZ control node: {} (axis={})", name, axis);
+        } catch (Exception e) {
+            logger.error("Failed to add PTZ writable node: {}", name, e);
+        }
+    }
+
+    /**
+     * Clamps a PTZ value to ONVIF's normalised range {@code [-1.0, 1.0]}.
+     * Package-private for direct testing.
+     */
+    static double clampPtz(double v) {
+        if (Double.isNaN(v)) return 0.0;
+        return Math.max(-1.0, Math.min(1.0, v));
+    }
+
+    /**
+     * Implementation of the per-axis PTZ write handler — extracted from the
+     * Milo {@code AttributeFilter} lambda so the C10-followup logic is unit
+     * testable without Milo on the test classpath.
+     *
+     * <p>Validates the incoming value, clamps it to ONVIF range, atomically
+     * updates the per-axis cache, then dispatches a SOAP {@code AbsoluteMove}
+     * with the latest (pan, tilt, zoom) triple.</p>
+     *
+     * @param nodeName     the name of the OPC-UA node that received the write
+     *                     (for log context only)
+     * @param axis         which axis this write affects
+     * @param profileToken ONVIF media-profile token (must not be null/empty)
+     * @param rawValue     raw value extracted from the DataValue's Variant —
+     *                     must be a {@link Number}; otherwise the write is
+     *                     ignored
+     * @param onvifClient  the ONVIF client (must not be null — camera must
+     *                     be connected)
+     * @param axisState    per-axis cache shared with other PTZ writable nodes
+     *                     so AbsoluteMove always sees a coherent triple
+     */
+    static void handlePtzWrite(String nodeName,
+                               PtzAxis axis,
+                               String profileToken,
+                               Object rawValue,
+                               ONVIFClient onvifClient,
+                               AtomicReference<double[]> axisState) {
+        if (!(rawValue instanceof Number)) {
+            logger.warn("PTZ write to {} ignored — non-numeric value: {}", nodeName, rawValue);
+            return;
+        }
+        double v = clampPtz(((Number) rawValue).doubleValue());
+
+        double[] updated = axisState.updateAndGet(prev -> {
+            double[] next = prev.clone();
+            next[axis.ordinal()] = v;
+            return next;
         });
 
-        addWritableNode(ptzFolder, "SetTilt", 0.0, (value) -> {
-            try {
-                double tilt = ((Number) value).doubleValue();
-                PTZStatus current = onvifClient.getPTZStatus(profileToken);
-                onvifClient.absoluteMove(profileToken, current.getPan(), tilt, current.getZoom());
-            } catch (Exception e) {
-                logger.error("Failed to set tilt", e);
-            }
-        });
+        if (onvifClient == null) {
+            logger.warn("PTZ write to {} ignored — no ONVIF client (camera not connected?)", nodeName);
+            return;
+        }
+        if (profileToken == null || profileToken.isEmpty()) {
+            logger.warn("PTZ write to {} ignored — no media profile token", nodeName);
+            return;
+        }
 
-        addWritableNode(ptzFolder, "SetZoom", 0.0, (value) -> {
-            try {
-                double zoom = ((Number) value).doubleValue();
-                PTZStatus current = onvifClient.getPTZStatus(profileToken);
-                onvifClient.absoluteMove(profileToken, current.getPan(), current.getTilt(), zoom);
-            } catch (Exception e) {
-                logger.error("Failed to set zoom", e);
-            }
-        });
-
-        logger.info("PTZ address space created");
+        try {
+            onvifClient.absoluteMove(profileToken, updated[0], updated[1], updated[2]);
+            logger.debug("PTZ AbsoluteMove sent: pan={}, tilt={}, zoom={} (triggered by {} write)",
+                updated[0], updated[1], updated[2], nodeName);
+        } catch (Exception e) {
+            logger.error("PTZ AbsoluteMove failed for {}: {}", nodeName, e.getMessage());
+        }
     }
 
     /**
@@ -503,53 +651,4 @@ public class AddressSpaceBuilder {
         }
     }
 
-    /**
-     * Adds a writable variable node.
-     * Note: For full PTZ control integration, use OPC-UA Methods or external scripting.
-     */
-    private void addWritableNode(UaFolderNode parent, String name, Object initialValue,
-                                 java.util.function.Consumer<Object> writeHandler) {
-        try {
-            org.eclipse.milo.opcua.stack.core.types.builtin.NodeId dataType = Identifiers.Double;
-
-            UaVariableNode variableNode = new UaVariableNode.UaVariableNodeBuilder(nodeContext)
-                .setNodeId(deviceContext.nodeId(parent.getBrowseName().getName() + "/" + name))
-                .setBrowseName(deviceContext.qualifiedName(name))
-                .setDisplayName(LocalizedText.english(name))
-                .setDataType(dataType)
-                .setTypeDefinition(Identifiers.BaseDataVariableType)
-                .setAccessLevel(AccessLevel.READ_WRITE)
-                .setUserAccessLevel(AccessLevel.READ_WRITE)
-                .build();
-
-            variableNode.setValue(new DataValue(new Variant(initialValue)));
-
-            // Add to NodeManager
-            addNodeCallback.accept(variableNode);
-
-            // Create bidirectional reference
-            parent.addComponent(variableNode);
-            variableNode.addReference(new Reference(
-                variableNode.getNodeId(),
-                NodeIds.HasComponent,
-                parent.getNodeId().expanded(),
-                Reference.Direction.INVERSE
-            ));
-
-            String nodePath = parent.getBrowseName().getName() + "/" + name;
-            nodeCache.put(nodePath, variableNode);
-
-            logger.debug("Added writable variable: {} (write handler requires OPC-UA Methods for full integration)", name);
-
-        } catch (Exception e) {
-            logger.error("Failed to add writable node: {}", name, e);
-        }
-    }
-
-    /**
-     * URL encodes a string for use in URL parameters.
-     *
-     * @param value String to encode
-     * @return URL-encoded string
-     */
 }
