@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import Modal from './Modal'
 
 interface GridGroupModalProps {
   isOpen: boolean
@@ -10,11 +11,9 @@ function GridGroupModal({ isOpen, onClose, onCreate }: GridGroupModalProps) {
   const [groupName, setGroupName] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Focus input when modal opens
   useEffect(() => {
     if (isOpen) {
       setGroupName('')
-      setTimeout(() => inputRef.current?.focus(), 50)
     }
   }, [isOpen])
 
@@ -32,41 +31,36 @@ function GridGroupModal({ isOpen, onClose, onCreate }: GridGroupModalProps) {
     if (e.key === 'Enter') {
       e.preventDefault()
       handleSubmit()
-    } else if (e.key === 'Escape') {
-      onClose()
     }
-  }, [handleSubmit, onClose])
-
-  const handleOverlayClick = useCallback((e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      onClose()
-    }
-  }, [onClose])
-
-  if (!isOpen) return null
+  }, [handleSubmit])
 
   return (
-    <div className="grid-group-modal-overlay" onClick={handleOverlayClick}>
-      <div className="grid-group-modal">
-        <h3>Create Group</h3>
-        <label htmlFor="grid-group-name-input">Group name</label>
-        <input
-          id="grid-group-name-input"
-          ref={inputRef}
-          type="text"
-          className="form-input"
-          placeholder="Enter group name"
-          autoComplete="off"
-          value={groupName}
-          onChange={(e) => setGroupName(e.target.value)}
-          onKeyDown={handleKeyDown}
-        />
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Create Group"
+      backdropClassName="grid-group-modal-overlay"
+      className="grid-group-modal"
+      footer={
         <div className="modal-actions">
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={handleSubmit}>Create</button>
         </div>
-      </div>
-    </div>
+      }
+    >
+      <label htmlFor="grid-group-name-input">Group name</label>
+      <input
+        id="grid-group-name-input"
+        ref={inputRef}
+        type="text"
+        className="form-input"
+        placeholder="Enter group name"
+        autoComplete="off"
+        value={groupName}
+        onChange={(e) => setGroupName(e.target.value)}
+        onKeyDown={handleKeyDown}
+      />
+    </Modal>
   )
 }
 

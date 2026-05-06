@@ -16,6 +16,10 @@ function getOrCreateContainer(): HTMLElement {
   if (!container) {
     container = document.createElement('div')
     container.id = CONTAINER_ID
+    // Sprint 3 P10: announce toasts via screen-reader live region.
+    container.setAttribute('role', 'status')
+    container.setAttribute('aria-live', 'polite')
+    container.setAttribute('aria-atomic', 'true')
     Object.assign(container.style, {
       position: 'fixed',
       bottom: '24px',

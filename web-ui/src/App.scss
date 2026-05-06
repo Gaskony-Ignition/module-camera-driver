@@ -508,3 +508,40 @@
 @media (max-width: 700px) {
   .app-wrapper .content-area { padding: 16px; }
 }
+
+/* ==========================================================================
+   Accessibility: Skip Link (WCAG 2.4.1 Bypass Blocks)
+   ========================================================================== */
+.app-wrapper .skip-link {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 8px 16px;
+  background: var(--accent-primary);
+  color: var(--text-inverse);
+  text-decoration: none;
+  font-weight: 600;
+  border-radius: 0 0 var(--radius-md) 0;
+  z-index: 9999;
+  transform: translateY(-100%);
+  transition: transform 0.15s ease;
+}
+.app-wrapper .skip-link:focus {
+  transform: translateY(0);
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   Accessibility: Reduced Motion (WCAG 2.3.3 Animation from Interactions)
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .app-wrapper *,
+  .app-wrapper *::before,
+  .app-wrapper *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

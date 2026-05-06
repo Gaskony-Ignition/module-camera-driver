@@ -109,8 +109,9 @@ function App() {
   return (
     <ErrorBoundary>
       <div className="app-wrapper">
+        <a href="#main-content" className="skip-link">Skip to main content</a>
         {status === 'disconnected' && (
-          <div className="connection-banner">
+          <div className="connection-banner" role="status" aria-live="polite">
             Unable to connect to Camera Driver gateway. Retrying...
           </div>
         )}
@@ -121,9 +122,9 @@ function App() {
             moduleVersion={health?.version}
           />
           <div className="app-content-area">
-            <div className="content-area">
+            <main id="main-content" className="content-area" tabIndex={-1}>
               {renderActiveView()}
-            </div>
+            </main>
             <StatusBar health={health} />
           </div>
         </div>
