@@ -131,9 +131,10 @@ ignition-module-camera-driver/
 | Document | Description |
 |----------|-------------|
 | [CHANGELOG.md](CHANGELOG.md) | Complete version history |
-| [SKILLS.md](SKILLS.md) | Critical SDK lessons (read first!) |
+| [.claude/skills/](.claude/skills/) | Module-specific skills (camera-protocols, camera-i18n-bugs) |
+| [/modules/.claude/skills/](../.claude/skills/) | Shared skills across all 5 modules |
 | [docs/USAGE.md](docs/USAGE.md) | HTTP endpoint usage guide |
-| [docs/SECURITY.md](docs/SECURITY.md) | Security architecture |
+| [SECURITY.md](SECURITY.md) | Security architecture |
 | [docs/TESTING.md](docs/TESTING.md) | Testing guide |
 | [docs/CAMERA_COMPATIBILITY.md](docs/CAMERA_COMPATIBILITY.md) | Camera compatibility notes |
 | [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) | Feature tracking |
@@ -141,10 +142,10 @@ ignition-module-camera-driver/
 
 ## BEFORE YOU START IMPLEMENTING
 
-**Read `SKILLS.md` first!** It documents critical bugs and lessons learned that took significant time to debug:
+**Load the module-specific skills in `.claude/skills/`** (`camera-i18n-bugs/SKILL.md` and `camera-protocols/SKILL.md`). They document critical bugs and lessons learned that took significant time to debug:
 - Why display names show as "?...?" and how to fix it
 - Resource bundle registration (critical!)
-- FormFieldType options and their actual behavior
+- FormFieldType options and their actual behaviour
 
 ## Camera Resources
 

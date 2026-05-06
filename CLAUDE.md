@@ -21,10 +21,11 @@ This file contains module-specific instructions. Shared standards are in `/modul
 
 ### Essential Reading Order
 1. **This file** - Overall context and architecture
-2. **SKILLS.md** - Critical bugs and lessons learned (READ THIS to avoid hours of debugging)
-3. **docs/SECURITY.md** - Security architecture and practices
-4. **README.md** - User-facing documentation
-5. **docs/IMPLEMENTATION_STATUS.md** - Current implementation status
+2. **`.claude/skills/`** - Module-specific skills (`camera-i18n-bugs/SKILL.md`, `camera-protocols/SKILL.md`) — load to avoid hours of debugging
+3. **`/modules/.claude/skills/`** - Shared skills (building, reviewing, testing, security)
+4. **SECURITY.md** - Security architecture and practices
+5. **README.md** - User-facing documentation
+6. **docs/IMPLEMENTATION_STATUS.md** - Current implementation status
 
 ### Building the Module
 ```bash
@@ -187,8 +188,8 @@ Properties file must be in exact package structure:
 ## Working with This Project
 
 ### Before Making Changes
-1. Read SKILLS.md (avoid repeated mistakes)
-2. Check docs/SECURITY.md (security requirements)
+1. Load the module skills in `.claude/skills/` (avoid repeated mistakes)
+2. Check SECURITY.md (security requirements)
 3. Review docs/IMPLEMENTATION_STATUS.md (what's done)
 
 ### Making Changes

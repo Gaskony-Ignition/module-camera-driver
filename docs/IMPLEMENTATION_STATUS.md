@@ -179,7 +179,7 @@ The following features are **implemented and functional** but require real ONVIF
    - Test network disconnect/reconnect scenarios
    - Verify auto-reconnect with exponential backoff
    - Test with intermittent network failures
-   - Validate error counter behavior
+   - Validate error counter behaviour
 
 8. **HTTPS Communication**
    - Test with cameras using self-signed certificates
