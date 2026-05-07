@@ -5,7 +5,7 @@ This file contains module-specific instructions. Shared standards are in `/modul
 ## Project Overview
 
 **Name**: Ignition Camera Driver Module
-**Version**: 2.34.13
+**Version**: 2.34.14
 **Status**: Production Ready
 **Language**: Java 17
 **Framework**: Inductive Automation Ignition SDK 8.3.0
@@ -31,7 +31,7 @@ This file contains module-specific instructions. Shared standards are in `/modul
 ```bash
 cd /modules/ignition-module-camera-driver
 ./gradlew clean build
-# Output: build/CameraDriver-2.34.13.modl
+# Output: build/CameraDriver-2.34.14.modl
 ```
 
 ### Common Commands
@@ -205,4 +205,4 @@ Java packages remain `com.onvif.driver.*` for backward compatibility. Class name
 ---
 
 **Last Updated**: 2026-02-11
-**Document Version**: 2.34.13
+**Document Version**: 2.34.14

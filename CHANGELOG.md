@@ -18,6 +18,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.34.14] - 2026-05-07
+
+### Sprint 3 closeout — a11y, perf, hygiene
+
+#### Added
+- A11y baseline: skip-link, `prefers-reduced-motion: reduce` block in `styles.css`, `aria-live="polite"` toast container, focus-trap on `Modal` primitive, label associations on form inputs (P10).
+
+#### Performance
+- Pause `DiagnosticsView` polling when `document.visibilityState === 'hidden'` to remove background network traffic.
+
+#### Changed
+- Standardise `.gitattributes` and `.gitignore` to the cross-module canonical version (Sprint 3 hygiene).
+
+#### Documentation
+- Replace stale `SKILLS.md` / `LEARNINGS.md` references with `.claude/skills/` paths; Australian English spelling sweep across READMEs (P8).
+
+#### Tests
+- `./gradlew check` now enforced in `pr-checks.yml` (JaCoCo + Checkstyle + SpotBugs gate PRs); JaCoCo threshold raised in line with measured coverage (P7).
+
+---
+
 ## [2.34.13] - 2026-05-05
 
 ### Changed
