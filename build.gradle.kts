@@ -13,7 +13,7 @@ configure<org.owasp.dependencycheck.gradle.extension.DependencyCheckExtension> {
     analyzers.assemblyEnabled = false
 }
 
-version = "2.34.14"
+version = "3.0.0"
 group = "com.gaskony"
 
 allprojects {
@@ -24,7 +24,7 @@ allprojects {
 ignitionModule {
     fileName.set("CameraDriver-${project.version}")
     name.set("Camera Driver")
-    id.set("com.onvif.driver.opcua")
+    id.set("com.gaskony.camera.opcua")
     moduleVersion.set(project.version.toString())
     moduleDescription.set("Multi-protocol camera driver supporting ONVIF, RTSP, MJPEG, and snapshot URL connections to IP cameras with bundled go2rtc streaming")
     requiredIgnitionVersion.set("8.3.0")
@@ -37,8 +37,8 @@ ignitionModule {
     ))
 
     hooks.putAll(mapOf(
-        "com.onvif.driver.gateway.ONVIFModuleHook" to "G",
-        "com.onvif.driver.designer.DesignerHook" to "D"
+        "com.gaskony.camera.gateway.ONVIFModuleHook" to "G",
+        "com.gaskony.camera.designer.DesignerHook" to "D"
     ))
 
     // Declare dependency on OPC-UA module for device driver APIs (Ignition 8.3+ format)

@@ -6,7 +6,7 @@
         a logs directory.
     -->
     <Match>
-        <Class name="com.onvif.driver.gateway.servlet.handlers.GatewayLogHandler" />
+        <Class name="com.gaskony.camera.gateway.servlet.handlers.GatewayLogHandler" />
         <Method name="findSystemLogsDb" />
         <Bug pattern="DMI_HARDCODED_ABSOLUTE_FILENAME" />
     </Match>
@@ -17,7 +17,7 @@
         the SQL string directly.
     -->
     <Match>
-        <Class name="com.onvif.driver.gateway.servlet.handlers.GatewayLogHandler" />
+        <Class name="com.gaskony.camera.gateway.servlet.handlers.GatewayLogHandler" />
         <Bug pattern="SQL_PREPARED_STATEMENT_GENERATED_FROM_NONCONSTANT_STRING" />
     </Match>
 
@@ -27,7 +27,7 @@
         a defensive copy is not appropriate here.
     -->
     <Match>
-        <Class name="com.onvif.driver.gateway.servlet.ONVIFRoutes" />
+        <Class name="com.gaskony.camera.gateway.servlet.ONVIFRoutes" />
         <Method name="getAuthenticationManager" />
         <Bug pattern="EI_EXPOSE_REP" />
     </Match>
@@ -37,7 +37,7 @@
         module lifecycle methods must not propagate unexpected exceptions.
     -->
     <Match>
-        <Class name="com.onvif.driver.gateway.ONVIFModuleHook" />
+        <Class name="com.gaskony.camera.gateway.ONVIFModuleHook" />
         <Method name="loadModuleVersion" />
         <Bug pattern="REC_CATCH_EXCEPTION" />
     </Match>
@@ -49,7 +49,7 @@
         finalizer attack risk.
     -->
     <Match>
-        <Class name="com.onvif.driver.gateway.util.ValidationUtil" />
+        <Class name="com.gaskony.camera.gateway.util.ValidationUtil" />
         <Bug pattern="CT_CONSTRUCTOR_THROW" />
     </Match>
 
@@ -59,7 +59,7 @@
         HTTP errors, etc.) and we want to degrade gracefully.
     -->
     <Match>
-        <Class name="com.onvif.driver.gateway.stream.Go2RtcManager" />
+        <Class name="com.gaskony.camera.gateway.stream.Go2RtcManager" />
         <Method name="getStreamInfo" />
         <Bug pattern="REC_CATCH_EXCEPTION" />
     </Match>
@@ -73,11 +73,11 @@
     <Match>
         <Bug pattern="EI_EXPOSE_REP2" />
         <Or>
-            <Class name="com.onvif.driver.gateway.device.generic.GenericCameraAddressSpaceBuilder" />
-            <Class name="com.onvif.driver.gateway.device.CameraExtensionPoint" />
-            <Class name="com.onvif.driver.gateway.device.AddressSpaceBuilder" />
-            <Class name="com.onvif.driver.gateway.device.ONVIFPoller" />
-            <Class name="com.onvif.driver.gateway.device.CameraDevice" />
+            <Class name="com.gaskony.camera.gateway.device.generic.GenericCameraAddressSpaceBuilder" />
+            <Class name="com.gaskony.camera.gateway.device.CameraExtensionPoint" />
+            <Class name="com.gaskony.camera.gateway.device.AddressSpaceBuilder" />
+            <Class name="com.gaskony.camera.gateway.device.ONVIFPoller" />
+            <Class name="com.gaskony.camera.gateway.device.CameraDevice" />
         </Or>
     </Match>
 </FindBugsFilter>

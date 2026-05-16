@@ -297,7 +297,7 @@ After restart, check:
 To enable debug logging:
 
 1. Go to Config → System → Console/Logging
-2. Add logger: `com.onvif.driver`
+2. Add logger: `com.gaskony.camera`
 3. Set level to: `DEBUG`
 4. Check wrapper.log for detailed SOAP messages
 

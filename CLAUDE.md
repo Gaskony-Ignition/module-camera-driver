@@ -5,7 +5,7 @@ This file contains module-specific instructions. Shared standards are in `/modul
 ## Project Overview
 
 **Name**: Ignition Camera Driver Module
-**Version**: 2.34.14
+**Version**: 3.0.0
 **Status**: Production Ready
 **Language**: Java 17
 **Framework**: Inductive Automation Ignition SDK 8.3.0
@@ -31,7 +31,7 @@ This file contains module-specific instructions. Shared standards are in `/modul
 ```bash
 cd /modules/ignition-module-camera-driver
 ./gradlew clean build
-# Output: build/CameraDriver-2.34.14.modl
+# Output: build/CameraDriver-3.0.0.modl
 ```
 
 ### Common Commands
@@ -200,9 +200,9 @@ Properties file must be in exact package structure:
 5. Update CHANGELOG.md
 
 ### Note on Package Names
-Java packages remain `com.onvif.driver.*` for backward compatibility. Class names like `ONVIFDevice`, `ONVIFModuleHook`, etc. are unchanged. The module ID is `com.onvif.driver.opcua`. These are internal identifiers - user-facing names use "Camera Driver" (module) and "ONVIF Camera" / "Generic Camera" (device types).
+Java packages are `com.gaskony.camera.*` as of v3.0.0 (renamed from `com.onvif.driver.*`). Class names like `ONVIFDevice`, `ONVIFModuleHook`, etc. retain their original capitalisation — they describe the ONVIF protocol, not the package vendor. The module ID is `com.gaskony.camera.opcua` (was `com.onvif.driver.opcua` pre-v3.0.0). Existing device profiles must be recreated on upgrade — see `MIGRATION-v3.md`.
 
 ---
 
 **Last Updated**: 2026-02-11
-**Document Version**: 2.34.14
+**Document Version**: 3.0.0
