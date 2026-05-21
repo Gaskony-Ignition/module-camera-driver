@@ -75,6 +75,7 @@
         <Or>
             <Class name="com.gaskony.camera.gateway.device.generic.GenericCameraAddressSpaceBuilder" />
             <Class name="com.gaskony.camera.gateway.device.CameraExtensionPoint" />
+            <Class name="com.gaskony.camera.gateway.device.LegacyCameraExtensionPoint" />
             <Class name="com.gaskony.camera.gateway.device.AddressSpaceBuilder" />
             <Class name="com.gaskony.camera.gateway.device.ONVIFPoller" />
             <Class name="com.gaskony.camera.gateway.device.CameraDevice" />

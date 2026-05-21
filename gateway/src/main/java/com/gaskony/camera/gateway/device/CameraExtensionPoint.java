@@ -99,6 +99,17 @@ public class CameraExtensionPoint extends DeviceExtensionPoint<CameraConfig> {
 
     @Override
     protected void validate(CameraConfig config, Builder errors) {
+        applyValidation(config, errors);
+    }
+
+    /**
+     * Shared validation logic used by both {@link CameraExtensionPoint} (new
+     * v3.0.0 type) and {@link LegacyCameraExtensionPoint} (the
+     * {@code com.onvif.driver.Camera} back-compat alias). Pulled out so the
+     * legacy alias enforces the same rules without instantiating a new
+     * extension point per call.
+     */
+    static void applyValidation(CameraConfig config, Builder errors) {
         // Validate IP address (required)
         String ipAddress = config.connection().ipAddress();
         if (ipAddress == null || ipAddress.trim().isEmpty()) {

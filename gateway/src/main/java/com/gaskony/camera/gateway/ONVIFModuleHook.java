@@ -11,6 +11,7 @@ import com.inductiveautomation.ignition.gateway.web.systemjs.SystemJsModule;
 import com.gaskony.camera.common.CameraComponents;
 import com.gaskony.camera.common.CameraDriverPaths;
 import com.gaskony.camera.gateway.device.CameraExtensionPoint;
+import com.gaskony.camera.gateway.device.LegacyCameraExtensionPoint;
 import com.gaskony.camera.gateway.servlet.ONVIFRoutes;
 import com.gaskony.camera.gateway.servlet.RateLimiter;
 import com.gaskony.camera.gateway.servlet.handlers.SnapshotHandler;
@@ -38,6 +39,14 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
     private static final Logger logger = LoggerFactory.getLogger(ONVIFModuleHook.class);
     private GatewayContext context;
     private CameraExtensionPoint cameraExtensionPoint;
+    /**
+     * v3.0.0 back-compat alias under the pre-rename type ID
+     * {@code com.onvif.driver.Camera}. Lets existing device profiles deserialise
+     * without manual intervention. Removal scheduled for v4.0.0 — see
+     * {@link com.gaskony.camera.gateway.device.LegacyCameraExtensionPoint} for
+     * the full migration story.
+     */
+    private LegacyCameraExtensionPoint legacyCameraExtensionPoint;
     private Go2RtcManager go2RtcManager;
 
     /**
@@ -70,6 +79,14 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
             this.cameraExtensionPoint = new CameraExtensionPoint();
         }
         this.cameraExtensionPoint.setGo2RtcManager(go2RtcManager);
+
+        // v3.0.0 back-compat: also register the legacy com.onvif.driver.Camera
+        // type so pre-rename profiles deserialise. See LegacyCameraExtensionPoint
+        // class-level doc for the removal schedule (v4.0.0).
+        if (this.legacyCameraExtensionPoint == null) {
+            this.legacyCameraExtensionPoint = new LegacyCameraExtensionPoint();
+        }
+        this.legacyCameraExtensionPoint.setGo2RtcManager(go2RtcManager);
 
         logger.info("Camera Driver module setup complete (go2rtc launch deferred to startup)");
 
@@ -222,7 +239,11 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
             logger.warn("cameraExtensionPoint is null in getDeviceExtensionPoints - creating early instance");
             cameraExtensionPoint = new CameraExtensionPoint();
         }
-        return List.of(cameraExtensionPoint);
+        if (legacyCameraExtensionPoint == null) {
+            logger.warn("legacyCameraExtensionPoint is null in getDeviceExtensionPoints - creating early instance");
+            legacyCameraExtensionPoint = new LegacyCameraExtensionPoint();
+        }
+        return List.of(cameraExtensionPoint, legacyCameraExtensionPoint);
     }
 
     @Override
