@@ -5,6 +5,25 @@ All notable changes to the Ignition Camera Driver module will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-05-21
+
+### MAJOR — BREAKING — package rename + new module ID
+
+This is the suite-wide Gaskony rename promised in `/modules/.review/SECTION_10_DECISIONS.md` §10 #6. The Java packages move to the `com.gaskony.camera.*` prefix and the module ID changes accordingly. Customers MUST uninstall the old `com.onvif.driver.opcua` and install the new `com.gaskony.camera.opcua` — Ignition treats them as different modules. Existing device profiles continue to work through a legacy alias.
+
+### Breaking
+- **Module ID renamed.** `com.onvif.driver.opcua` → `com.gaskony.camera.opcua`. Customers must perform a manual uninstall + install via the Gateway module manager (the gateway does not auto-port config between module IDs).
+- **Java packages renamed.** `com.onvif.driver.*` → `com.gaskony.camera.*`. Any Jython that referenced the old FQNs needs updating.
+- **Extension-point type renamed.** `com.onvif.driver.Camera` → `com.gaskony.camera.Camera`. New device profiles must be created under the new type (visible as "Camera" in the OPC-UA device-type dropdown).
+
+### Added
+- `LegacyCameraExtensionPoint` — a back-compat alias registered under the pre-rename type ID `com.onvif.driver.Camera`. Existing v2.34.x device profiles continue to load transparently after the upgrade and emit a one-time `WARN` per device naming what to recreate later. Hidden from the "Add Device" dropdown (one-way alias). Scheduled for removal in Camera Driver v4.0.0.
+
+### Migration
+See `/modules/.review/MIGRATION-v3-v4.md` for the customer-facing playbook covering both Camera v3.0.0 and Python3 v4.0.0.
+
+---
+
 ## [2.34.1] - 2026-03-07
 
 ### Cross-module standardisation (Round 4)
