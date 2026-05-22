@@ -5,6 +5,15 @@ All notable changes to the Ignition Camera Driver module will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.1] - 2026-05-22
+
+**Type:** PATCH — bug fix
+
+### Fixed
+- **Dedicated/standalone page showed a redundant "Camera Driver" top bar when logged out.** `mounted/standalone.html` rendered its `dedicated-header` bar unconditionally, so a logged-out visitor saw the top bar *and* the centred "Authentication Required" card (which carries its own module identity) — inconsistent with the other four modules, whose logged-out view shows only the centred card. The header now toggles with auth state: hidden in the auth view, shown only once authenticated (matching the AI Terminal / Python3 pattern). As a side benefit, the bar no longer flashes before the auth check resolves.
+
+---
+
 ## [3.0.0] - 2026-05-21
 
 ### MAJOR — BREAKING — package rename + new module ID

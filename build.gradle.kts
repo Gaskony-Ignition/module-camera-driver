@@ -13,7 +13,7 @@ configure<org.owasp.dependencycheck.gradle.extension.DependencyCheckExtension> {
     analyzers.assemblyEnabled = false
 }
 
-version = "3.0.0"
+version = "3.0.1"
 group = "com.gaskony"
 
 allprojects {
@@ -100,6 +100,19 @@ tasks.register("syncVersion") {
         }
         sync(file("web-ui/package.json"),
             Regex(""""version":\s*"[^"]+""""), """"version": "$ver"""")
+        // package-lock.json embeds the project version twice at the top (root + packages[""]).
+        // Only replace the first two occurrences so third-party dependency versions are untouched.
+        run {
+            val f = file("web-ui/package-lock.json")
+            if (f.exists()) {
+                var remaining = 2
+                val text = f.readText()
+                val updated = Regex(""""version":\s*"[^"]+"""").replace(text) { m ->
+                    if (remaining > 0) { remaining--; """"version": "$ver"""" } else m.value
+                }
+                if (updated != text) { f.writeText(updated); logger.lifecycle("  synced ${f.name} → $ver") }
+            }
+        }
         sync(file("README.md"),
             Regex("""(?m)^\*\*Version\*\*:\s*[\d.]+"""), "**Version**: ${ver}")
         sync(file("README.md"),
