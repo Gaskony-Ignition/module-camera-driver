@@ -232,7 +232,7 @@ sourceSets {
 tasks.named<ProcessResources>("processResources") {
     dependsOn(downloadGo2Rtc, downloadFfmpeg)
     // Inject the Gradle project version into module.properties at build time.
-    // Single source of truth: build.gradle.kts → module.properties → ONVIFModuleHook
+    // Single source of truth: build.gradle.kts → module.properties → CameraModuleHook
     filesMatching("module.properties") {
         expand(mapOf("moduleVersion" to rootProject.version))
     }

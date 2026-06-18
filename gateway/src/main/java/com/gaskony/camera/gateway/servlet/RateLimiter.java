@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Per-IP rate limiter for Camera Driver HTTP endpoints.
- * Extracted from ONVIFRoutes to enable instance-scoped lifecycle management.
+ * Extracted from CameraRoutes to enable instance-scoped lifecycle management.
  */
 public final class RateLimiter {
 

@@ -85,15 +85,27 @@ public class CameraExtensionPoint extends DeviceExtensionPoint<CameraConfig> {
 
     @Override
     public Optional<WebUiComponent> getWebUiComponent(ComponentType type) {
-        return Optional.of(
-            new ExtensionPointResourceForm(
-                DeviceExtensionPoint.DEVICE_RESOURCE_TYPE,
-                "Device Connection",
-                TYPE_ID,
-                SchemaUtil.fromType(DeviceProfileConfig.class),
-                SchemaUtil.fromType(CameraConfig.class),
-                Set.of()
-            )
+        return Optional.of(cameraResourceForm(TYPE_ID));
+    }
+
+    /**
+     * Builds the device-connection editor form for the given extension-point
+     * type ID.
+     *
+     * <p>Shared with {@link LegacyCameraExtensionPoint} so devices still on the
+     * legacy {@code com.onvif.driver.Camera} type get an identical editor and
+     * never fail with "Web UI Component type not found" when edited. Keeping a
+     * single source for the form also means add/edit forms can't drift apart
+     * between the two extension points.</p>
+     */
+    static WebUiComponent cameraResourceForm(String typeId) {
+        return new ExtensionPointResourceForm(
+            DeviceExtensionPoint.DEVICE_RESOURCE_TYPE,
+            "Device Connection",
+            typeId,
+            SchemaUtil.fromType(DeviceProfileConfig.class),
+            SchemaUtil.fromType(CameraConfig.class),
+            Set.of()
         );
     }
 

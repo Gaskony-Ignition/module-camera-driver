@@ -5,6 +5,34 @@ All notable changes to the Ignition Camera Driver module will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.3] - 2026-06-18
+
+**Type:** PATCH — bug fix / robustness / internal rename
+
+### Fixed
+- **Devices on the legacy `com.onvif.driver.Camera` type could not be edited** — opening one in the Gateway's Device Connections editor showed **"Web UI Component type not found"**. `LegacyCameraExtensionPoint.getWebUiComponent()` returned `Optional.empty()` for *all* component types, which hid the type from the "Add Device" dropdown (intended) but also stripped the **edit** form (unintended). It now returns the standard Camera editor for `EDIT_FORM` while still returning empty for `ADD_FORM`, so any device left on the legacy type after a pre-v3.0.0 upgrade stays fully editable. The editor form construction is shared between `CameraExtensionPoint` and `LegacyCameraExtensionPoint` so add/edit forms can't drift. Covered by `LegacyCameraExtensionPointWebUiTest`.
+
+### Changed
+- **De-emphasised ONVIF as the module's primary identity.** ONVIF is now documented and structured as one of several connection methods (alongside RTSP, MJPEG, and snapshot) on the single unified **Camera** device type — not the headline. Renamed the two ONVIF-named *non-protocol* classes: `ONVIFModuleHook` → **`CameraModuleHook`** (gateway hook) and `ONVIFRoutes` → **`CameraRoutes`** (shared HTTP endpoints), with the gateway hook-class reference updated accordingly. The genuine ONVIF protocol classes (`ONVIFClient`, `ONVIFAuth`, `ONVIFService`, `ONVIFPoller`, etc.) keep their names. `README.md` and `CLAUDE.md` reframed around the unified Camera device type. **No change to the module ID (`com.gaskony.camera.opcua`) or device type ID (`com.gaskony.camera.Camera`)** — existing devices are unaffected.
+
+---
+
+## [3.0.2] - 2026-06-17
+
+**Type:** PATCH — bug fix / robustness
+
+### Fixed
+- **Live stream returned a misleading `400 "No streaming source available"` when the camera was configured but unreachable.** If go2rtc could not pull the upstream RTSP source (e.g. wrong stream path → camera `404`, bad credentials, or camera offline), `StreamHandler` fell through its fallback chain and reported a 400 implying nothing was configured. It now distinguishes the two cases: a configured-but-unreachable source returns **`502`** with the real reason (e.g. *"go2rtc returned HTTP 500"* / *"…could not be reached"*), while `400` is reserved for genuinely no source configured. `proxyStream()` now propagates the upstream HTTP status instead of a bare boolean.
+- **H.265/HEVC streams failed silently in the browser player.** When the camera served HEVC (e.g. a Reolink main stream), the MSE player fell back to an H.264 codec and fed it mismatched bytes, producing an opaque failure. Both players (`mse-player.js` and `web-ui` `MsePlayer.ts`) now trust the server-declared codec: they play HEVC where the browser supports it, and otherwise show a clear message directing the user to the H.264 sub-stream. The players also surface the server's error body, so a 502 now reads as *"HTTP 502 - Camera stream source is unavailable: …"* instead of a bare status code.
+
+### Security
+- **Stopped logging credential-bearing stream URLs.** `StreamHandler.proxyStream()` previously logged the full upstream URL (`rtsp://user:pass@…`) on a non-200 response; it now logs only the device name and status code.
+
+### Tests
+- Added `StreamHandlerTest` (auth, missing/invalid device params, the new 502-on-upstream-failure path, and 400-only-when-no-source-configured).
+
+---
+
 ## [3.0.1] - 2026-05-22
 
 **Type:** PATCH — bug fix

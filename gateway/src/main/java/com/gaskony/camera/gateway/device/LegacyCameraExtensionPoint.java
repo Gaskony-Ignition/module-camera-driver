@@ -35,11 +35,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * profiles continue to work transparently — the customer's tag bindings,
  * device names, and OPC-UA address spaces are preserved.</p>
  *
- * <p>What this class does NOT do. The legacy form is intentionally hidden
+ * <p>What this class does NOT do. The legacy type is intentionally hidden
  * from the Gateway "Add Device" dropdown ({@link #getWebUiComponent} returns
- * {@link Optional#empty()}), so new profiles can only be created under the
- * new type ID. The alias is therefore one-way: it accepts legacy profiles
- * but doesn't perpetuate the old naming.</p>
+ * {@link Optional#empty()} for {@code ADD_FORM}), so new profiles can only be
+ * created under the new type ID. Existing legacy profiles stay fully editable
+ * ({@code EDIT_FORM} returns the standard Camera editor). The alias is
+ * therefore one-way: it accepts and edits legacy profiles but doesn't
+ * perpetuate the old naming for new ones.</p>
  *
  * <h2>Migration story</h2>
  *
@@ -113,15 +115,23 @@ public class LegacyCameraExtensionPoint extends DeviceExtensionPoint<CameraConfi
     }
 
     /**
-     * Hides the legacy type from the "Add Device" dropdown.
+     * Keeps the legacy type out of the "Add Device" dropdown while leaving
+     * existing legacy-typed devices fully editable.
      *
-     * <p>Operators must create new profiles under
-     * {@link CameraExtensionPoint#TYPE_ID}. The legacy ID is accepted only
-     * for back-compat deserialization of pre-v3.0.0 profiles.</p>
+     * <p>Returns {@link Optional#empty()} for {@link ComponentType#ADD_FORM}
+     * so operators cannot create new {@code com.onvif.driver.Camera} profiles —
+     * new devices must use {@link CameraExtensionPoint#TYPE_ID}. But it returns
+     * the standard Camera editor for {@link ComponentType#EDIT_FORM} so a device
+     * still on the legacy type after a pre-v3.0.0 upgrade can be opened and
+     * edited normally. Without the EDIT_FORM branch, editing such a device fails
+     * with "Web UI Component type not found".</p>
      */
     @Override
     public Optional<WebUiComponent> getWebUiComponent(ComponentType type) {
-        return Optional.empty();
+        if (type == ComponentType.ADD_FORM) {
+            return Optional.empty();
+        }
+        return Optional.of(CameraExtensionPoint.cameraResourceForm(LEGACY_TYPE_ID));
     }
 
     /**

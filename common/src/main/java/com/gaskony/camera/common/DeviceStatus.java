@@ -6,7 +6,7 @@ package com.gaskony.camera.common;
  * Centralises the status strings so that:
  *  - Typos are caught at compile time.
  *  - Comparisons (e.g. isActive()) live in one place rather than being
- *    repeated across ONVIFDevice, GenericCameraDevice and ONVIFRoutes.
+ *    repeated across ONVIFDevice, GenericCameraDevice and CameraRoutes.
  *
  * The devices still store status as a String (to allow dynamic error messages
  * like "Error: connection timeout"), but all *known* status assignments

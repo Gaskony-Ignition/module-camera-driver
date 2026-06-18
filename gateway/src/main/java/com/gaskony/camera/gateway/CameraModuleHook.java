@@ -12,7 +12,7 @@ import com.gaskony.camera.common.CameraComponents;
 import com.gaskony.camera.common.CameraDriverPaths;
 import com.gaskony.camera.gateway.device.CameraExtensionPoint;
 import com.gaskony.camera.gateway.device.LegacyCameraExtensionPoint;
-import com.gaskony.camera.gateway.servlet.ONVIFRoutes;
+import com.gaskony.camera.gateway.servlet.CameraRoutes;
 import com.gaskony.camera.gateway.servlet.RateLimiter;
 import com.gaskony.camera.gateway.servlet.handlers.SnapshotHandler;
 import com.gaskony.camera.gateway.servlet.handlers.StreamHandler;
@@ -34,9 +34,9 @@ import java.util.concurrent.TimeUnit;
  * Module hook for the Camera Driver.
  * Registers a single "Camera" device type with Ignition's device connection system.
  */
-public class ONVIFModuleHook extends AbstractDeviceModuleHook {
+public class CameraModuleHook extends AbstractDeviceModuleHook {
 
-    private static final Logger logger = LoggerFactory.getLogger(ONVIFModuleHook.class);
+    private static final Logger logger = LoggerFactory.getLogger(CameraModuleHook.class);
     private GatewayContext context;
     private CameraExtensionPoint cameraExtensionPoint;
     /**
@@ -165,7 +165,7 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
         logger.info("Mounting route handlers at /data/camera-driver/*");
 
         String moduleVersion = loadModuleVersion();
-        new ONVIFRoutes(context, cameraExtensionPoint, go2RtcManager, moduleVersion).mountRoutes(routes);
+        new CameraRoutes(context, cameraExtensionPoint, go2RtcManager, moduleVersion).mountRoutes(routes);
 
         logger.info("Route handlers mounted successfully");
     }
@@ -196,7 +196,7 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
         RateLimiter.reset();
 
         try {
-            ONVIFRoutes.shutdown();
+            CameraRoutes.shutdown();
         } catch (Exception e) {
             logger.error("Error shutting down ONVIF routes", e);
         }
@@ -257,14 +257,14 @@ public class ONVIFModuleHook extends AbstractDeviceModuleHook {
     }
 
     private static String loadModuleVersion() {
-        try (InputStream is = ONVIFModuleHook.class.getResourceAsStream("/module.properties")) {
+        try (InputStream is = CameraModuleHook.class.getResourceAsStream("/module.properties")) {
             if (is != null) {
                 Properties props = new Properties();
                 props.load(is);
                 return props.getProperty("module.version", "unknown");
             }
         } catch (Exception e) {
-            LoggerFactory.getLogger(ONVIFModuleHook.class)
+            LoggerFactory.getLogger(CameraModuleHook.class)
                 .debug("Could not load module.properties: {}", e.getMessage());
         }
         return "unknown";

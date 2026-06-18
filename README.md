@@ -4,30 +4,31 @@ A multi-protocol camera driver module for Inductive Automation's Ignition SCADA 
 
 ## Overview
 
-The Camera Driver module provides two device types for connecting to IP cameras:
+The Camera Driver module provides a single unified **Camera** device type for connecting to IP cameras. Each camera supports multiple connection methods, enabled per device, and exposes its data through Ignition's OPC-UA server.
 
-### ONVIF Camera
-For cameras that support the ONVIF protocol (Profile S/T). Provides full device discovery, media profile enumeration, PTZ control, streaming, and snapshot capture via ONVIF SOAP services.
+### Connection methods
 
-### Generic Camera
-For cameras that provide direct RTSP, MJPEG, or snapshot HTTP URLs but may not support ONVIF. Uses bundled go2rtc for RTSP-to-MJPEG transcoding.
+A single Camera device can use any combination of the following:
+
+| Method | Protocol | Capabilities |
+|--------|----------|-------------|
+| **RTSP** | RTSP | Direct video streaming, browser playback via bundled go2rtc + ffmpeg |
+| **MJPEG** | HTTP MJPEG | Direct MJPEG video streaming |
+| **Snapshot** | HTTP | JPEG snapshot capture from a still-image URL |
+| **ONVIF** | ONVIF SOAP | Device discovery, media profile enumeration, PTZ control, and auto-detection of stream/snapshot URLs (Profile S/T) |
+
+URLs for RTSP, MJPEG, and snapshot can be entered directly or auto-detected via ONVIF when enabled.
 
 ## Current Status
 
-**Version**: 3.0.1 | **Status**: Production Ready
-
-### Supported Connection Types
-
-| Type | Protocol | Features |
-|------|----------|----------|
-| **ONVIF Camera** | ONVIF SOAP | Device discovery, media profiles, PTZ control, snapshots, streaming |
-| **Generic Camera** | RTSP / MJPEG / HTTP | Direct URL connections, go2rtc RTSP transcoding, snapshot polling |
+**Version**: 3.0.3 | **Status**: Production Ready
 
 ### Key Features
-- Multi-protocol camera connectivity (ONVIF, RTSP, MJPEG, snapshot URLs)
+- Single unified **Camera** device type with per-device connection methods
+- Multi-protocol camera connectivity (RTSP, MJPEG, snapshot URLs, ONVIF)
 - Authenticated HTTP endpoints (session auth, Basic Auth, API key)
 - Per-IP rate limiting (DoS protection)
-- Bundled go2rtc for RTSP-to-MJPEG transcoding
+- Bundled go2rtc and ffmpeg for RTSP-to-browser (MP4/MJPEG) streaming
 - Hierarchical OPC-UA address space with camera data
 - Connection Browser UI in Gateway Config
 - Configurable SSL/TLS validation modes
@@ -39,49 +40,37 @@ For cameras that provide direct RTSP, MJPEG, or snapshot HTTP URLs but may not s
 ```bash
 cd /modules/ignition-module-camera-driver
 ./gradlew clean build
-# Output: build/CameraDriver-3.0.1.modl
+# Output: build/CameraDriver-3.0.3.modl
 ```
 
 ### 2. Install
 ```bash
-docker cp build/CameraDriver-3.0.1.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
+docker cp build/CameraDriver-3.0.3.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
 docker restart ignition-gateway
 ```
 
 ### 3. Configure
 
-**For ONVIF cameras:**
 1. Gateway > Config > OPC UA > Device Connections
-2. Create new Device > Select **"ONVIF Camera"**
-3. Enter camera IP address, username, password
-4. Enable "Auto-discover Services"
-5. Save and view tags in OPC Browser
-
-**For generic cameras (RTSP/MJPEG/Snapshot):**
-1. Gateway > Config > OPC UA > Device Connections
-2. Create new Device > Select **"Generic Camera"**
-3. Enter RTSP URL, snapshot URL, and/or MJPEG URL
-4. Save and view in Connection Browser
+2. Create new Device > Select **"Camera"**
+3. Enter the camera IP address, username, and password
+4. Enable the connection methods the camera supports (RTSP, MJPEG, Snapshot, ONVIF)
+5. For RTSP/MJPEG/snapshot, either enter URLs directly or enable ONVIF to auto-detect them
+6. Save and view tags in OPC Browser, or open the Connection Browser
 
 See **[docs/TESTING.md](docs/TESTING.md)** for complete testing instructions.
 
 ## Configuration Fields
 
-### ONVIF Camera
+All fields belong to the single **Camera** device type.
 
 **General**: Device Name, Enabled
 
 **Connection**: IP Address, Port, Username, Password, Use HTTPS, Connection Timeout, SSL Validation Mode
 
-**ONVIF Settings**: Auto-discover Services, Poll Interval, Service Type
+**Streams** (connection methods): RTSP Stream, MJPEG Stream, Snapshot, ONVIF / PTZ, plus optional RTSP URL / Snapshot URL / MJPEG URL overrides
 
-### Generic Camera
-
-**General**: Enabled
-
-**Camera Connection**: RTSP URL, Snapshot URL, MJPEG URL, Username, Password, Connection Timeout
-
-**Stream Settings**: Default Frame Rate (FPS)
+**Advanced**: Poll Interval (ONVIF only)
 
 ## HTTP Endpoints
 
@@ -105,22 +94,24 @@ ignition-module-camera-driver/
 ├── common/                       # Shared code
 ├── designer/                     # Designer-side hook
 ├── gateway/                      # Gateway-side implementation
-│   └── src/main/java/com/onvif/driver/gateway/
-│       ├── ONVIFModuleHook.java                    # Module entry point
+│   └── src/main/java/com/gaskony/camera/gateway/
+│       ├── CameraModuleHook.java                   # Module entry point
 │       ├── device/
-│       │   ├── ONVIFDevice*.java                   # ONVIF Camera device type
+│       │   ├── CameraExtensionPoint.java           # Unified "Camera" device type
+│       │   ├── CameraDevice.java                   # Device lifecycle
+│       │   ├── CameraConfig.java                   # Device configuration record
+│       │   ├── LegacyCameraExtensionPoint.java     # Hidden pre-v3.0.0 alias (back-compat)
 │       │   ├── ONVIFPoller.java                    # ONVIF polling mechanism
 │       │   ├── AddressSpaceBuilder.java            # OPC-UA node builder
-│       │   └── generic/
-│       │       └── GenericCamera*.java             # Generic Camera device type
+│       │   └── generic/                            # URL-based stream/snapshot helpers
 │       ├── onvif/                                   # ONVIF protocol layer
 │       │   ├── ONVIFClient.java                    # SOAP client
 │       │   ├── ONVIFAuth.java                      # WS-UsernameToken auth
 │       │   └── ...                                 # Data models
 │       ├── servlet/
-│       │   └── ONVIFRoutes.java                    # HTTP endpoints (all device types)
+│       │   └── CameraRoutes.java                   # HTTP endpoints
 │       ├── stream/
-│       │   └── Go2RtcManager.java                  # RTSP transcoding
+│       │   └── Go2RtcManager.java                  # RTSP-to-browser streaming (go2rtc + ffmpeg)
 │       └── auth/
 │           └── AuthenticationManager.java          # HTTP auth
 └── web-ui/                       # Connection Browser React component
@@ -149,12 +140,12 @@ ignition-module-camera-driver/
 
 ## Camera Resources
 
+### RTSP / Streaming
+- **go2rtc**: https://github.com/AlexxIT/go2rtc (bundled for RTSP-to-browser streaming)
+
 ### ONVIF
 - **ONVIF Official**: https://www.onvif.org/
 - **ONVIF Specifications**: https://www.onvif.org/profiles/
-
-### RTSP / Streaming
-- **go2rtc**: https://github.com/AlexxIT/go2rtc (bundled for RTSP transcoding)
 
 ## Building
 

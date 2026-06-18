@@ -10,7 +10,7 @@ import java.util.concurrent.ExecutorService;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Structural regression tests for {@link ONVIFModuleHook} — ensures that the
+ * Structural regression tests for {@link CameraModuleHook} — ensures that the
  * P2-CD-1 fix is preserved and cannot regress without test failure.
  *
  * <p>Per /modules/.review/FINAL_REVIEW.md §5 P2 (P2-CD-1):
@@ -27,14 +27,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  * back into {@code setup()} would have to delete the executor field too, which
  * fails {@link #testStartup_HasGo2RtcStartExecutorField}.</p>
  */
-class ONVIFModuleHookStructureTest {
+class CameraModuleHookStructureTest {
 
     @Test
     void testHook_HasGo2RtcStartExecutorField() throws NoSuchFieldException {
         // The dedicated daemon executor for go2rtc startup must exist as a
         // field of ExecutorService type — that's how setup()'s blocking I/O is
         // moved off the lifecycle thread.
-        Field field = ONVIFModuleHook.class.getDeclaredField("go2RtcStartExecutor");
+        Field field = CameraModuleHook.class.getDeclaredField("go2RtcStartExecutor");
 
         assertThat(field.getType())
             .as("go2RtcStartExecutor must be an ExecutorService — see P2-CD-1")
@@ -45,7 +45,7 @@ class ONVIFModuleHookStructureTest {
     void testHook_HasStartGo2RtcAsyncMethod() {
         // The async launcher method must exist and take no arguments
         // (it is submitted to the executor as a Runnable).
-        Method method = Arrays.stream(ONVIFModuleHook.class.getDeclaredMethods())
+        Method method = Arrays.stream(CameraModuleHook.class.getDeclaredMethods())
             .filter(m -> m.getName().equals("startGo2RtcAsync"))
             .findFirst()
             .orElseThrow(() -> new AssertionError(
@@ -76,7 +76,7 @@ class ONVIFModuleHookStructureTest {
 
         // We assert the class loads and the method exists; no further byte
         // inspection (kept simple to avoid bytecode-library dependency).
-        Method setup = Arrays.stream(ONVIFModuleHook.class.getDeclaredMethods())
+        Method setup = Arrays.stream(CameraModuleHook.class.getDeclaredMethods())
             .filter(m -> m.getName().equals("setup"))
             .findFirst()
             .orElseThrow();

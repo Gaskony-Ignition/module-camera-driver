@@ -22,9 +22,9 @@ import org.slf4j.LoggerFactory;
  * Each route delegates to a focused handler class.
  * Registers routes under /data/camera-driver/*
  */
-public class ONVIFRoutes {
+public class CameraRoutes {
 
-    private static final Logger logger = LoggerFactory.getLogger(ONVIFRoutes.class);
+    private static final Logger logger = LoggerFactory.getLogger(CameraRoutes.class);
 
     private final AuthenticationManager authManager;
     private final SnapshotHandler snapshotHandler;
@@ -35,7 +35,7 @@ public class ONVIFRoutes {
     private final PageHandler pageHandler;
     private final PtzHandler ptzHandler;
 
-    public ONVIFRoutes(GatewayContext context,
+    public CameraRoutes(GatewayContext context,
                        CameraExtensionPoint cameraExtensionPoint,
                        Go2RtcManager go2RtcManager,
                        String moduleVersion) {

@@ -30,6 +30,11 @@ public class StreamHandler extends BaseHandler {
     private static final String BOUNDARY = "camera-stream-boundary";
     private static final int MAX_CONSECUTIVE_STREAM_ERRORS = 5;
     private static final int MAX_CONCURRENT_STREAMS = 20;
+
+    /** {@link #proxyStream} result: the upstream stream was proxied to the client successfully. */
+    private static final int PROXY_STREAMED = 200;
+    /** {@link #proxyStream} result: the upstream source could not be reached / returned no body. */
+    private static final int PROXY_CONNECT_ERROR = -1;
     private static final AtomicInteger activeStreams = new AtomicInteger(0);
 
     public StreamHandler(GatewayContext context,
@@ -109,6 +114,12 @@ public class StreamHandler extends BaseHandler {
 
             String origin = requestContext.getRequest().getHeader("Origin");
 
+            // Track whether the device actually has a streaming source configured.
+            // This lets us distinguish a genuine misconfiguration (no source -> 400)
+            // from a configured-but-unreachable camera (upstream failure -> 502).
+            boolean sourceConfigured = false;
+            String upstreamFailure = null;
+
             // Try late go2rtc registration
             if (!device.isGo2RtcStreamRegistered()) {
                 device.tryRegisterGo2Rtc();
@@ -116,27 +127,30 @@ public class StreamHandler extends BaseHandler {
 
             // Prefer go2rtc MP4 proxy for RTSP streaming
             if (device.isGo2RtcStreamRegistered() && go2RtcManager != null && go2RtcManager.isAvailable()) {
+                sourceConfigured = true;
                 logger.info("Streaming via go2rtc MP4 for device: {}", deviceName);
                 String go2rtcMp4Url = go2RtcManager.getStreamMp4Url(deviceName);
                 CorsManager.setStreamingHeaders(response, origin, requestContext.getRequest());
-                if (proxyStream(go2rtcMp4Url, response, deviceName, startTime)) {
+                int result = proxyStream(go2rtcMp4Url, response, deviceName, startTime);
+                if (result == PROXY_STREAMED) {
                     return null;
                 }
-                logger.warn("go2rtc MP4 proxy failed for {}, trying fallbacks", deviceName);
+                upstreamFailure = describeProxyFailure("go2rtc", result);
+                logger.warn("go2rtc MP4 proxy failed for {} ({}), trying fallbacks", deviceName, upstreamFailure);
             }
-
-            // Set MJPEG headers for fallback methods
-            response.setContentType("multipart/x-mixed-replace; boundary=" + BOUNDARY);
-            CorsManager.setStreamingHeaders(response, origin, requestContext.getRequest());
 
             // Fallback: Native MJPEG URL proxy
             String mjpegUrl = nonEmpty(device.getConfig().advanced().mjpegUrl());
             if (mjpegUrl != null) {
+                sourceConfigured = true;
                 logger.info("Streaming native MJPEG for device: {}", deviceName);
-                if (proxyStream(mjpegUrl, response, deviceName, startTime)) {
+                CorsManager.setStreamingHeaders(response, origin, requestContext.getRequest());
+                int result = proxyStream(mjpegUrl, response, deviceName, startTime);
+                if (result == PROXY_STREAMED) {
                     return null;
                 }
-                logger.warn("Native MJPEG proxy failed for {}, trying snapshot polling", deviceName);
+                upstreamFailure = describeProxyFailure("MJPEG source", result);
+                logger.warn("Native MJPEG proxy failed for {} ({}), trying snapshot polling", deviceName, upstreamFailure);
             }
 
             // Fallback: ONVIF snapshot polling
@@ -149,6 +163,8 @@ public class StreamHandler extends BaseHandler {
                         response.sendError(400, "Invalid profile token format");
                         return null;
                     }
+                    response.setContentType("multipart/x-mixed-replace; boundary=" + BOUNDARY);
+                    CorsManager.setStreamingHeaders(response, origin, requestContext.getRequest());
                     streamOnvifSnapshotPolling(device, deviceName, profileToken, fps, response, startTime);
                     return null;
                 }
@@ -156,12 +172,25 @@ public class StreamHandler extends BaseHandler {
 
             // Fallback: Generic camera snapshot polling
             if (device.getCameraClient() != null) {
+                response.setContentType("multipart/x-mixed-replace; boundary=" + BOUNDARY);
+                CorsManager.setStreamingHeaders(response, origin, requestContext.getRequest());
                 streamGenericSnapshotPolling(device, deviceName, fps, response, startTime);
                 return null;
             }
 
             if (!response.isCommitted()) {
-                response.sendError(400, "No streaming source available. Configure RTSP, MJPEG, or snapshot URL.");
+                if (sourceConfigured) {
+                    // A source is configured but every attempt to pull it failed —
+                    // an upstream/camera problem (offline, wrong path/credentials),
+                    // NOT a misconfiguration of this gateway. Report it as such so the
+                    // client doesn't misread it as "nothing is set up".
+                    response.sendError(502,
+                        "Camera stream source is unavailable: " + upstreamFailure
+                        + ". Verify the camera is online and that its stream URL, path, and credentials are correct.");
+                } else {
+                    response.sendError(400,
+                        "No streaming source available. Configure an RTSP, MJPEG, or snapshot URL for this device.");
+                }
             }
 
         } catch (Exception e) {
@@ -251,8 +280,16 @@ public class StreamHandler extends BaseHandler {
             deviceName, frameCount, System.currentTimeMillis() - startTime);
     }
 
-    private boolean proxyStream(String sourceUrl, HttpServletResponse response,
-                                String deviceName, long startTime) {
+    /**
+     * Proxies an upstream stream (go2rtc MP4 or native MJPEG) to the client.
+     *
+     * @return {@link #PROXY_STREAMED} if the stream was proxied successfully,
+     *         the upstream HTTP status code if the source responded with a
+     *         non-200, or {@link #PROXY_CONNECT_ERROR} if the source could not
+     *         be reached or returned no body.
+     */
+    private int proxyStream(String sourceUrl, HttpServletResponse response,
+                            String deviceName, long startTime) {
         RequestConfig proxyConfig = RequestConfig.custom()
             .setConnectTimeout(5000)
             .setSocketTimeout(30000)
@@ -264,8 +301,10 @@ public class StreamHandler extends BaseHandler {
             try (CloseableHttpResponse upstream = proxyClient.execute(request)) {
                 int statusCode = upstream.getStatusLine().getStatusCode();
                 if (statusCode != 200) {
-                    logger.warn("Stream proxy got HTTP {} from {}", statusCode, sourceUrl);
-                    return false;
+                    // Do NOT log sourceUrl — it can embed camera credentials.
+                    logger.warn("Stream proxy got HTTP {} from upstream source for device {}",
+                        statusCode, deviceName);
+                    return statusCode;
                 }
 
                 org.apache.http.HttpEntity entity = upstream.getEntity();
@@ -277,7 +316,7 @@ public class StreamHandler extends BaseHandler {
                 }
 
                 if (entity == null) {
-                    return false;
+                    return PROXY_CONNECT_ERROR;
                 }
 
                 OutputStream output = response.getOutputStream();
@@ -295,12 +334,20 @@ public class StreamHandler extends BaseHandler {
 
                 logger.info("Stream proxy ended - device: {}, bytes: {}, duration: {} ms",
                     deviceName, totalBytes, System.currentTimeMillis() - startTime);
-                return true;
+                return PROXY_STREAMED;
             }
         } catch (IOException e) {
             logger.debug("Stream proxy failed for {}: {}", deviceName, e.getMessage());
-            return false;
+            return PROXY_CONNECT_ERROR;
         }
+    }
+
+    /** Builds a credential-safe description of a failed proxy attempt for the client/log. */
+    private static String describeProxyFailure(String sourceLabel, int result) {
+        if (result == PROXY_CONNECT_ERROR) {
+            return sourceLabel + " could not be reached";
+        }
+        return sourceLabel + " returned HTTP " + result;
     }
 
     private void writeMjpegFrame(OutputStream output, byte[] frame) throws IOException {

@@ -67,15 +67,32 @@
         }
 
         if (!response.ok) {
-            self.onError('Failed to connect: HTTP ' + response.status);
+            var detail = await response.text().catch(function () { return ''; });
+            self.onError('Failed to connect: HTTP ' + response.status
+                + (detail ? ' - ' + detail.trim() : ''));
             return;
         }
 
         await sourceOpenPromise;
 
         var contentType = (response.headers.get('Content-Type') || '').replace(/;\s*charset=[^;]*/i, '').trim();
-        var mimeCodec = contentType;
-        if (!mimeCodec || !MediaSource.isTypeSupported(mimeCodec)) {
+        var mimeCodec;
+        if (contentType && contentType.indexOf('codecs') !== -1) {
+            // The server declared the exact codec — trust it. If the browser
+            // can't decode it, falling back to a different codec would feed
+            // mismatched bytes into the SourceBuffer, so report it instead.
+            if (MediaSource.isTypeSupported(contentType)) {
+                mimeCodec = contentType;
+            } else if (/hvc1|hev1/i.test(contentType)) {
+                self.onError('This camera is streaming H.265/HEVC, which this browser cannot decode. '
+                    + 'Switch the camera to its H.264 sub-stream, or use Safari or an Edge/Chrome build with hardware HEVC support.');
+                return;
+            } else {
+                self.onError('This stream uses a codec this browser cannot play (' + contentType + ').');
+                return;
+            }
+        } else {
+            // No codec info from the server — probe known-good codecs.
             mimeCodec = FALLBACK_CODECS.find(function (c) { return MediaSource.isTypeSupported(c); });
             if (!mimeCodec) {
                 self.onError('H.264 MP4 playback is not supported in this browser.');

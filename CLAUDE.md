@@ -5,11 +5,11 @@ This file contains module-specific instructions. Shared standards are in `/modul
 ## Project Overview
 
 **Name**: Ignition Camera Driver Module
-**Version**: 3.0.1
+**Version**: 3.0.3
 **Status**: Production Ready
 **Language**: Java 17
 **Framework**: Inductive Automation Ignition SDK 8.3.0
-**Purpose**: Multi-protocol camera driver module supporting ONVIF, RTSP, MJPEG, and snapshot URL connections to IP cameras
+**Purpose**: Multi-protocol IP camera driver module exposing a single unified `Camera` device type, with per-device connection methods (RTSP, MJPEG, snapshot URLs, and ONVIF)
 
 ## Project Location
 
@@ -31,7 +31,7 @@ This file contains module-specific instructions. Shared standards are in `/modul
 ```bash
 cd /modules/ignition-module-camera-driver
 ./gradlew clean build
-# Output: build/CameraDriver-3.0.1.modl
+# Output: build/CameraDriver-3.0.3.modl
 ```
 
 ### Common Commands
@@ -45,10 +45,14 @@ cd /modules/ignition-module-camera-driver
 
 ### Module Structure
 
-The Camera Driver module provides **two device types** within a single Ignition module:
+The Camera Driver module registers a **single unified `Camera` device type** (`CameraExtensionPoint`, type id `com.gaskony.camera.Camera`). Each Camera device supports multiple connection methods, enabled per device:
 
-1. **ONVIF Camera** - For cameras supporting the ONVIF protocol
-2. **Generic Camera** - For cameras providing direct RTSP/MJPEG/snapshot URLs
+1. **RTSP** - direct video streaming (browser playback via bundled go2rtc + ffmpeg)
+2. **MJPEG** - direct HTTP MJPEG streaming
+3. **Snapshot** - HTTP JPEG snapshot capture
+4. **ONVIF** - SOAP-based discovery, media profiles, PTZ, and auto-detection of stream/snapshot URLs
+
+A hidden legacy alias type (`LegacyCameraExtensionPoint`, type id `com.onvif.driver.Camera`) exists ONLY so pre-v3.0.0 device profiles still load and remain editable. It is not a separate device type for new use.
 
 ```
 ignition-module-camera-driver/
@@ -58,22 +62,21 @@ ignition-module-camera-driver/
 ├── common/                          # Shared code (currently minimal)
 │   └── build.gradle.kts
 ├── designer/                        # Designer-side code (minimal hook)
-│   └── src/main/java/com/onvif/driver/designer/
+│   └── src/main/java/com/gaskony/camera/designer/
 │       └── DesignerHook.java
 ├── gateway/                         # Gateway-side implementation (main code)
 │   ├── build.gradle.kts
-│   └── src/main/java/com/onvif/driver/gateway/
-│       ├── ONVIFModuleHook.java                    # Module entry point
-│       ├── device/                                  # ONVIF Camera device type
-│       │   ├── ONVIFDeviceConfig.java              # Configuration record
-│       │   ├── ONVIFDeviceExtensionPoint.java      # Device type registration
-│       │   ├── ONVIFDevice.java                    # Main device implementation
-│       │   ├── ONVIFPoller.java                    # Polling mechanism
+│   └── src/main/java/com/gaskony/camera/gateway/
+│       ├── CameraModuleHook.java                   # Module entry point
+│       ├── device/                                  # Unified Camera device type
+│       │   ├── CameraConfig.java                   # Configuration record
+│       │   ├── CameraExtensionPoint.java           # Device type registration
+│       │   ├── CameraDevice.java                   # Main device implementation
+│       │   ├── LegacyCameraExtensionPoint.java     # Hidden pre-v3.0.0 alias (back-compat)
+│       │   ├── ONVIFPoller.java                    # ONVIF polling mechanism
 │       │   ├── AddressSpaceBuilder.java            # OPC-UA node builder
-│       │   └── generic/                            # Generic Camera device type
+│       │   └── generic/                            # URL-based stream/snapshot helpers
 │       │       ├── GenericCameraConfig.java
-│       │       ├── GenericCameraExtensionPoint.java
-│       │       ├── GenericCameraDevice.java
 │       │       ├── GenericCameraClient.java
 │       │       └── GenericCameraAddressSpaceBuilder.java
 │       ├── onvif/                                   # ONVIF protocol layer
@@ -85,10 +88,11 @@ ignition-module-camera-driver/
 │       │   ├── PTZStatus.java                      # PTZ status model
 │       │   └── util/XmlUtil.java                   # Secure XML parsing
 │       ├── servlet/                                 # HTTP endpoints
-│       │   └── ONVIFRoutes.java                    # Routes for all device types
+│       │   └── CameraRoutes.java                   # Shared HTTP routes
 │       ├── stream/                                  # Streaming infrastructure
 │       │   ├── Go2RtcManager.java                  # go2rtc process manager
-│       │   └── Go2RtcBinaryExtractor.java          # Binary extraction
+│       │   ├── Go2RtcBinaryExtractor.java          # go2rtc binary extraction
+│       │   └── FfmpegBinaryExtractor.java          # ffmpeg binary extraction
 │       ├── auth/                                    # Authentication
 │       │   └── AuthenticationManager.java
 │       └── util/                                    # Utilities
@@ -100,44 +104,46 @@ ignition-module-camera-driver/
 
 ### Key Components
 
-#### 1. ONVIFModuleHook (Gateway Entry Point)
+#### 1. CameraModuleHook (Gateway Entry Point)
 - Registers module with Ignition
-- Creates both device extension points (ONVIF Camera + Generic Camera)
-- Initializes go2rtc streaming manager
+- Registers the unified `Camera` extension point (plus the hidden legacy alias)
+- Initialises go2rtc + ffmpeg streaming manager
 - Registers resource bundles for i18n
 - Mounts HTTP routes and Gateway Config navigation
 
-#### 2. ONVIF Camera Device Type
-- **ONVIFDevice** - Device lifecycle, ONVIF connection, OPC-UA address space
-- **ONVIFClient** - SOAP communication, WS-UsernameToken auth, XXE-protected XML
-- **ONVIFPoller** - Periodic device polling for PTZ and status updates
-- **AddressSpaceBuilder** - OPC-UA node hierarchy from ONVIF data
+#### 2. Camera Device Type (CameraExtensionPoint / CameraDevice)
+- **CameraDevice** - Device lifecycle, connection handling, OPC-UA address space
+- **CameraConfig** - Configuration record with per-method toggles (RTSP, MJPEG, Snapshot, ONVIF)
+- **AddressSpaceBuilder** - OPC-UA node hierarchy from camera data
 
-#### 3. Generic Camera Device Type
-- **GenericCameraDevice** - Device lifecycle for URL-based cameras
-- **GenericCameraClient** - HTTP snapshot fetching
-- **Go2RtcManager** - RTSP-to-MJPEG transcoding via bundled go2rtc
+#### 3. Connection Method Layers
+- **onvif/** - ONVIF SOAP layer: `ONVIFClient` (SOAP, WS-UsernameToken auth, XXE-protected XML), `ONVIFPoller` (PTZ/status polling), data models
+- **generic/** - URL-based helpers: `GenericCameraClient` (HTTP snapshot fetching), address-space support for direct stream/snapshot URLs
+- **Go2RtcManager** - RTSP-to-browser (MP4/MJPEG) streaming via bundled go2rtc + ffmpeg
 
-#### 4. Shared HTTP Endpoints (ONVIFRoutes)
-- `/data/camera-driver/snapshot` - JPEG snapshots from any device type
-- `/data/camera-driver/stream` - MJPEG streaming from any device type
-- `/data/camera-driver/devices` - List all devices (both types)
+#### 4. Shared HTTP Endpoints (CameraRoutes)
+- `/data/camera-driver/snapshot` - JPEG snapshots
+- `/data/camera-driver/stream` - MJPEG/stream output
+- `/data/camera-driver/devices` - List all devices
 - Authentication, rate limiting, and resource protection
 
-## Device Types in Detail
+## Connection Methods in Detail
 
-### ONVIF Camera
-- Connects via ONVIF SOAP protocol
+All methods belong to the single `Camera` device type and can be enabled in any combination per device.
+
+### ONVIF
+- ONVIF SOAP protocol (Profile S/T)
 - WS-UsernameToken authentication (SHA-1 digest)
 - Service discovery, media profiles, PTZ control
+- Auto-detects RTSP/snapshot URLs for the other methods
 - Configurable SSL/TLS validation (STRICT/TRUST_FIRST_USE/INSECURE)
 - Auto-reconnect with exponential backoff
 
-### Generic Camera
-- Connects via direct URLs (RTSP, MJPEG, HTTP snapshot)
-- go2rtc integration for RTSP-to-MJPEG transcoding
+### RTSP / MJPEG / Snapshot
+- Connects via direct URLs (RTSP, MJPEG, HTTP snapshot), entered manually or auto-detected via ONVIF
+- go2rtc + ffmpeg for RTSP-to-browser streaming
 - Fallback chain: go2rtc RTSP -> native MJPEG -> snapshot polling
-- No ONVIF dependency required
+- No ONVIF required when URLs are supplied directly
 
 ## Security Architecture
 
@@ -154,7 +160,7 @@ ignition-module-camera-driver/
 - XXE protection on all XML parsing
 - XML injection prevention with proper escaping
 
-## OPC-UA Address Space (ONVIF Camera)
+## OPC-UA Address Space (Camera, ONVIF-populated nodes)
 
 ```
 [DeviceName]/
@@ -169,14 +175,14 @@ ignition-module-camera-driver/
 
 ### Bug #1: Display Names as "?...?"
 **Cause**: Resource bundle not registered with BundleUtil
-**Fix**: Register in ONVIFModuleHook.startup()
+**Fix**: Register in CameraModuleHook.startup()
 ```java
-BundleUtil.get().addBundle("ONVIFDevice", ONVIFDeviceExtensionPoint.class, "ONVIFDevice");
+BundleUtil.get().addBundle("Camera", CameraExtensionPoint.class, "Camera");
 ```
 
 ### Bug #2: Property File Location
 Properties file must be in exact package structure:
-`gateway/src/main/resources/com/onvif/driver/gateway/device/ONVIFDevice.properties`
+`gateway/src/main/resources/com/gaskony/camera/gateway/device/Camera.properties`
 
 ## Automated Test Suite
 
@@ -199,10 +205,10 @@ Properties file must be in exact package structure:
 4. Update tests if applicable
 5. Update CHANGELOG.md
 
-### Note on Package Names
-Java packages are `com.gaskony.camera.*` as of v3.0.0 (renamed from `com.onvif.driver.*`). Class names like `ONVIFDevice`, `ONVIFModuleHook`, etc. retain their original capitalisation — they describe the ONVIF protocol, not the package vendor. The module ID is `com.gaskony.camera.opcua` (was `com.onvif.driver.opcua` pre-v3.0.0). Existing device profiles must be recreated on upgrade — see `MIGRATION-v3.md`.
+### Note on Package and Class Names
+Java packages are `com.gaskony.camera.*` as of v3.0.0 (renamed from `com.onvif.driver.*`). The module entry point and shared routes are now `CameraModuleHook` and `CameraRoutes` (renamed from `ONVIFModuleHook` / `ONVIFRoutes`). Classes that genuinely implement the ONVIF protocol keep the `ONVIF` prefix — `ONVIFClient`, `ONVIFAuth`, `ONVIFService`, `ONVIFPoller`, plus the data models `DeviceInformation`, `MediaProfile`, `PTZStatus` — because they describe the protocol, not the package vendor. The module ID is `com.gaskony.camera.opcua` (was `com.onvif.driver.opcua` pre-v3.0.0). Existing pre-v3.0.0 device profiles load via the hidden legacy alias type `com.onvif.driver.Camera` — see `MIGRATION-v3.md`.
 
 ---
 
 **Last Updated**: 2026-02-11
-**Document Version**: 3.0.1
+**Document Version**: 3.0.3

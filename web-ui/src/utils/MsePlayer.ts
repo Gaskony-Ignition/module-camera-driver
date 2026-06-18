@@ -71,7 +71,8 @@ export class MsePlayer {
     }
 
     if (!response.ok) {
-      this.onError(`Failed to connect: HTTP ${response.status}`)
+      const detail = await response.text().catch(() => '')
+      this.onError(`Failed to connect: HTTP ${response.status}${detail ? ` - ${detail.trim()}` : ''}`)
       return
     }
 
@@ -81,8 +82,25 @@ export class MsePlayer {
       .replace(/;\s*charset=[^;]*/i, '')
       .trim()
 
-    let mimeCodec: string | undefined = contentType
-    if (!mimeCodec || !MediaSource.isTypeSupported(mimeCodec)) {
+    let mimeCodec: string | undefined
+    if (contentType && contentType.includes('codecs')) {
+      // The server declared the exact codec — trust it. If the browser can't
+      // decode it, falling back to a different codec would feed mismatched
+      // bytes into the SourceBuffer, so report it clearly instead.
+      if (MediaSource.isTypeSupported(contentType)) {
+        mimeCodec = contentType
+      } else if (/hvc1|hev1/i.test(contentType)) {
+        this.onError(
+          'This camera is streaming H.265/HEVC, which this browser cannot decode. ' +
+            'Switch the camera to its H.264 sub-stream, or use Safari or an Edge/Chrome build with hardware HEVC support.',
+        )
+        return
+      } else {
+        this.onError(`This stream uses a codec this browser cannot play (${contentType}).`)
+        return
+      }
+    } else {
+      // No codec info from the server — probe known-good codecs.
       mimeCodec = FALLBACK_CODECS.find((c) => MediaSource.isTypeSupported(c))
       if (!mimeCodec) {
         this.onError('H.264 MP4 playback is not supported in this browser.')

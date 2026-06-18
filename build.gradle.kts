@@ -13,7 +13,7 @@ configure<org.owasp.dependencycheck.gradle.extension.DependencyCheckExtension> {
     analyzers.assemblyEnabled = false
 }
 
-version = "3.0.1"
+version = "3.0.3"
 group = "com.gaskony"
 
 allprojects {
@@ -37,7 +37,7 @@ ignitionModule {
     ))
 
     hooks.putAll(mapOf(
-        "com.gaskony.camera.gateway.ONVIFModuleHook" to "G",
+        "com.gaskony.camera.gateway.CameraModuleHook" to "G",
         "com.gaskony.camera.designer.DesignerHook" to "D"
     ))
 

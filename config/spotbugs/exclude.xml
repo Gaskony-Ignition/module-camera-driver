@@ -27,7 +27,7 @@
         a defensive copy is not appropriate here.
     -->
     <Match>
-        <Class name="com.gaskony.camera.gateway.servlet.ONVIFRoutes" />
+        <Class name="com.gaskony.camera.gateway.servlet.CameraRoutes" />
         <Method name="getAuthenticationManager" />
         <Bug pattern="EI_EXPOSE_REP" />
     </Match>
@@ -37,7 +37,7 @@
         module lifecycle methods must not propagate unexpected exceptions.
     -->
     <Match>
-        <Class name="com.gaskony.camera.gateway.ONVIFModuleHook" />
+        <Class name="com.gaskony.camera.gateway.CameraModuleHook" />
         <Method name="loadModuleVersion" />
         <Bug pattern="REC_CATCH_EXCEPTION" />
     </Match>
