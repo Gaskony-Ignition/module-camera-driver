@@ -38,7 +38,7 @@ function StatusBar({ health }: StatusBarProps) {
           </div>
           <span className="gsb-value">{cpuPct.toFixed(0)}%</span>
         </div>
-        <div className="gsb-metric" title={`RAM: ${ramMb} MB (${ramPct.toFixed(1)}%)`}>
+        <div className="gsb-metric" title={`JVM heap: ${ramMb} MB (${ramPct.toFixed(1)}% of max heap)`}>
           <MemoryStick size={11} />
           <div className="gsb-bar">
             <div
@@ -46,7 +46,7 @@ function StatusBar({ health }: StatusBarProps) {
               style={{ width: `${Math.min(ramPct, 100)}%`, background: getUsageColour(ramPct) }}
             />
           </div>
-          <span className="gsb-value">{ramMb} MB</span>
+          <span className="gsb-value">{ramMb} MB heap</span>
         </div>
       </div>
       <div className="global-status-bar-right">

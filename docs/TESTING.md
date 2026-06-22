@@ -11,7 +11,7 @@ The Camera Driver module is production-ready with comprehensive authentication, 
 - **WS-UsernameToken Authentication** - Secure digest-based authentication
 - **Configurable SSL Validation** - STRICT, TRUST_FIRST_USE, or INSECURE modes
 - **Authenticated HTTP Endpoints** - Session auth, Basic Auth, and API key support
-- **Per-IP Rate Limiting** - 10 requests/minute per IP (DoS protection)
+- **Per-IP Rate Limiting** - 600 requests/minute per IP (DoS protection)
 - **GetDeviceInformation** - Retrieves manufacturer, model, firmware, serial number
 - **GetServices** - Discovers available ONVIF services
 - **GetMediaProfiles** - Retrieves media stream profiles

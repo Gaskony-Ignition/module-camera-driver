@@ -30,6 +30,24 @@ declare module '@inductiveautomation/perspective-client' {
         height: number;
     }
 
+    // Opaque Ignition MobX component store handed to a ComponentStoreDelegate.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    export type ComponentStore = any;
+
+    /**
+     * Base class for a component's client-side delegate. It exchanges events with the
+     * component's gateway-side ComponentModelDelegate over the authenticated Perspective
+     * channel: fireEvent() reaches the gateway delegate's handleEvent(EventFiredMsg), and
+     * the gateway delegate's fireEvent() reaches this delegate's handleEvent().
+     */
+    export abstract class ComponentStoreDelegate {
+        constructor(componentStore: ComponentStore);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        fireEvent(eventName: string, eventObject: Record<string, any>): void;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        abstract handleEvent(eventName: string, eventObject: Record<string, any>): void;
+    }
+
     export interface ComponentMeta {
         getComponentType(): string;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -39,6 +57,9 @@ declare module '@inductiveautomation/perspective-client' {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         // Ignition SDK declares this as any; implementations may return a typed object (assignable to any)
         getPropsReducer(tree: PropertyTree): any;
+        // Optional: create the client-side delegate that talks to the gateway ComponentModelDelegate.
+        // The framework looks for exactly this name: p.createDelegate(this)
+        createDelegate?(componentStore: ComponentStore): ComponentStoreDelegate;
     }
 
     export namespace ComponentRegistry {

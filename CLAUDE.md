@@ -5,7 +5,7 @@ This file contains module-specific instructions. Shared standards are in `/modul
 ## Project Overview
 
 **Name**: Ignition Camera Driver Module
-**Version**: 3.0.3
+**Version**: 3.0.7
 **Status**: Production Ready
 **Language**: Java 17
 **Framework**: Inductive Automation Ignition SDK 8.3.0
@@ -31,7 +31,7 @@ This file contains module-specific instructions. Shared standards are in `/modul
 ```bash
 cd /modules/ignition-module-camera-driver
 ./gradlew clean build
-# Output: build/CameraDriver-3.0.3.modl
+# Output: build/CameraDriver-3.0.7.modl
 ```
 
 ### Common Commands
@@ -153,7 +153,7 @@ All methods belong to the single `Camera` device type and can be enabled in any 
 3. **API Key Authentication** - SHA-256 hashed keys
 
 ### Per-IP Rate Limiting
-- 10 requests/minute per IP
+- 600 requests/minute per IP (deliberately high to support Perspective polling many cameras)
 - Proxy-aware (X-Forwarded-For, X-Real-IP)
 
 ### XML Security
@@ -211,4 +211,4 @@ Java packages are `com.gaskony.camera.*` as of v3.0.0 (renamed from `com.onvif.d
 ---
 
 **Last Updated**: 2026-02-11
-**Document Version**: 3.0.3
+**Document Version**: 3.0.7

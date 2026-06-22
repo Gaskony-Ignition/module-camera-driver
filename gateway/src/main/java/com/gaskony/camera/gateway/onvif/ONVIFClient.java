@@ -2,6 +2,7 @@ package com.gaskony.camera.gateway.onvif;
 
 import com.gaskony.camera.gateway.device.CameraConfig.SslValidationMode;
 import com.gaskony.camera.gateway.onvif.util.XmlUtil;
+import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.auth.AuthScope;
@@ -439,30 +440,48 @@ public class ONVIFClient implements Closeable {
      * @throws IOException if communication fails
      */
     private String sendSoapRequest(String url, String soapRequest) throws IOException {
-        HttpPost post = new HttpPost(url);
-        post.setHeader("Content-Type", "application/soap+xml; charset=utf-8");
-        post.setEntity(new StringEntity(soapRequest, StandardCharsets.UTF_8));
+        // Apache HttpClient 4 does not follow redirects for POST automatically.
+        // ONVIF cameras sometimes redirect HTTP→HTTPS (302) or change paths, so we handle
+        // 3xx responses manually and re-POST to the Location URL (up to 3 hops).
+        String currentUrl = url;
+        for (int redirects = 0; redirects <= 3; redirects++) {
+            HttpPost post = new HttpPost(currentUrl);
+            post.setHeader("Content-Type", "application/soap+xml; charset=utf-8");
+            post.setEntity(new StringEntity(soapRequest, StandardCharsets.UTF_8));
 
-        try {
-            HttpResponse response = httpClient.execute(post);
-            HttpEntity entity = response.getEntity();
-
-            if (entity != null) {
-                String responseBody = EntityUtils.toString(entity);
+            try {
+                HttpResponse response = httpClient.execute(post);
                 int statusCode = response.getStatusLine().getStatusCode();
 
-                if (statusCode != 200) {
-                    throw new IOException("SOAP request failed with status " + statusCode + ": " + responseBody);
+                if (statusCode >= 300 && statusCode < 400) {
+                    Header location = response.getFirstHeader("Location");
+                    EntityUtils.consume(response.getEntity());
+                    if (location == null) {
+                        throw new IOException("SOAP redirect (HTTP " + statusCode
+                            + ") with no Location header from: " + currentUrl);
+                    }
+                    String redirectUrl = location.getValue();
+                    logger.debug("ONVIF SOAP redirect (HTTP {}) {} -> {}", statusCode, currentUrl, redirectUrl);
+                    currentUrl = redirectUrl;
+                    continue;
                 }
 
-                return responseBody;
-            } else {
-                throw new IOException("Empty response from ONVIF device");
+                HttpEntity entity = response.getEntity();
+                if (entity != null) {
+                    String responseBody = EntityUtils.toString(entity);
+                    if (statusCode != 200) {
+                        throw new IOException("SOAP request failed with status " + statusCode + ": " + responseBody);
+                    }
+                    return responseBody;
+                } else {
+                    throw new IOException("Empty response from ONVIF device");
+                }
+            } catch (IOException e) {
+                logger.error("Failed to send SOAP request to {}", currentUrl, e);
+                throw e;
             }
-        } catch (IOException e) {
-            logger.error("Failed to send SOAP request to {}", url, e);
-            throw e;
         }
+        throw new IOException("Too many SOAP redirects from: " + url);
     }
 
     /**

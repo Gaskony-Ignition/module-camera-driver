@@ -141,6 +141,12 @@ public class CameraRoutes {
             .accessControl(AccessControlStrategy.OPEN_ROUTE)
             .mount();
 
+        routes.newRoute(CameraDriverPaths.ROUTE_METRICS)
+            .handler(diagnosticsHandler::handleMetrics)
+            .type(RouteGroup.TYPE_JSON)
+            .accessControl(AccessControlStrategy.OPEN_ROUTE)
+            .mount();
+
         logger.info("Camera driver routes mounted under /data/{}", CameraDriverPaths.MOUNT_ALIAS);
     }
 

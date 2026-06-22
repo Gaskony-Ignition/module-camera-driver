@@ -116,6 +116,17 @@ public class AuthenticationManager {
             logger.trace("HTTP session check failed: {}", t.getMessage());
         }
 
+        // Method 1c: Short-lived Perspective session token (see SessionTokenStore).
+        //
+        // This is the secure replacement for the removed "any active Perspective session"
+        // heuristic. The token is issued ONLY inside an authenticated, live Perspective
+        // session by the camera component's gateway-side delegate, so presenting an unexpired
+        // token is itself proof the caller is a rendered camera component in a real session.
+        if (SessionTokenStore.isValid(request)) {
+            logger.debug("Request authenticated via Perspective session token");
+            return true;
+        }
+
         // Method 2: Check for API key
         if (isApiKeyValid(request)) {
             return true;

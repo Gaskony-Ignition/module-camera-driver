@@ -15,6 +15,7 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.ThreadMXBean;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Handles health check, diagnostics, and auth-status endpoints.
@@ -50,8 +51,8 @@ public class DiagnosticsHandler extends BaseHandler {
             if (d.isOnvifAvailable()) onvifCount++;
         }
         result.put("runningCount", runningCount);
-        result.put("onvifCount", onvifCount);
-        result.put("genericCount", allDevices.size() - onvifCount);
+        result.put("onvifDeviceCount", onvifCount);
+        result.put("genericCameraCount", allDevices.size() - onvifCount);
 
         result.put("activeSnapshots", SnapshotHandler.getActiveSnapshots());
         result.put("maxSnapshots", SnapshotHandler.getMaxConcurrentSnapshots());
@@ -59,21 +60,28 @@ public class DiagnosticsHandler extends BaseHandler {
         result.put("maxStreams", StreamHandler.getMaxConcurrentStreams());
         result.put("go2rtcAvailable", go2RtcManager != null && go2RtcManager.isAvailable());
 
+        // CPU: system-wide load (what the machine is doing overall)
         try {
             java.lang.management.OperatingSystemMXBean osBean = ManagementFactory.getOperatingSystemMXBean();
             if (osBean instanceof com.sun.management.OperatingSystemMXBean) {
                 com.sun.management.OperatingSystemMXBean sunBean = (com.sun.management.OperatingSystemMXBean) osBean;
                 double cpuLoad = sunBean.getCpuLoad();
                 result.put("cpuPercent", cpuLoad >= 0 ? Math.round(cpuLoad * 100) : -1);
-                long totalMem = sunBean.getTotalMemorySize();
-                long freeMem = sunBean.getFreeMemorySize();
-                long usedMem = totalMem - freeMem;
-                result.put("ramUsedMb", usedMem / (1024 * 1024));
-                result.put("ramTotalMb", totalMem / (1024 * 1024));
-                result.put("ramPercent", totalMem > 0 ? Math.round((double) usedMem / totalMem * 100) : -1);
             }
         } catch (Exception e) {
-            logger.debug("Could not read CPU/RAM stats: {}", e.getMessage());
+            logger.debug("Could not read CPU stats: {}", e.getMessage());
+        }
+
+        // RAM: JVM heap (what this process actually allocates — system RAM is not actionable here)
+        try {
+            MemoryMXBean memBean = ManagementFactory.getMemoryMXBean();
+            long heapUsed = memBean.getHeapMemoryUsage().getUsed();
+            long heapMax = memBean.getHeapMemoryUsage().getMax();
+            result.put("ramUsedMb", heapUsed / (1024 * 1024));
+            result.put("ramTotalMb", heapMax > 0 ? heapMax / (1024 * 1024) : -1);
+            result.put("ramPercent", heapMax > 0 ? Math.round((double) heapUsed / heapMax * 100) : -1);
+        } catch (Exception e) {
+            logger.debug("Could not read heap stats: {}", e.getMessage());
         }
 
         result.put("timestamp", System.currentTimeMillis());
@@ -158,6 +166,110 @@ public class DiagnosticsHandler extends BaseHandler {
         }
         response.setContentType("application/json");
         response.getWriter().write(result.toString());
+        return null;
+    }
+
+    /**
+     * GET /data/camera-driver/metrics
+     *
+     * Returns per-camera resource metrics (go2rtc viewers, bitrate, snapshot latency)
+     * and module-level memory (JVM heap + go2rtc process RSS). Inspired by Frigate's
+     * per-camera stats view. Auth required.
+     */
+    public Object handleMetrics(RequestContext requestContext, HttpServletResponse response) throws Exception {
+        if (!requireAuthenticated(requestContext, response)) {
+            return null;
+        }
+
+        try {
+            JSONObject result = new JSONObject();
+
+            // ── JVM heap ─────────────────────────────────────────────────────────
+            JSONObject jvm = new JSONObject();
+            MemoryMXBean memBean = ManagementFactory.getMemoryMXBean();
+            long heapUsed = memBean.getHeapMemoryUsage().getUsed();
+            long heapMax  = memBean.getHeapMemoryUsage().getMax();
+            jvm.put("heapUsedMb",  heapUsed / (1024 * 1024));
+            jvm.put("heapMaxMb",   heapMax > 0 ? heapMax / (1024 * 1024) : -1);
+            jvm.put("heapPercent", heapMax > 0 ? Math.round((double) heapUsed / heapMax * 100) : -1);
+            result.put("jvm", jvm);
+
+            // ── go2rtc process memory ─────────────────────────────────────────────
+            JSONObject go2rtcInfo = new JSONObject();
+            long go2rtcRssKb = 0;
+            boolean go2rtcAlive = false;
+            if (go2RtcManager != null) {
+                JSONObject procInfo = go2RtcManager.getProcessInfo();
+                go2rtcAlive = procInfo.optBoolean("alive", false);
+                go2rtcRssKb = procInfo.optLong("vmRssKb", 0);
+            }
+            go2rtcInfo.put("alive", go2rtcAlive);
+            go2rtcInfo.put("processMemoryMb", go2rtcRssKb / 1024);
+            go2rtcInfo.put("processMemoryKb", go2rtcRssKb);
+            result.put("go2rtc", go2rtcInfo);
+
+            // ── Per-camera stats ──────────────────────────────────────────────────
+            // go2rtc stream data indexed by camera name
+            java.util.Map<String, org.json.JSONObject> streamsByName =
+                (go2RtcManager != null) ? go2RtcManager.getStreamsByName() : new java.util.HashMap<>();
+
+            // Snapshot tracking from SnapshotHandler
+            Set<String> trackedDevices = SnapshotHandler.getTrackedDevices();
+
+            // Union of all known device names
+            Map<String, CameraDevice> allDevices = CameraExtensionPoint.getAllDevices();
+            java.util.Set<String> allNames = new java.util.HashSet<>();
+            allNames.addAll(allDevices.keySet());
+            allNames.addAll(streamsByName.keySet());
+            allNames.addAll(trackedDevices);
+
+            JSONObject cameras = new JSONObject();
+            for (String name : allNames) {
+                JSONObject cam = new JSONObject();
+
+                // go2rtc stream metrics
+                org.json.JSONObject stream = streamsByName.get(name);
+                if (stream != null) {
+                    cam.put("go2rtcConsumers",    stream.optInt("consumers", 0));
+                    cam.put("go2rtcBitrateKbps",  stream.optLong("bitrateKbps", 0));
+                    cam.put("go2rtcProducerState", stream.opt("producerState"));
+                    Object tracks = stream.opt("producerTracks");
+                    cam.put("go2rtcProducerTracks", tracks != null ? tracks : new org.json.JSONArray());
+                } else {
+                    cam.put("go2rtcConsumers", 0);
+                    cam.put("go2rtcBitrateKbps", 0);
+                    cam.put("go2rtcProducerState", JSONObject.NULL);
+                    cam.put("go2rtcProducerTracks", new org.json.JSONArray());
+                }
+
+                // Snapshot metrics
+                Map<String, Object> snapMetrics = SnapshotHandler.getDeviceMetrics(name);
+                cam.put("snapshotLastDurationMs",  snapMetrics.get("lastFetchDurationMs"));
+                cam.put("snapshotLastTimestampMs", snapMetrics.get("lastFetchTimestampMs"));
+                cam.put("snapshotTotalFetches",    snapMetrics.get("totalFetches"));
+                cam.put("snapshotErrors",          snapMetrics.get("fetchErrors"));
+
+                // Device status
+                CameraDevice device = allDevices.get(name);
+                if (device != null) {
+                    cam.put("status", device.getStatus());
+                    cam.put("onvifAvailable", device.isOnvifAvailable());
+                    cam.put("go2rtcRegistered", device.isGo2RtcStreamRegistered());
+                }
+
+                cameras.put(name, cam);
+            }
+            result.put("cameras", cameras);
+            result.put("timestamp", System.currentTimeMillis());
+
+            response.setContentType("application/json");
+            response.getWriter().write(result.toString());
+
+        } catch (Exception e) {
+            logger.error("Error generating metrics", e);
+            response.sendError(500, "Internal server error");
+        }
+
         return null;
     }
 }

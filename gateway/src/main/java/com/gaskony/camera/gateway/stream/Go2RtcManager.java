@@ -623,6 +623,28 @@ public class Go2RtcManager {
     }
 
     /**
+     * Returns go2rtc stream statistics indexed by stream name, for per-camera metrics lookup.
+     * Delegates to getStreamInfo() and re-indexes the streams array by name.
+     */
+    public java.util.Map<String, JSONObject> getStreamsByName() {
+        java.util.Map<String, JSONObject> result = new java.util.HashMap<>();
+        JSONObject info = getStreamInfo();
+        if (!info.has("streams")) return result;
+        Object streamsObj = info.opt("streams");
+        if (!(streamsObj instanceof org.json.JSONArray)) return result;
+        org.json.JSONArray streams = (org.json.JSONArray) streamsObj;
+        for (int i = 0; i < streams.length(); i++) {
+            Object item = streams.opt(i);
+            if (item instanceof JSONObject) {
+                JSONObject s = (JSONObject) item;
+                String name = s.optString("name", null);
+                if (name != null) result.put(name, s);
+            }
+        }
+        return result;
+    }
+
+    /**
      * Gracefully stops the go2rtc process.
      */
     public synchronized void stop() {

@@ -10,13 +10,16 @@ import com.inductiveautomation.ignition.gateway.opcua.server.api.DeviceExtension
 import com.inductiveautomation.ignition.gateway.web.systemjs.SystemJsModule;
 import com.gaskony.camera.common.CameraComponents;
 import com.gaskony.camera.common.CameraDriverPaths;
+import com.gaskony.camera.gateway.auth.SessionTokenStore;
 import com.gaskony.camera.gateway.device.CameraExtensionPoint;
 import com.gaskony.camera.gateway.device.LegacyCameraExtensionPoint;
+import com.gaskony.camera.gateway.perspective.CameraComponentDelegate;
 import com.gaskony.camera.gateway.servlet.CameraRoutes;
 import com.gaskony.camera.gateway.servlet.RateLimiter;
 import com.gaskony.camera.gateway.servlet.handlers.SnapshotHandler;
 import com.gaskony.camera.gateway.servlet.handlers.StreamHandler;
 import com.gaskony.camera.gateway.stream.Go2RtcManager;
+import com.inductiveautomation.perspective.gateway.api.ComponentModelDelegateRegistry;
 import com.inductiveautomation.perspective.gateway.api.PerspectiveContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -129,7 +132,15 @@ public class CameraModuleHook extends AbstractDeviceModuleHook {
             PerspectiveContext perspectiveContext = PerspectiveContext.get(context);
             perspectiveContext.getComponentRegistry().registerComponent(CameraComponents.VIEWER_DESCRIPTOR);
             perspectiveContext.getComponentRegistry().registerComponent(CameraComponents.GRID_DESCRIPTOR);
-            logger.info("Registered Perspective components: Camera Viewer, Camera Grid");
+
+            // Register the gateway-side delegate that hands each rendered camera component a
+            // short-lived auth token, so Perspective views can reach /data/camera-driver/*
+            // without an API key. See CameraComponentDelegate / SessionTokenStore.
+            ComponentModelDelegateRegistry delegateRegistry = ComponentModelDelegateRegistry.get(context);
+            delegateRegistry.register(CameraComponents.VIEWER_ID, CameraComponentDelegate::new);
+            delegateRegistry.register(CameraComponents.GRID_ID, CameraComponentDelegate::new);
+
+            logger.info("Registered Perspective components and auth delegates: Camera Viewer, Camera Grid");
         } catch (Throwable t) {
             logger.debug("Perspective component registration skipped: {}", t.getMessage());
         }
@@ -184,16 +195,21 @@ public class CameraModuleHook extends AbstractDeviceModuleHook {
     public void shutdown() {
         logger.info("Camera Driver module shutting down...");
 
-        // Unregister Perspective components
+        // Unregister Perspective components and their auth delegates
         try {
             PerspectiveContext perspectiveContext = PerspectiveContext.get(context);
             perspectiveContext.getComponentRegistry().removeComponent(CameraComponents.VIEWER_ID);
             perspectiveContext.getComponentRegistry().removeComponent(CameraComponents.GRID_ID);
+
+            ComponentModelDelegateRegistry delegateRegistry = ComponentModelDelegateRegistry.get(context);
+            delegateRegistry.remove(CameraComponents.VIEWER_ID);
+            delegateRegistry.remove(CameraComponents.GRID_ID);
         } catch (Throwable t) {
             logger.debug("Perspective cleanup skipped: {}", t.getMessage());
         }
 
         RateLimiter.reset();
+        SessionTokenStore.reset();
 
         try {
             CameraRoutes.shutdown();

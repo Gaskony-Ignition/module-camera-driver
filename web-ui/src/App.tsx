@@ -1,8 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { Camera } from 'lucide-react'
 import { API_ENDPOINTS } from './constants/api'
+import { API } from './api/paths'
 import { apiFetch } from './utils/apiClient'
-import type { HealthData } from './types/device'
+import type { HealthData, MetricsData } from './types/device'
 import Sidebar from './components/Sidebar'
 import StatusBar from './components/StatusBar'
 import DashboardView from './components/DashboardView'
@@ -19,11 +20,13 @@ const STORAGE_KEY = 'camera-driver-active-view'
 function App() {
   const [status, setStatus] = useState<ConnectionStatus>('connecting')
   const [health, setHealth] = useState<HealthData | null>(null)
+  const [metrics, setMetrics] = useState<MetricsData | null>(null)
   const [activeView, setActiveView] = useState<string>(() => {
     const stored = localStorage.getItem(STORAGE_KEY) || 'dashboard'
     return stored === 'logs' ? 'diagnostics' : stored
   })
   const healthTimerRef = useRef<number | null>(null)
+  const metricsTimerRef = useRef<number | null>(null)
   const attemptsRef = useRef(0)
   const intervalRef = useRef(5000)
 
@@ -55,14 +58,27 @@ function App() {
     healthTimerRef.current = window.setTimeout(checkHealth, intervalRef.current)
   }, [])
 
+  const fetchMetrics = useCallback(async () => {
+    try {
+      const res = await apiFetch(API.metrics)
+      if (res.ok) {
+        const data: MetricsData = await res.json()
+        setMetrics(data)
+      }
+    } catch {
+      // metrics are non-critical — ignore errors
+    }
+    metricsTimerRef.current = window.setTimeout(fetchMetrics, 10000)
+  }, [])
+
   useEffect(() => {
     checkHealth()
+    fetchMetrics()
     return () => {
-      if (healthTimerRef.current) {
-        window.clearTimeout(healthTimerRef.current)
-      }
+      if (healthTimerRef.current) window.clearTimeout(healthTimerRef.current)
+      if (metricsTimerRef.current) window.clearTimeout(metricsTimerRef.current)
     }
-  }, [checkHealth])
+  }, [checkHealth, fetchMetrics])
 
   const handleViewChange = useCallback((view: string) => {
     setActiveView(view)
@@ -102,7 +118,7 @@ function App() {
       case 'diagnostics':
         return <DiagnosticsView />
       default:
-        return <DashboardView health={health} onViewChange={handleViewChange} />
+        return <DashboardView health={health} metrics={metrics} onViewChange={handleViewChange} />
     }
   }
 

@@ -40,4 +40,6 @@ export const API = {
     /** PTZ status — GET current position and move status. */
     ptzStatus: (device: string) =>
         `${DATA_BASE}/ptz/status?device=${encodeURIComponent(device)}`,
+    /** Per-camera resource metrics: go2rtc viewers/bitrate, snapshot latency, JVM heap, go2rtc RSS. */
+    metrics: `${DATA_BASE}/metrics`,
 } as const;

@@ -36,6 +36,8 @@ public final class CameraDriverPaths {
     public static final String ROUTE_PTZ_STOP          = "/ptz/stop";
     public static final String ROUTE_PTZ_STATUS        = "/ptz/status";
 
+    public static final String ROUTE_METRICS           = "/metrics";
+
     private CameraDriverPaths() {
         throw new UnsupportedOperationException("CameraDriverPaths is a constants class");
     }

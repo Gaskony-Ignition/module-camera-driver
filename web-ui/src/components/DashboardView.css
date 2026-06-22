@@ -67,3 +67,170 @@
   gap: var(--spacing-sm);
   flex-wrap: wrap;
 }
+
+/* Memory summary strip */
+.app-wrapper .dashboard-mem-strip {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  padding: 8px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  margin-bottom: 20px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+
+.app-wrapper .dashboard-mem-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.app-wrapper .dashboard-mem-bar {
+  display: inline-block;
+  width: 56px;
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.app-wrapper .dashboard-mem-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  transition: width var(--transition-normal);
+}
+
+/* Per-camera metrics section */
+.app-wrapper .dashboard-cam-metrics {
+  margin-bottom: 20px;
+}
+
+.app-wrapper .dashboard-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+
+.app-wrapper .cam-metrics-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+}
+
+.app-wrapper .cam-metrics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  background: var(--bg-secondary);
+}
+
+.app-wrapper .cam-metrics-table thead th {
+  padding: 7px 12px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-default);
+  white-space: nowrap;
+  background: var(--bg-tertiary);
+}
+
+.app-wrapper .cam-metrics-table thead th svg {
+  display: inline;
+  vertical-align: middle;
+  margin-right: 3px;
+}
+
+.app-wrapper .cam-metrics-row td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.app-wrapper .cam-metrics-row:last-child td {
+  border-bottom: none;
+}
+
+.app-wrapper .cam-metrics-row:hover td {
+  background: var(--bg-hover);
+}
+
+.app-wrapper .cam-metrics-name {
+  color: var(--text-primary) !important;
+  font-weight: 600;
+  font-family: var(--font-sans) !important;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-wrapper .cam-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.app-wrapper .cam-status-dot.active  { background: var(--success); }
+.app-wrapper .cam-status-dot.inactive { background: var(--text-tertiary); }
+
+.app-wrapper .cam-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+}
+
+.app-wrapper .cam-tag.active {
+  background: rgba(166, 227, 161, 0.15);
+  color: var(--success);
+}
+
+.app-wrapper .cam-tracks {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.app-wrapper .cam-track-badge {
+  padding: 1px 5px;
+  background: var(--accent-primary-bg);
+  color: var(--accent-primary);
+  border-radius: 3px;
+  font-size: 10px;
+}
+
+.app-wrapper .cam-muted {
+  color: var(--text-tertiary);
+}
+
+.app-wrapper .cam-error-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--error);
+  font-weight: 600;
+}
+
+.app-wrapper .cam-ok-icon {
+  color: var(--success);
+}

@@ -119,6 +119,43 @@ export interface LogsResponse {
   entries: LogEntry[]
 }
 
+/** Per-camera resource metrics from GET /data/camera-driver/metrics. */
+export interface CameraMetrics {
+  go2rtcConsumers: number
+  go2rtcBitrateKbps: number
+  go2rtcProducerState: string | null
+  go2rtcProducerTracks: string[]
+  go2rtcRegistered: boolean
+  snapshotLastDurationMs: number   // -1 if never fetched
+  snapshotLastTimestampMs: number  // -1 if never fetched
+  snapshotTotalFetches: number
+  snapshotErrors: number
+  status?: string
+  onvifAvailable?: boolean
+}
+
+/** JVM heap sub-section of MetricsData. */
+export interface JvmMetrics {
+  heapUsedMb: number
+  heapMaxMb: number
+  heapPercent: number
+}
+
+/** go2rtc process metrics sub-section of MetricsData. */
+export interface Go2RtcMetrics {
+  alive: boolean
+  processMemoryMb: number
+  processMemoryKb: number
+}
+
+/** Response from GET /data/camera-driver/metrics. */
+export interface MetricsData {
+  jvm: JvmMetrics
+  go2rtc: Go2RtcMetrics
+  cameras: Record<string, CameraMetrics>
+  timestamp: number
+}
+
 /** A named camera grid group (stored in localStorage). */
 export interface GridGroup {
   name: string

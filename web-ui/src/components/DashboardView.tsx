@@ -1,13 +1,15 @@
 import {
-  Camera, Activity, Video, Wifi, RefreshCw, Eye, Grid2x2
+  Camera, Activity, Video, Wifi, RefreshCw, Eye, Grid2x2,
+  Users, Radio, Clock, AlertCircle, CheckCircle2, MemoryStick
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import PageHeader from './PageHeader'
-import type { HealthData } from '../types/device'
+import type { HealthData, MetricsData, CameraMetrics } from '../types/device'
 import './DashboardView.css'
 
 interface DashboardViewProps {
   health: HealthData | null
+  metrics: MetricsData | null
   onViewChange: (view: string) => void
 }
 
@@ -19,7 +21,62 @@ interface StatCard {
   valueColour?: string
 }
 
-function DashboardView({ health, onViewChange }: DashboardViewProps) {
+function formatBitrate(kbps: number): string {
+  if (kbps <= 0) return '—'
+  if (kbps >= 1000) return `${(kbps / 1000).toFixed(1)} Mbps`
+  return `${kbps} kbps`
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 0) return '—'
+  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`
+  return `${ms}ms`
+}
+
+function formatAge(tsMs: number): string {
+  if (tsMs < 0) return '—'
+  const ageS = Math.round((Date.now() - tsMs) / 1000)
+  if (ageS < 60) return `${ageS}s ago`
+  return `${Math.round(ageS / 60)}m ago`
+}
+
+function CameraMetricsRow({ name, cam }: { name: string; cam: CameraMetrics }) {
+  const isStreaming = cam.go2rtcConsumers > 0
+  const hasErrors = cam.snapshotErrors > 0
+  const tracks = Array.isArray(cam.go2rtcProducerTracks) ? cam.go2rtcProducerTracks : []
+
+  return (
+    <tr className="cam-metrics-row">
+      <td className="cam-metrics-name">
+        <span className={`cam-status-dot ${cam.go2rtcRegistered ? 'active' : 'inactive'}`} />
+        {name}
+      </td>
+      <td>
+        <span className={`cam-tag ${isStreaming ? 'active' : ''}`}>
+          <Users size={10} />
+          {cam.go2rtcConsumers}
+        </span>
+      </td>
+      <td>{formatBitrate(cam.go2rtcBitrateKbps)}</td>
+      <td className="cam-tracks">
+        {tracks.length > 0
+          ? tracks.map((t, i) => <span key={i} className="cam-track-badge">{t}</span>)
+          : <span className="cam-muted">—</span>
+        }
+      </td>
+      <td>{formatDuration(cam.snapshotLastDurationMs)}</td>
+      <td className="cam-muted">{formatAge(cam.snapshotLastTimestampMs)}</td>
+      <td>
+        {hasErrors
+          ? <span className="cam-error-badge"><AlertCircle size={11} />{cam.snapshotErrors}</span>
+          : <CheckCircle2 size={12} className="cam-ok-icon" />
+        }
+      </td>
+    </tr>
+  )
+}
+
+function DashboardView({ health, metrics, onViewChange }: DashboardViewProps) {
   const loading = health === null
 
   const statCards: StatCard[] = loading
@@ -57,6 +114,10 @@ function DashboardView({ health, onViewChange }: DashboardViewProps) {
         },
       ]
 
+  const cameraNames = metrics ? Object.keys(metrics.cameras).sort() : []
+  const jvm = metrics?.jvm
+  const go2rtcMem = metrics?.go2rtc
+
   return (
     <div className="dashboard-view">
       <PageHeader
@@ -86,6 +147,61 @@ function DashboardView({ health, onViewChange }: DashboardViewProps) {
           )
         })}
       </div>
+
+      {/* Memory summary strip */}
+      {(jvm || go2rtcMem) && (
+        <div className="dashboard-mem-strip">
+          {jvm && (
+            <span className="dashboard-mem-item" title={`JVM heap: ${jvm.heapUsedMb} MB / ${jvm.heapMaxMb} MB`}>
+              <MemoryStick size={12} />
+              JVM heap {jvm.heapUsedMb} MB
+              <span className="dashboard-mem-bar">
+                <span
+                  className="dashboard-mem-bar-fill"
+                  style={{
+                    width: `${Math.min(jvm.heapPercent, 100)}%`,
+                    background: jvm.heapPercent > 75 ? 'var(--error)' : jvm.heapPercent > 50 ? 'var(--warning)' : 'var(--success)',
+                  }}
+                />
+              </span>
+              {jvm.heapPercent}%
+            </span>
+          )}
+          {go2rtcMem && go2rtcMem.alive && (
+            <span className="dashboard-mem-item" title="go2rtc process RSS memory">
+              <Radio size={12} />
+              go2rtc {go2rtcMem.processMemoryMb} MB RSS
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Per-camera metrics — Frigate-style */}
+      {cameraNames.length > 0 && (
+        <div className="dashboard-cam-metrics">
+          <div className="dashboard-section-title">Camera Resources</div>
+          <div className="cam-metrics-table-wrap">
+            <table className="cam-metrics-table">
+              <thead>
+                <tr>
+                  <th>Camera</th>
+                  <th><Users size={11} /> Viewers</th>
+                  <th><Radio size={11} /> Bitrate</th>
+                  <th>Tracks</th>
+                  <th><Clock size={11} /> Snap latency</th>
+                  <th>Last snap</th>
+                  <th>Errors</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cameraNames.map(name => (
+                  <CameraMetricsRow key={name} name={name} cam={metrics!.cameras[name]} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="dashboard-quick-actions">
         <button className="btn btn-ghost" onClick={() => onViewChange('dashboard')}>

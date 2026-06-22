@@ -1,8 +1,16 @@
 import React, { useRef } from 'react';
-import { ComponentProps, ComponentMeta, PropertyTree, SizeObject } from '@inductiveautomation/perspective-client';
+import {
+    ComponentProps,
+    ComponentMeta,
+    ComponentStore,
+    ComponentStoreDelegate,
+    PropertyTree,
+    SizeObject,
+} from '@inductiveautomation/perspective-client';
 import { useCameraStream, saveSnapshot } from './CameraViewer';
 import { StreamMode } from '../types';
 import { CAMERA_THEME } from '../theme';
+import { CameraAuthDelegate } from '../cameraAuth';
 
 export const CAMERA_GRID_TYPE = 'cam.display.camera-grid';
 
@@ -244,5 +252,9 @@ export class CameraGridMeta implements ComponentMeta {
             showSaveButtons: tree.readBoolean('showSaveButtons', true),
             gap: tree.readNumber('gap', 2),
         };
+    }
+
+    createDelegate(componentStore: ComponentStore): ComponentStoreDelegate {
+        return new CameraAuthDelegate(componentStore);
     }
 }

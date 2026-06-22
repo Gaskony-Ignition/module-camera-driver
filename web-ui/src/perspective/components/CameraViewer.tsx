@@ -1,8 +1,16 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { ComponentProps, ComponentMeta, PropertyTree, SizeObject } from '@inductiveautomation/perspective-client';
+import {
+    ComponentProps,
+    ComponentMeta,
+    ComponentStore,
+    ComponentStoreDelegate,
+    PropertyTree,
+    SizeObject,
+} from '@inductiveautomation/perspective-client';
 import { StreamMode, StreamStatus } from '../types';
 import { CAMERA_THEME } from '../theme';
 import { API } from '../../api/paths';
+import { CameraAuthDelegate, cameraAuthHeaders, cameraTokenHolder, useCameraToken } from '../cameraAuth';
 
 export const CAMERA_VIEWER_TYPE = 'cam.display.camera-viewer';
 
@@ -25,6 +33,7 @@ export function useCameraStream(
     videoRef: React.RefObject<HTMLVideoElement | null>,
     imgRef: React.RefObject<HTMLImageElement | null>
 ) {
+    const token = useCameraToken();
     const [status, setStatus] = useState<StreamStatus>('idle');
     const [error, setError] = useState<string>('');
     const [activeMode, setActiveMode] = useState<'mse' | 'snapshot' | null>(null);
@@ -68,7 +77,7 @@ export function useCameraStream(
             try {
                 const resp = await fetch(
                     API.snapshot(deviceName),
-                    { credentials: 'include' }
+                    { credentials: 'include', headers: cameraAuthHeaders(token) }
                 );
                 if (!resp.ok) {
                     setStatus('error');
@@ -93,7 +102,7 @@ export function useCameraStream(
 
         fetchSnapshot();
         intervalRef.current = window.setInterval(fetchSnapshot, snapshotInterval);
-    }, [deviceName, snapshotInterval, imgRef]);
+    }, [deviceName, snapshotInterval, imgRef, token]);
 
     const startMse = useCallback(async (fallbackToSnapshot: boolean) => {
         if (!deviceName) return;
@@ -128,7 +137,7 @@ export function useCameraStream(
         try {
             response = await fetch(
                 API.stream(deviceName),
-                { credentials: 'include', signal: ac.signal }
+                { credentials: 'include', headers: cameraAuthHeaders(token), signal: ac.signal }
             );
         } catch (e: unknown) {
             const err = e as Error;
@@ -229,7 +238,7 @@ export function useCameraStream(
                 setError('Stream lost: ' + err.message);
             }
         }
-    }, [deviceName, videoRef, startSnapshot]);
+    }, [deviceName, videoRef, startSnapshot, token]);
 
     const start = useCallback(() => {
         cleanup();
@@ -237,10 +246,16 @@ export function useCameraStream(
             setStatus('idle');
             return;
         }
+        // Wait for the auth token from the gateway delegate before issuing any request;
+        // without it every fetch would 401. The effect re-runs when the token arrives.
+        if (!token) {
+            setStatus('loading');
+            return;
+        }
         if (mode === 'snapshot') startSnapshot();
         else if (mode === 'mse') startMse(false);
         else startMse(true); // auto: try MSE, fallback to snapshot
-    }, [deviceName, mode, cleanup, startSnapshot, startMse]);
+    }, [deviceName, mode, cleanup, startSnapshot, startMse, token]);
 
     useEffect(() => {
         start();
@@ -267,7 +282,7 @@ export function saveSnapshot(
         a.click();
     } else {
         // In MSE mode or no blob available, fetch a fresh snapshot
-        fetch(API.snapshot(deviceName), { credentials: 'include' })
+        fetch(API.snapshot(deviceName), { credentials: 'include', headers: cameraAuthHeaders(cameraTokenHolder.get()) })
             .then(r => r.blob())
             .then(blob => {
                 const url = URL.createObjectURL(blob);
@@ -320,10 +335,13 @@ const ptzStyles = {
 };
 
 function PtzControls({ deviceName }: { deviceName: string }) {
+    const token = useCameraToken();
+
     const sendMove = (pan: number, tilt: number, zoom: number) => {
         fetch(API.ptzMove(deviceName, pan, tilt, zoom), {
             method: 'POST',
             credentials: 'include',
+            headers: cameraAuthHeaders(token),
         }).catch(() => { /* fire-and-forget PTZ command */ });
     };
 
@@ -331,6 +349,7 @@ function PtzControls({ deviceName }: { deviceName: string }) {
         fetch(API.ptzStop(deviceName), {
             method: 'POST',
             credentials: 'include',
+            headers: cameraAuthHeaders(token),
         }).catch(() => { /* fire-and-forget PTZ stop */ });
     };
 
@@ -555,5 +574,9 @@ export class CameraViewerMeta implements ComponentMeta {
             showSaveButton: tree.readBoolean('showSaveButton', true),
             showPtzControls: tree.readBoolean('showPtzControls', false),
         };
+    }
+
+    createDelegate(componentStore: ComponentStore): ComponentStoreDelegate {
+        return new CameraAuthDelegate(componentStore);
     }
 }

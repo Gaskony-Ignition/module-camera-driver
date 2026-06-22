@@ -194,7 +194,7 @@ Cross-Origin Resource Sharing (CORS) headers are restricted to known origins onl
 ## Rate Limiting
 
 ### Per-IP Rate Limiting (v2.1.0+)
-- **Limit**: 10 requests per minute per IP address
+- **Limit**: 600 requests per minute per IP address
 - **Scope**: Applied to snapshot and stream endpoints
 - **Response**: HTTP 429 Too Many Requests when exceeded
 - **Tracking**: Per-IP via X-Forwarded-For and X-Real-IP headers
@@ -328,7 +328,7 @@ All dependencies are scanned for known vulnerabilities:
 
 ### v2.1.0 (2025-11-22)
 - **SECURITY**: HTTP endpoint authentication implemented (session, Basic Auth, API key)
-- **SECURITY**: Per-IP rate limiting implemented (10 req/min)
+- **SECURITY**: Per-IP rate limiting implemented (600 req/min)
 - **SECURITY**: 168 comprehensive automated tests including security tests
 - **SECURITY**: XSS, SQL injection, JNDI injection, and path traversal protection verified
 - **SECURITY**: XXE and Billion Laughs attack prevention tested
