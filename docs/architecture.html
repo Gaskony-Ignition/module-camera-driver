@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Camera Driver — Interactive Architecture (v3.0.9)</title>
+<style>
+  :root{
+    --base:#1e1e2e; --mantle:#181825; --crust:#11111b; --surface0:#313244;
+    --surface1:#45475a; --text:#cdd6f4; --subtext:#a6adc8; --overlay:#6c7086;
+    --blue:#89b4fa; --green:#a6e3a1; --mauve:#cba6f7; --peach:#fab387;
+    --red:#f38ba8; --teal:#94e2d5; --yellow:#f9e2af; --sky:#89dceb;
+    --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --font-mono:"SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--base);color:var(--text);font-family:var(--font-sans);overflow:hidden}
+  #app{display:flex;height:100vh;width:100vw}
+  #stage{position:relative;flex:1;overflow:hidden;cursor:grab;background:
+     radial-gradient(circle at 1px 1px, rgba(108,112,134,.18) 1px, transparent 0) 0 0/28px 28px,
+     var(--base)}
+  #stage.grabbing{cursor:grabbing}
+  #viewport{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
+  #edges{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
+  .node{position:absolute;border:1px solid var(--surface1);border-left-width:4px;
+    background:linear-gradient(180deg,var(--surface0),#2a2b3c);border-radius:10px;
+    padding:9px 11px;width:188px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35);
+    transition:transform .08s ease, box-shadow .12s ease, opacity .12s ease, border-color .12s}
+  .node:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(0,0,0,.5);border-color:var(--overlay)}
+  .node .t{font-weight:650;font-size:13px;line-height:1.2}
+  .node .s{font-size:10.5px;color:var(--subtext);margin-top:3px;font-family:var(--font-mono)}
+  .node .badge{display:inline-block;margin-top:6px;font-size:9.5px;font-weight:700;letter-spacing:.3px;
+    padding:1px 6px;border-radius:999px;background:rgba(243,139,168,.16);color:var(--red)}
+  .node.sel{outline:2px solid var(--blue);outline-offset:2px}
+  .node.dim{opacity:.22}
+  .lname{position:absolute;font-size:11px;font-weight:800;letter-spacing:2px;color:var(--overlay);
+    text-transform:uppercase;writing-mode:vertical-rl;transform:rotate(180deg)}
+  /* sidebar */
+  #side{width:360px;min-width:360px;background:var(--mantle);border-left:1px solid var(--surface0);
+    display:flex;flex-direction:column;height:100vh}
+  #side header{padding:16px 18px 12px;border-bottom:1px solid var(--surface0)}
+  #side h1{font-size:15px;margin:0 0 3px}
+  #side .ver{font-family:var(--font-mono);font-size:11px;color:var(--green)}
+  #side .hint{font-size:11.5px;color:var(--subtext);margin-top:8px;line-height:1.5}
+  #detail{padding:16px 18px;overflow:auto;flex:1}
+  #detail .empty{color:var(--overlay);font-size:12.5px;line-height:1.6}
+  #detail h2{font-size:15px;margin:0 0 2px}
+  #detail .layer{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.5px;
+    text-transform:uppercase;padding:2px 8px;border-radius:999px;margin-bottom:12px}
+  #detail .lbl{font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+    color:var(--overlay);margin:14px 0 5px}
+  #detail p{font-size:12.5px;line-height:1.55;margin:0;color:var(--text)}
+  #detail .files li{font-family:var(--font-mono);font-size:11px;color:var(--sky);line-height:1.7;
+    list-style:none;word-break:break-all}
+  #detail .files{margin:0;padding:0}
+  #detail .chg li{font-size:11.5px;line-height:1.5;margin-bottom:6px;color:var(--peach)}
+  #detail .chg{margin:0;padding-left:16px}
+  #detail .conn a{display:inline-block;font-size:11px;color:var(--blue);background:var(--surface0);
+    padding:2px 8px;border-radius:6px;margin:0 5px 5px 0;cursor:pointer;text-decoration:none}
+  /* toolbar */
+  #bar{position:absolute;top:12px;left:12px;display:flex;gap:8px;z-index:5;align-items:center}
+  #bar button,#bar input{font-family:var(--font-sans);font-size:12px;border:1px solid var(--surface1);
+    background:var(--surface0);color:var(--text);border-radius:8px;padding:6px 10px;cursor:pointer}
+  #bar button:hover{background:var(--surface1)}
+  #bar input{cursor:text;width:180px}
+  #legend{position:absolute;bottom:12px;left:12px;background:rgba(24,24,37,.85);border:1px solid var(--surface0);
+    border-radius:10px;padding:10px 12px;font-size:11px;z-index:5;backdrop-filter:blur(4px)}
+  #legend .row{display:flex;align-items:center;gap:7px;margin:3px 0;color:var(--subtext)}
+  #legend .sw{width:12px;height:12px;border-radius:3px;border-left:3px solid}
+  .edge{fill:none;stroke:var(--overlay);stroke-width:1.5;opacity:.28}
+  .edge.hi{stroke:var(--blue);stroke-width:2.4;opacity:.95}
+  .edge.hi.ext{stroke:var(--yellow)}
+  .elabel{font-family:var(--font-mono);font-size:9.5px;fill:var(--subtext);opacity:0}
+  .elabel.hi{opacity:1;fill:var(--blue)}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <div id="bar">
+      <button id="reset">⟲ Reset view</button>
+      <button id="fit">⤢ Fit</button>
+      <input id="search" placeholder="filter nodes…"/>
+      <span style="font-size:11px;color:var(--overlay)">scroll = zoom · drag = pan · click a box</span>
+    </div>
+    <div id="viewport">
+      <svg id="edges"></svg>
+    </div>
+    <div id="legend"></div>
+  </div>
+  <aside id="side">
+    <header>
+      <h1>Camera Driver — Architecture</h1>
+      <div class="ver">module v3.0.9 · com.gaskony.camera.opcua</div>
+      <div class="hint">Multi-protocol IP-camera driver: one unified <b>Camera</b> device type (RTSP · MJPEG · Snapshot · ONVIF) exposed as OPC-UA nodes + HTTP routes + Perspective components. Click any node for its files, role, and the changes made in the 3.0.8 / 3.0.9 work.</div>
+    </header>
+    <div id="detail"><div class="empty">Select a node to see its responsibilities, key source files, the data flows it participates in, and any fixes applied this session.<br><br>Tip: click a connected node name in the details to jump around.</div></div>
+  </aside>
+</div>
+
+<script>
+const LAYERS = {
+  client:   {name:"Clients",  color:"var(--blue)",  badge:"rgba(137,180,250,.16)"},
+  entry:    {name:"HTTP entry",color:"var(--mauve)", badge:"rgba(203,166,247,.16)"},
+  handler:  {name:"Handlers", color:"var(--teal)",  badge:"rgba(148,226,213,.16)"},
+  core:     {name:"Core / device",color:"var(--green)",badge:"rgba(166,227,161,.16)"},
+  protocol: {name:"Protocol / stream",color:"var(--peach)",badge:"rgba(250,179,135,.16)"},
+  external: {name:"External",  color:"var(--yellow)",badge:"rgba(249,226,175,.16)"},
+};
+
+// virtual canvas coords
+const NODES = [
+  // clients
+  {id:"webui",label:"Gateway Web UI",sub:"React SPA",layer:"client",x:30,y:150,
+    files:["web-ui/src/App.tsx","web-ui/src/components/DashboardView.tsx","CamerasView · DiagnosticsView · LiveGridView"],
+    desc:"Config & status single-page app served inside the Gateway. Polls metrics/health and lists devices.",
+    changes:["M5: formatAge uses server clock (clock-skew fix)","L5: Refresh button wired to real fetch","L7: metrics cleared on disconnect"]},
+  {id:"persp",label:"Perspective Components",sub:"Camera Viewer / Grid",layer:"client",x:30,y:330,
+    files:["web-ui/src/perspective/components/CameraViewer.tsx","gateway/perspective/CameraComponentDelegate.java"],
+    desc:"Perspective components for live view in operator sessions. Server delegate mints scoped session tokens.",
+    changes:["L6: MSE stream reads token via ref — no 96s reconnect on token refresh"]},
+
+  // entry
+  {id:"routes",label:"CameraRoutes",sub:"/data/camera-driver/*",layer:"entry",x:330,y:70,
+    files:["gateway/servlet/CameraRoutes.java"],
+    desc:"Mounts all HTTP route handlers under /data/camera-driver and wires the auth + rate-limit pipeline."},
+  {id:"cors",label:"CorsManager",sub:"CORS policy",layer:"entry",x:330,y:200,
+    files:["gateway/servlet/CorsManager.java"],desc:"Applies CORS headers / origin policy to camera routes."},
+  {id:"rate",label:"RateLimiter",sub:"600 req/min per IP",layer:"entry",x:330,y:320,
+    files:["gateway/servlet/RateLimiter.java"],
+    desc:"Per-IP rate limiting, proxy-aware (X-Forwarded-For / X-Real-IP).",
+    changes:["H2: now also applied to metrics/diagnostics/health handlers"]},
+  {id:"auth",label:"Authentication",sub:"Session · ApiKey · Lockout",layer:"entry",x:330,y:440,
+    files:["gateway/auth/AuthenticationManager.java","auth/ApiKeyStore.java","auth/SessionTokenStore.java","auth/AccessControl.java"],
+    desc:"Session auth, SHA-256 API keys (per-key salt), account lockout, and scoped session tokens for Perspective.",
+    changes:["H6: session token accepted via header only (no ?token= log leak)","apiKey accepted via X-API-Key header only","M1: periodic sweep of expired tokens"]},
+
+  // handlers
+  {id:"snapshot",label:"SnapshotHandler",sub:"JPEG snapshots",layer:"handler",x:630,y:40,
+    files:["gateway/servlet/handlers/SnapshotHandler.java"],
+    desc:"Serves cached/just-fetched JPEG frames; coalesces concurrent requests per device+profile.",
+    changes:["C1: forgetDevice() clears all per-device maps + cache on shutdown","C2: coalescing winner wrapped try/catch(Throwable)/finally; join timeout 30s→15s"]},
+  {id:"stream",label:"StreamHandler",sub:"MJPEG / proxy",layer:"handler",x:630,y:140,
+    files:["gateway/servlet/handlers/StreamHandler.java"],
+    desc:"Proxies the browser-playable stream (go2rtc MSE/MJPEG). Never logs source URLs."},
+  {id:"ptz",label:"PtzHandler",sub:"pan/tilt/zoom",layer:"handler",x:630,y:240,
+    files:["gateway/servlet/handlers/PtzHandler.java"],
+    desc:"PTZ control + status REST endpoints. Rejects calls unless the device reports hasPTZ()."},
+  {id:"deviceapi",label:"DeviceApiHandler",sub:"/devices",layer:"handler",x:630,y:340,
+    files:["gateway/servlet/handlers/DeviceApiHandler.java"],
+    desc:"Lists devices and per-device capabilities (hasPTZ, ONVIF, stream flags) as JSON."},
+  {id:"diag",label:"DiagnosticsHandler",sub:"/metrics /health",layer:"handler",x:630,y:440,
+    files:["gateway/servlet/handlers/DiagnosticsHandler.java"],
+    desc:"Metrics, health and diagnostics — iterates devices and queries go2rtc stream stats.",
+    changes:["H1: per-stream bitrate baseline (no shared mutable state corruption)","H2: rate-limited"]},
+  {id:"page",label:"Page / Log handlers",sub:"UI + gateway log",layer:"handler",x:630,y:540,
+    files:["gateway/servlet/handlers/PageHandler.java","handlers/GatewayLogHandler.java","handlers/BaseHandler.java"],
+    desc:"Serves the web-ui assets and a gateway-log view. BaseHandler holds shared request plumbing."},
+
+  // core
+  {id:"hook",label:"CameraModuleHook",sub:"module entry point",layer:"core",x:930,y:560,
+    files:["gateway/CameraModuleHook.java"],
+    desc:"Gateway entry: registers extension points, mounts routes, inits go2rtc (off-thread), registers Perspective components + i18n bundles."},
+  {id:"extpoint",label:"CameraExtensionPoint",sub:"type com.gaskony.camera.Camera",layer:"core",x:930,y:440,
+    files:["gateway/device/CameraExtensionPoint.java","device/LegacyCameraExtensionPoint.java"],
+    desc:"Registers the unified Camera device type (+ hidden pre-v3 legacy alias). Validates device config on save.",
+    changes:["M6: IP/host validation now via ValidationUtil.isValidIpOrHost (old inline regex accepted 1111)"]},
+  {id:"device",label:"CameraDevice",sub:"device lifecycle",layer:"core",x:930,y:180,
+    files:["gateway/device/CameraDevice.java"],
+    desc:"Per-device lifecycle: probes RTSP/snapshot/MJPEG/ONVIF, builds OPC-UA address space, registers go2rtc stream. probeOnvif() is where PTZ detection happens.",
+    changes:["H5: deviceStatus volatile + address-space build guarded so a node-build error can't brick the device","PTZ fallback: detect PTZ from media-profile PTZConfiguration"]},
+  {id:"config",label:"CameraConfig",sub:"config record",layer:"core",x:930,y:300,
+    files:["gateway/device/CameraConfig.java"],
+    desc:"Connection (ip/port/creds), stream toggles, and advanced (sslValidationMode, useHttps). Persisted as config.json.",
+    changes:["Live fix: FrontPTZ ONVIF port 80→8000 (port 80 is the camera web UI)"]},
+  {id:"registry",label:"DeviceRegistry",sub:"active devices",layer:"core",x:930,y:660,
+    files:["gateway/device/DeviceRegistry.java"],desc:"Tracks running CameraDevice instances for handler lookup."},
+  {id:"poller",label:"ONVIFPoller",sub:"PTZ/status poll",layer:"core",x:930,y:60,
+    files:["gateway/device/ONVIFPoller.java"],
+    desc:"Background poller: refreshes PTZ status and connection state on the configured interval (only if hasPTZ)."},
+  {id:"addr",label:"AddressSpaceBuilder",sub:"OPC-UA nodes",layer:"core",x:930,y:740,
+    files:["gateway/device/AddressSpaceBuilder.java","device/generic/GenericCameraAddressSpaceBuilder.java"],
+    desc:"Builds the OPC-UA node tree: DeviceInfo, Services, MediaProfiles, PTZ, Status."},
+
+  // protocol
+  {id:"onvif",label:"ONVIFClient",sub:"SOAP · WS-UsernameToken",layer:"protocol",x:1240,y:120,
+    files:["gateway/onvif/ONVIFClient.java","onvif/ONVIFAuth.java","onvif/ONVIFService.java","onvif/util/XmlUtil.java","onvif/MediaProfile.java · PTZStatus.java · DeviceInformation.java"],
+    desc:"ONVIF SOAP client: GetServices / GetProfiles / PTZ. XXE-protected XML. Discovers PTZ + media/snapshot URLs.",
+    changes:["parseServices: namespace-prefix-agnostic (was hardcoded tds: → dropped all services on other vendors)","PTZConfiguration parsed from profiles","H3: SOAP redirect only followed to same host (SSRF)","H4: response entity consumed on non-200 (pool leak)","TRUST_FIRST_USE no longer throws — falls back to STRICT"]},
+  {id:"generic",label:"GenericCameraClient",sub:"HTTP snapshot/MJPEG",layer:"protocol",x:1240,y:320,
+    files:["gateway/device/generic/GenericCameraClient.java","generic/GenericCameraConfig.java"],
+    desc:"URL-based fetching for direct snapshot/MJPEG cameras (no ONVIF required)."},
+  {id:"go2rtc",label:"Go2RtcManager",sub:"process manager",layer:"protocol",x:1240,y:480,
+    files:["gateway/stream/Go2RtcManager.java","stream/Go2RtcBinaryExtractor.java","stream/FfmpegBinaryExtractor.java"],
+    desc:"Launches & supervises the bundled go2rtc process; registers RTSP streams for browser playback.",
+    changes:["C3: random per-launch API password + HTTP Basic on every go2rtc API call","M2: restart counter only resets after 60s stable uptime"]},
+
+  // external
+  {id:"camera",label:"IP Camera",sub:"ONVIF :8000 · RTSP :554",layer:"external",x:1545,y:170,
+    files:["e.g. Reolink RLC-823A 16X @ 10.60.9.148"],
+    desc:"The physical camera. ONVIF SOAP on :8000/onvif/device_service; RTSP video on :554. Port 80 here is the web UI (redirects to self-signed HTTPS)."},
+  {id:"go2rtcproc",label:"go2rtc + ffmpeg",sub:"localhost :1984",layer:"external",x:1545,y:470,
+    files:["bundled binaries, data/camera-driver/"],
+    desc:"Local transcoder turning camera RTSP into browser MSE/MJPEG. API now password-protected on localhost."},
+  {id:"opcua",label:"Ignition OPC-UA Server",sub:"address space",layer:"external",x:1545,y:730,
+    files:["Ignition platform"],
+    desc:"Hosts the camera's OPC-UA nodes (DeviceInfo / MediaProfiles / PTZ / Status) for tags & scripting."},
+];
+
+const EDGES = [
+  ["webui","routes","HTTP"],["persp","routes","token"],["persp","stream","MSE"],
+  ["routes","cors",""],["routes","rate",""],["routes","auth",""],
+  ["routes","snapshot",""],["routes","stream",""],["routes","ptz",""],["routes","deviceapi",""],["routes","diag",""],["routes","page",""],
+  ["snapshot","device",""],["stream","go2rtc",""],["ptz","device",""],["deviceapi","registry",""],["diag","go2rtc","stats"],["diag","registry",""],
+  ["hook","extpoint","register"],["hook","routes","mount"],["hook","go2rtc","init"],
+  ["extpoint","device","creates"],["registry","device",""],
+  ["device","config","reads"],["device","onvif",""],["device","generic",""],["device","go2rtc","register"],["device","addr",""],["device","poller","starts"],
+  ["poller","onvif","poll"],
+  ["addr","opcua","nodes"],
+  ["onvif","camera","SOAP :8000",1],["generic","camera","HTTP",1],
+  ["go2rtc","go2rtcproc","spawn",1],["go2rtcproc","camera","RTSP :554",1],
+];
+
+const NW=188, viewport=document.getElementById('viewport'), svg=document.getElementById('edges'),
+      stage=document.getElementById('stage'), detail=document.getElementById('detail');
+const byId=Object.fromEntries(NODES.map(n=>[n.id,n]));
+
+// estimate node heights (sub + maybe badge)
+NODES.forEach(n=>{ n.w=NW; n.h = n.changes&&n.changes.length?92:64; });
+
+// layer labels (left of each column min-x)
+const colX={}; NODES.forEach(n=>{ colX[n.layer]=Math.min(colX[n.layer]??1e9,n.x); });
+
+// --- render nodes
+const nodeEls={};
+NODES.forEach(n=>{
+  const L=LAYERS[n.layer];
+  const el=document.createElement('div'); el.className='node'; el.style.left=n.x+'px'; el.style.top=n.y+'px';
+  el.style.width=n.w+'px'; el.style.borderLeftColor=L.color;
+  el.innerHTML=`<div class="t">${n.label}</div><div class="s">${n.sub}</div>`+
+    (n.changes&&n.changes.length?`<div class="badge">${n.changes.length} change${n.changes.length>1?'s':''}</div>`:'');
+  el.addEventListener('click',e=>{e.stopPropagation();select(n.id);});
+  viewport.appendChild(el); nodeEls[n.id]=el;
+});
+// layer titles
+Object.entries(colX).forEach(([layer,x])=>{
+  const lab=document.createElement('div'); lab.className='lname'; lab.textContent=LAYERS[layer].name;
+  lab.style.left=(x-22)+'px'; lab.style.top='40px'; lab.style.color=LAYERS[layer].color; lab.style.opacity=.55;
+  viewport.appendChild(lab);
+});
+
+// --- render edges
+function anchor(n,side){ return side==='r'?{x:n.x+n.w,y:n.y+n.h/2}:{x:n.x,y:n.y+n.h/2}; }
+const edgeEls=[];
+EDGES.forEach(([a,b,label,ext])=>{
+  const na=byId[a], nb=byId[b]; if(!na||!nb) return;
+  const rightward = nb.x>=na.x;
+  const p1=anchor(na,rightward?'r':'l'), p2=anchor(nb,rightward?'l':'r');
+  const dx=Math.max(40,Math.abs(p2.x-p1.x)*0.5);
+  const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+  const c1x=p1.x+(rightward?dx:-dx), c2x=p2.x+(rightward?-dx:dx);
+  path.setAttribute('d',`M ${p1.x} ${p1.y} C ${c1x} ${p1.y}, ${c2x} ${p2.y}, ${p2.x} ${p2.y}`);
+  path.setAttribute('class','edge'+(ext?' ext0':''));
+  svg.appendChild(path);
+  let lblEl=null;
+  if(label){ lblEl=document.createElementNS('http://www.w3.org/2000/svg','text');
+    lblEl.setAttribute('x',(p1.x+p2.x)/2); lblEl.setAttribute('y',(p1.y+p2.y)/2-4);
+    lblEl.setAttribute('text-anchor','middle'); lblEl.setAttribute('class','elabel'); lblEl.textContent=label;
+    svg.appendChild(lblEl); }
+  edgeEls.push({a,b,path,lblEl,ext});
+});
+svg.setAttribute('width',2000); svg.setAttribute('height',1100);
+
+// --- selection
+let selected=null;
+function select(id){
+  selected=id; const n=byId[id]; const L=LAYERS[n.layer];
+  const conn=new Set();
+  edgeEls.forEach(e=>{
+    const on = e.a===id||e.b===id;
+    e.path.classList.toggle('hi',on); e.path.classList.toggle('ext',!!e.ext&&on);
+    if(e.lblEl) e.lblEl.classList.toggle('hi',on);
+    if(on){conn.add(e.a);conn.add(e.b);}
+  });
+  Object.entries(nodeEls).forEach(([nid,el])=>{
+    el.classList.toggle('sel',nid===id);
+    el.classList.toggle('dim',!(nid===id||conn.has(nid)));
+  });
+  const connList=[...conn].filter(c=>c!==id);
+  detail.innerHTML =
+    `<h2>${n.label}</h2>`+
+    `<span class="layer" style="background:${L.badge};color:${L.color}">${L.name}</span>`+
+    `<p>${n.desc}</p>`+
+    `<div class="lbl">Key files</div><ul class="files">${n.files.map(f=>`<li>${f}</li>`).join('')}</ul>`+
+    (n.changes&&n.changes.length?`<div class="lbl">Changes this session (3.0.8 / 3.0.9)</div><ul class="chg">${n.changes.map(c=>`<li>${c}</li>`).join('')}</ul>`:'')+
+    (connList.length?`<div class="lbl">Connected to</div><div class="conn">${connList.map(c=>`<a data-go="${c}">${byId[c].label}</a>`).join('')}</div>`:'');
+  detail.querySelectorAll('[data-go]').forEach(a=>a.addEventListener('click',()=>select(a.dataset.go)));
+}
+function clearSel(){
+  selected=null;
+  edgeEls.forEach(e=>{e.path.classList.remove('hi','ext'); if(e.lblEl)e.lblEl.classList.remove('hi');});
+  Object.values(nodeEls).forEach(el=>el.classList.remove('sel','dim'));
+  detail.innerHTML=`<div class="empty">Select a node to see its responsibilities, key source files, the data flows it participates in, and any fixes applied this session.<br><br>Tip: click a connected node name in the details to jump around.</div>`;
+}
+stage.addEventListener('click',clearSel);
+
+// --- pan & zoom
+let tx=70,ty=40,scale=.82;
+function apply(){viewport.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;}
+apply();
+stage.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const r=stage.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+  const f=e.deltaY<0?1.12:1/1.12, ns=Math.min(2.2,Math.max(.3,scale*f));
+  tx=mx-(mx-tx)*(ns/scale); ty=my-(my-ty)*(ns/scale); scale=ns; apply();
+},{passive:false});
+let drag=null;
+stage.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,tx,ty};stage.classList.add('grabbing');stage.setPointerCapture(e.pointerId);});
+stage.addEventListener('pointermove',e=>{if(!drag)return;tx=drag.tx+(e.clientX-drag.x);ty=drag.ty+(e.clientY-drag.y);apply();});
+stage.addEventListener('pointerup',e=>{drag=null;stage.classList.remove('grabbing');});
+document.getElementById('reset').addEventListener('click',()=>{tx=70;ty=40;scale=.82;apply();clearSel();});
+document.getElementById('fit').addEventListener('click',()=>{
+  const xs=NODES.map(n=>n.x), ys=NODES.map(n=>n.y), xe=NODES.map(n=>n.x+n.w), ye=NODES.map(n=>n.y+n.h);
+  const minX=Math.min(...xs)-40,minY=Math.min(...ys)-40,maxX=Math.max(...xe)+40,maxY=Math.max(...ye)+40;
+  const r=stage.getBoundingClientRect();
+  scale=Math.min(r.width/(maxX-minX),r.height/(maxY-minY),1.4);
+  tx=(r.width-(maxX-minX)*scale)/2-minX*scale; ty=(r.height-(maxY-minY)*scale)/2-minY*scale; apply();
+});
+
+// --- search filter
+document.getElementById('search').addEventListener('input',e=>{
+  const q=e.target.value.trim().toLowerCase();
+  Object.entries(nodeEls).forEach(([id,el])=>{
+    const n=byId[id]; const hit=!q||n.label.toLowerCase().includes(q)||n.sub.toLowerCase().includes(q)||(n.changes||[]).join(' ').toLowerCase().includes(q);
+    el.style.opacity=hit?'1':'.12'; el.style.outline=q&&hit?'2px solid var(--yellow)':'';
+  });
+});
+
+// --- legend
+document.getElementById('legend').innerHTML=Object.values(LAYERS).map(L=>
+  `<div class="row"><span class="sw" style="border-left-color:${L.color};background:${L.badge}"></span>${L.name}</div>`).join('')
+  +`<div class="row" style="margin-top:6px"><span class="sw" style="border-left-color:var(--blue);background:transparent;border:1px solid var(--blue)"></span>highlighted flow</div>`;
+</script>
+</body>
+</html>
