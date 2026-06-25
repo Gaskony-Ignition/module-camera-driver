@@ -21,7 +21,7 @@ URLs for RTSP, MJPEG, and snapshot can be entered directly or auto-detected via 
 
 ## Current Status
 
-**Version**: 3.0.7 | **Status**: Production Ready
+**Version**: 3.0.9 | **Status**: Production Ready
 
 ### Key Features
 - Single unified **Camera** device type with per-device connection methods
@@ -40,12 +40,12 @@ URLs for RTSP, MJPEG, and snapshot can be entered directly or auto-detected via 
 ```bash
 cd /modules/ignition-module-camera-driver
 ./gradlew clean build
-# Output: build/CameraDriver-3.0.7.modl
+# Output: build/CameraDriver-3.0.9.modl
 ```
 
 ### 2. Install
 ```bash
-docker cp build/CameraDriver-3.0.7.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
+docker cp build/CameraDriver-3.0.9.modl ignition-gateway:/usr/local/bin/ignition/user-lib/modules/
 docker restart ignition-gateway
 ```
 

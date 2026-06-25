@@ -11,6 +11,7 @@ interface DashboardViewProps {
   health: HealthData | null
   metrics: MetricsData | null
   onViewChange: (view: string) => void
+  onRefresh: () => void
 }
 
 interface StatCard {
@@ -33,14 +34,16 @@ function formatDuration(ms: number): string {
   return `${ms}ms`
 }
 
-function formatAge(tsMs: number): string {
+function formatAge(tsMs: number, serverNowMs: number | undefined): string {
   if (tsMs < 0) return '—'
-  const ageS = Math.round((Date.now() - tsMs) / 1000)
+  if (serverNowMs === undefined) return '—'
+  const ageS = Math.round((serverNowMs - tsMs) / 1000)
+  if (ageS < 0) return '—'
   if (ageS < 60) return `${ageS}s ago`
   return `${Math.round(ageS / 60)}m ago`
 }
 
-function CameraMetricsRow({ name, cam }: { name: string; cam: CameraMetrics }) {
+function CameraMetricsRow({ name, cam, serverNowMs }: { name: string; cam: CameraMetrics; serverNowMs: number | undefined }) {
   const isStreaming = cam.go2rtcConsumers > 0
   const hasErrors = cam.snapshotErrors > 0
   const tracks = Array.isArray(cam.go2rtcProducerTracks) ? cam.go2rtcProducerTracks : []
@@ -65,7 +68,7 @@ function CameraMetricsRow({ name, cam }: { name: string; cam: CameraMetrics }) {
         }
       </td>
       <td>{formatDuration(cam.snapshotLastDurationMs)}</td>
-      <td className="cam-muted">{formatAge(cam.snapshotLastTimestampMs)}</td>
+      <td className="cam-muted">{formatAge(cam.snapshotLastTimestampMs, serverNowMs)}</td>
       <td>
         {hasErrors
           ? <span className="cam-error-badge"><AlertCircle size={11} />{cam.snapshotErrors}</span>
@@ -76,7 +79,7 @@ function CameraMetricsRow({ name, cam }: { name: string; cam: CameraMetrics }) {
   )
 }
 
-function DashboardView({ health, metrics, onViewChange }: DashboardViewProps) {
+function DashboardView({ health, metrics, onViewChange, onRefresh }: DashboardViewProps) {
   const loading = health === null
 
   const statCards: StatCard[] = loading
@@ -117,6 +120,7 @@ function DashboardView({ health, metrics, onViewChange }: DashboardViewProps) {
   const cameraNames = metrics ? Object.keys(metrics.cameras).sort() : []
   const jvm = metrics?.jvm
   const go2rtcMem = metrics?.go2rtc
+  const serverNowMs = metrics?.timestamp
 
   return (
     <div className="dashboard-view">
@@ -195,7 +199,7 @@ function DashboardView({ health, metrics, onViewChange }: DashboardViewProps) {
               </thead>
               <tbody>
                 {cameraNames.map(name => (
-                  <CameraMetricsRow key={name} name={name} cam={metrics!.cameras[name]} />
+                  <CameraMetricsRow key={name} name={name} cam={metrics!.cameras[name]} serverNowMs={serverNowMs} />
                 ))}
               </tbody>
             </table>
@@ -204,7 +208,7 @@ function DashboardView({ health, metrics, onViewChange }: DashboardViewProps) {
       )}
 
       <div className="dashboard-quick-actions">
-        <button className="btn btn-ghost" onClick={() => onViewChange('dashboard')}>
+        <button className="btn btn-ghost" onClick={onRefresh}>
           <RefreshCw size={14} />
           Refresh Devices
         </button>

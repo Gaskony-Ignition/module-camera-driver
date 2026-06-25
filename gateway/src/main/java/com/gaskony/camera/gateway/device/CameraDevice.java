@@ -10,6 +10,7 @@ import com.gaskony.camera.gateway.onvif.MediaProfile;
 import com.gaskony.camera.gateway.onvif.ONVIFClient;
 import com.gaskony.camera.gateway.onvif.ONVIFService;
 import com.gaskony.camera.gateway.onvif.PTZStatus;
+import com.gaskony.camera.gateway.servlet.handlers.SnapshotHandler;
 import com.gaskony.camera.gateway.stream.Go2RtcManager;
 import com.gaskony.camera.gateway.util.CredentialUtil;
 import org.apache.http.HttpResponse;
@@ -115,7 +116,7 @@ public class CameraDevice extends ManagedAddressSpaceWithLifecycle implements De
     private final SubscriptionModel subscriptionModel;
 
     private UaFolderNode rootNode;
-    private String deviceStatus = DeviceStatus.INITIALIZING.displayName();
+    private volatile String deviceStatus = DeviceStatus.INITIALIZING.displayName();
 
     // ONVIF state (only used for PTZ and gap-filling)
     private ONVIFClient onvifClient;
@@ -295,14 +296,24 @@ public class CameraDevice extends ManagedAddressSpaceWithLifecycle implements De
             }
         }
 
-        // Step 8: Build OPC-UA address space
+        // Step 8: Build OPC-UA address space.
+        // Wrapped in try/catch so a builder failure (e.g. transient Milo state,
+        // NPE in profile data) does not permanently brick the device in an
+        // "Error: ..." state with no recovery path. The device is always set to
+        // RUNNING after this block regardless of outcome; a warning is logged so
+        // the operator knows the address space is incomplete.
         deviceStatus = DeviceStatus.BUILDING_ADDRESS_SPACE.displayName();
-        createRootNode();
+        try {
+            createRootNode();
 
-        if (onvifAvailable) {
-            buildOnvifAddressSpace();
-        } else {
-            buildGenericAddressSpace();
+            if (onvifAvailable) {
+                buildOnvifAddressSpace();
+            } else {
+                buildGenericAddressSpace();
+            }
+        } catch (Exception e) {
+            logger.warn("Address space build failed for device {} — device will run without full OPC-UA nodes: {}",
+                context.getName(), e.getMessage(), e);
         }
 
         // Step 9: Always running
@@ -603,6 +614,19 @@ public class CameraDevice extends ManagedAddressSpaceWithLifecycle implements De
                 logger.info("Default profile token: {}", defaultProfileToken);
             }
 
+            // PTZ may be advertised as a discrete ONVIF service (handled in the loop above)
+            // or via a PTZConfiguration on a media profile. Fall back to the profile signal
+            // so PTZ-capable cameras that don't list a standalone PTZ service still work.
+            if (!hasPTZ && mediaProfiles != null) {
+                for (MediaProfile profile : mediaProfiles) {
+                    if (profile.hasPtz()) {
+                        this.hasPTZ = true;
+                        logger.info("PTZ support detected via media profile PTZConfiguration");
+                        break;
+                    }
+                }
+            }
+
             this.onvifAvailable = true;
             return true;
 
@@ -787,6 +811,11 @@ public class CameraDevice extends ManagedAddressSpaceWithLifecycle implements De
         }
 
         deviceStatus = DeviceStatus.STOPPED.displayName();
+
+        // Remove all per-device snapshot handler state (metrics, cached frames,
+        // in-flight futures) so /metrics does not emit rows for this deleted device
+        // and no stale JPEG can be served after shutdown.
+        SnapshotHandler.forgetDevice(context.getName());
 
         CameraExtensionPoint.unregisterDevice(context.getName());
         logger.info("Camera device shutdown complete: {}", context.getName());

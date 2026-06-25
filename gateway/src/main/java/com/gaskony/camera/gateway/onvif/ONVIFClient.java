@@ -29,6 +29,7 @@ import org.w3c.dom.NodeList;
 import javax.net.ssl.SSLContext;
 import java.io.Closeable;
 import java.io.IOException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
@@ -144,14 +145,16 @@ public class ONVIFClient implements Closeable {
                     .build();
 
             case TRUST_FIRST_USE:
-                // TRUST_FIRST_USE mode is not implemented
-                // Certificate pinning would require persistent storage and complexity
-                // Users should choose either STRICT (production) or INSECURE (development)
-                throw new IllegalArgumentException(
-                    "TRUST_FIRST_USE SSL mode is not implemented. " +
-                    "Please use STRICT mode (recommended for production) or INSECURE mode (development only). " +
-                    "Planned for future release."
-                );
+                // TRUST_FIRST_USE (certificate pinning) is not implemented — it would
+                // require persistent trust storage. Rather than throw (which would brick
+                // any device whose saved profile selects this mode), apply the secure
+                // STRICT behaviour and warn. Existing profiles keep loading; connections
+                // get full validation instead of a hard failure.
+                logger.warn(
+                    "ONVIFClient for {} requested TRUST_FIRST_USE SSL mode, which is not "
+                        + "implemented; falling back to STRICT certificate validation.",
+                    deviceUrl);
+                return SSLContext.getDefault();
 
             case STRICT:
             default:
@@ -443,6 +446,18 @@ public class ONVIFClient implements Closeable {
         // Apache HttpClient 4 does not follow redirects for POST automatically.
         // ONVIF cameras sometimes redirect HTTP→HTTPS (302) or change paths, so we handle
         // 3xx responses manually and re-POST to the Location URL (up to 3 hops).
+        //
+        // SECURITY (H3): only follow a redirect when the Location host matches the
+        // originally-configured device host (same-origin check). A compromised or
+        // malicious camera must not be able to redirect the SOAP request — which
+        // contains a WS-UsernameToken — to an attacker-controlled external host.
+        final String originalHost;
+        try {
+            originalHost = new URL(url).getHost();
+        } catch (Exception e) {
+            throw new IOException("Cannot parse device URL for origin check: " + url, e);
+        }
+
         String currentUrl = url;
         for (int redirects = 0; redirects <= 3; redirects++) {
             HttpPost post = new HttpPost(currentUrl);
@@ -461,6 +476,27 @@ public class ONVIFClient implements Closeable {
                             + ") with no Location header from: " + currentUrl);
                     }
                     String redirectUrl = location.getValue();
+
+                    // Same-origin check: reject cross-host redirects to prevent SSRF /
+                    // credential theft via a compromised camera sending a 302 to an
+                    // attacker-controlled host.
+                    final String redirectHost;
+                    try {
+                        redirectHost = new URL(redirectUrl).getHost();
+                    } catch (Exception e) {
+                        throw new IOException("SOAP redirect (HTTP " + statusCode
+                            + ") contains an unparseable Location URL '" + redirectUrl
+                            + "' from: " + currentUrl);
+                    }
+                    if (!originalHost.equalsIgnoreCase(redirectHost)) {
+                        logger.warn("ONVIF SOAP redirect (HTTP {}) rejected: Location host '{}' "
+                            + "does not match configured device host '{}' — possible SSRF attempt. "
+                            + "Redirect URL: {}", statusCode, redirectHost, originalHost, redirectUrl);
+                        throw new IOException("SOAP redirect (HTTP " + statusCode
+                            + ") rejected: cross-host redirect from '" + originalHost
+                            + "' to '" + redirectHost + "' is not permitted");
+                    }
+
                     logger.debug("ONVIF SOAP redirect (HTTP {}) {} -> {}", statusCode, currentUrl, redirectUrl);
                     currentUrl = redirectUrl;
                     continue;
@@ -524,16 +560,26 @@ public class ONVIFClient implements Closeable {
 
         try {
             Document doc = parseXml(xml);
-            NodeList serviceNodes = doc.getElementsByTagName("tds:Service");
+            // Match on local name, not a hardcoded "tds:" prefix — the SOAP element
+            // prefix is chosen by the camera and varies by vendor. Hardcoding "tds:"
+            // silently dropped every service (and with it PTZ/media discovery) on any
+            // camera that used a different prefix. This now mirrors parseMediaProfiles.
+            NodeList allNodes = doc.getElementsByTagName("*");
 
-            for (int i = 0; i < serviceNodes.getLength(); i++) {
-                Element serviceElement = (Element) serviceNodes.item(i);
+            for (int i = 0; i < allNodes.getLength(); i++) {
+                if (!(allNodes.item(i) instanceof Element)) {
+                    continue;
+                }
+                Element serviceElement = (Element) allNodes.item(i);
+                if (!"Service".equals(serviceElement.getLocalName())) {
+                    continue;
+                }
 
                 String namespace = getChildTextContent(serviceElement, "Namespace");
                 String xAddr = getChildTextContent(serviceElement, "XAddr");
 
                 // Get version
-                Element versionElement = (Element) serviceElement.getElementsByTagName("Version").item(0);
+                Element versionElement = findElement(serviceElement, "Version");
                 String version = "Unknown";
                 if (versionElement != null) {
                     String major = getChildTextContent(versionElement, "Major");
@@ -614,6 +660,13 @@ public class ONVIFClient implements Closeable {
                             String bitrate = getChildTextContent(videoEncoder, "Bitrate");
                             if (frameRate != null) profile.setFrameRate(Integer.parseInt(frameRate));
                             if (bitrate != null) profile.setBitrate(Integer.parseInt(bitrate));
+                        }
+
+                        // A profile carrying a PTZConfiguration is the authoritative ONVIF
+                        // signal that PTZ is usable on it — some cameras advertise PTZ this
+                        // way rather than (or in addition to) a discrete PTZ service.
+                        if (findElement(element, "PTZConfiguration") != null) {
+                            profile.setHasPtz(true);
                         }
 
                         profiles.add(profile);
@@ -737,6 +790,9 @@ public class ONVIFClient implements Closeable {
             int statusCode = response.getStatusLine().getStatusCode();
 
             if (statusCode != 200) {
+                // FIX H4: consume the entity before throwing so the pooled connection
+                // is returned to the pool rather than left in an unusable state.
+                EntityUtils.consumeQuietly(entity);
                 String errorMsg = String.format("Snapshot request failed with status %d: %s",
                     statusCode, response.getStatusLine().getReasonPhrase());
                 logger.error(errorMsg);

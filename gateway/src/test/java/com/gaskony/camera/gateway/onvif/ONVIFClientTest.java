@@ -15,6 +15,8 @@ import org.mockito.ArgumentCaptor;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.lang.reflect.Method;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -494,5 +496,84 @@ class ONVIFClientTest {
         strictClient.close();
         insecureClient.close();
         tfuClient.close();
+    }
+
+    // ==================== Service / PTZ Discovery Parsing Tests ====================
+
+    @SuppressWarnings("unchecked")
+    private List<ONVIFService> invokeParseServices(String xml) throws Exception {
+        Method m = ONVIFClient.class.getDeclaredMethod("parseServices", String.class);
+        m.setAccessible(true);
+        return (List<ONVIFService>) m.invoke(client, xml);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<MediaProfile> invokeParseMediaProfiles(String xml) throws Exception {
+        Method m = ONVIFClient.class.getDeclaredMethod("parseMediaProfiles", String.class);
+        m.setAccessible(true);
+        return (List<MediaProfile>) m.invoke(client, xml);
+    }
+
+    @Test
+    void testParseServices_NonTdsPrefix_StillDiscoversPtzAndMedia() throws Exception {
+        // Regression: cameras choose their own SOAP element prefix. This response uses
+        // "wsdl:" instead of "tds:" — the old hardcoded getElementsByTagName("tds:Service")
+        // returned zero services, hiding PTZ (and ONVIF media) entirely.
+        String xml =
+            "<?xml version=\"1.0\"?>"
+            + "<env:Envelope xmlns:env=\"http://www.w3.org/2003/05/soap-envelope\""
+            + " xmlns:wsdl=\"http://www.onvif.org/ver10/device/wsdl\">"
+            + "<env:Body><wsdl:GetServicesResponse>"
+            + "<wsdl:Service><wsdl:Namespace>http://www.onvif.org/ver10/media/wsdl</wsdl:Namespace>"
+            + "<wsdl:XAddr>http://192.168.1.100/onvif/media</wsdl:XAddr>"
+            + "<wsdl:Version><wsdl:Major>2</wsdl:Major><wsdl:Minor>5</wsdl:Minor></wsdl:Version></wsdl:Service>"
+            + "<wsdl:Service><wsdl:Namespace>http://www.onvif.org/ver20/ptz/wsdl</wsdl:Namespace>"
+            + "<wsdl:XAddr>http://192.168.1.100/onvif/ptz</wsdl:XAddr>"
+            + "<wsdl:Version><wsdl:Major>2</wsdl:Major><wsdl:Minor>5</wsdl:Minor></wsdl:Version></wsdl:Service>"
+            + "</wsdl:GetServicesResponse></env:Body></env:Envelope>";
+
+        List<ONVIFService> services = invokeParseServices(xml);
+
+        assertThat(services).hasSize(2);
+        assertThat(services).anyMatch(s -> s.getServiceName().equalsIgnoreCase("ptz"));
+        assertThat(services).anyMatch(s -> s.getServiceName().equalsIgnoreCase("media"));
+    }
+
+    @Test
+    void testParseMediaProfiles_WithPtzConfiguration_SetsHasPtz() throws Exception {
+        // A profile carrying a PTZConfiguration means PTZ is usable even if the camera
+        // does not list a discrete PTZ service.
+        String xml =
+            "<?xml version=\"1.0\"?>"
+            + "<env:Envelope xmlns:env=\"http://www.w3.org/2003/05/soap-envelope\""
+            + " xmlns:trt=\"http://www.onvif.org/ver10/media/wsdl\""
+            + " xmlns:tt=\"http://www.onvif.org/ver10/schema\">"
+            + "<env:Body><trt:GetProfilesResponse>"
+            + "<trt:Profiles token=\"Profile_1\"><tt:Name>MainStream</tt:Name>"
+            + "<tt:PTZConfiguration token=\"PTZCfg_1\"><tt:Name>PTZ</tt:Name></tt:PTZConfiguration>"
+            + "</trt:Profiles>"
+            + "</trt:GetProfilesResponse></env:Body></env:Envelope>";
+
+        List<MediaProfile> profiles = invokeParseMediaProfiles(xml);
+
+        assertThat(profiles).hasSize(1);
+        assertThat(profiles.get(0).hasPtz()).isTrue();
+    }
+
+    @Test
+    void testParseMediaProfiles_WithoutPtzConfiguration_HasPtzFalse() throws Exception {
+        String xml =
+            "<?xml version=\"1.0\"?>"
+            + "<env:Envelope xmlns:env=\"http://www.w3.org/2003/05/soap-envelope\""
+            + " xmlns:trt=\"http://www.onvif.org/ver10/media/wsdl\""
+            + " xmlns:tt=\"http://www.onvif.org/ver10/schema\">"
+            + "<env:Body><trt:GetProfilesResponse>"
+            + "<trt:Profiles token=\"Profile_1\"><tt:Name>MainStream</tt:Name></trt:Profiles>"
+            + "</trt:GetProfilesResponse></env:Body></env:Envelope>";
+
+        List<MediaProfile> profiles = invokeParseMediaProfiles(xml);
+
+        assertThat(profiles).hasSize(1);
+        assertThat(profiles.get(0).hasPtz()).isFalse();
     }
 }

@@ -149,9 +149,10 @@ All HTTP endpoints support HTTPS when Ignition Gateway is configured with SSL.
 All user inputs are validated before use:
 
 ### Device Names
-- Pattern: `[a-zA-Z0-9_-]+`
+- Pattern: `[a-zA-Z0-9_.()\- ]+`
 - Maximum length: 64 characters
-- No special characters or path traversal
+- Allows letters, digits, spaces, `_`, `-`, `.`, and parentheses to match Ignition's
+  device-name charset; rejects `/`, `\`, control characters, and path traversal (`..`)
 
 ### Profile Tokens
 - Pattern: `[a-zA-Z0-9_-]+`
@@ -159,8 +160,25 @@ All user inputs are validated before use:
 - Sanitized before XML insertion
 
 ### IP Addresses
-- Validated via regex pattern
-- Supports IPv4 addresses and hostnames
+- Validated via `ValidationUtil.isValidIpOrHost`: strict IPv4 (each octet 0–255) or a
+  valid DNS hostname
+- Bogus inputs such as `1111` or `25525525525` are rejected (the previous regex accepted them)
+
+## go2rtc Streaming Trust Boundary
+
+The bundled go2rtc process is launched on gateway localhost to transcode RTSP for browser
+playback. Its HTTP API receives credentialed RTSP URLs (`rtsp://user:pass@host`) when streams
+are registered.
+
+- **API authentication**: as of v3.0.8 the gateway generates a random per-launch password,
+  writes it into the go2rtc `api.password` config, and sends HTTP Basic auth on every API call.
+  This closes the prior exposure where any local process could `GET /api/streams` and read back
+  camera credentials from an unauthenticated localhost API.
+- **Trust boundary**: go2rtc binds to localhost only. The threat model assumes the gateway host
+  itself is trusted; operators should not run untrusted local processes on the gateway, and the
+  go2rtc API port should never be exposed beyond localhost.
+- **Stream proxy**: the module's own stream proxy never logs source URLs, so credentials do not
+  leak into gateway logs.
 
 ## XML Security
 

@@ -39,6 +39,10 @@ class ValidationUtilTest {
         assertThat(ValidationUtil.isValidDeviceName("Camera-1_Main")).isTrue();
         assertThat(ValidationUtil.isValidDeviceName("CAM_123-ABC")).isTrue();
 
+        // Valid dot and parentheses (permitted by Ignition device names)
+        assertThat(ValidationUtil.isValidDeviceName("Camera.1")).isTrue();
+        assertThat(ValidationUtil.isValidDeviceName("Entrance (Left)")).isTrue();
+
         // Single character
         assertThat(ValidationUtil.isValidDeviceName("A")).isTrue();
         assertThat(ValidationUtil.isValidDeviceName("1")).isTrue();
@@ -64,12 +68,10 @@ class ValidationUtilTest {
         "Camera%1",           // % not allowed
         "Camera&1",           // & not allowed
         "Camera*1",           // * not allowed
-        "Camera(1)",          // Parentheses not allowed
         "Camera[1]",          // Brackets not allowed
         "Camera{1}",          // Braces not allowed
         "Camera/1",           // Slash not allowed
         "Camera\\1",          // Backslash not allowed
-        "Camera.1",           // Dot not allowed
         "Camera,1",           // Comma not allowed
         "Camera;1",           // Semicolon not allowed
         "Camera:1",           // Colon not allowed

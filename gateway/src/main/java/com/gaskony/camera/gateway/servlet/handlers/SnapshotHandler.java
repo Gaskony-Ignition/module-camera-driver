@@ -73,6 +73,33 @@ public class SnapshotHandler extends BaseHandler {
         cacheTimestamps.keySet().removeIf(k -> k.startsWith(prefix));
     }
 
+    /**
+     * Removes all per-device state for the named device.
+     * Must be called when a device is removed/shut down to prevent unbounded
+     * memory growth in the metric maps and stale JPEG frames being served.
+     * Any in-flight pending future for this device is also completed
+     * exceptionally so waiters are not left blocked.
+     */
+    public static void forgetDevice(String deviceName) {
+        // Clear per-device metrics
+        lastFetchDurationMs.remove(deviceName);
+        lastFetchTimestampMs.remove(deviceName);
+        fetchTotals.remove(deviceName);
+        fetchErrors.remove(deviceName);
+
+        // Clear cached snapshot frames (cache keys are "deviceName:profileToken")
+        invalidateCache(deviceName);
+
+        // Fail any in-flight futures for this device so waiters unblock immediately
+        String prefix = deviceName + ":";
+        pendingFetches.forEach((key, future) -> {
+            if (key.startsWith(prefix)) {
+                future.completeExceptionally(new IllegalStateException("Device removed: " + deviceName));
+            }
+        });
+        pendingFetches.keySet().removeIf(k -> k.startsWith(prefix));
+    }
+
     /** Returns the set of device names that have been tracked (ever received a snapshot request). */
     public static Set<String> getTrackedDevices() {
         return fetchTotals.keySet();
@@ -171,7 +198,7 @@ public class SnapshotHandler extends BaseHandler {
             if (racing != null) {
                 // Another fetch is already in flight — join it instead of hitting the camera twice
                 try {
-                    snapshotBytes = racing.get(30, TimeUnit.SECONDS);
+                    snapshotBytes = racing.get(15, TimeUnit.SECONDS);
                 } catch (ExecutionException e) {
                     response.sendError(503, "Snapshot fetch failed: " + e.getCause().getMessage());
                     return null;
@@ -180,7 +207,10 @@ public class SnapshotHandler extends BaseHandler {
                     return null;
                 }
             } else {
-                // We won the race — perform the actual camera fetch
+                // We won the race — perform the actual camera fetch.
+                // The future MUST be completed (normally or exceptionally) and MUST be
+                // removed from pendingFetches regardless of outcome, otherwise waiters
+                // will block for the full join timeout on any unchecked exception.
                 try {
                     snapshotBytes = fetchSnapshotBytes(device, deviceName, resolvedProfile);
                     cachedSnapshots.put(cacheKey, snapshotBytes);
@@ -189,6 +219,13 @@ public class SnapshotHandler extends BaseHandler {
                 } catch (IOException e) {
                     mine.completeExceptionally(e);
                     response.sendError(500, e.getMessage());
+                    return null;
+                } catch (Throwable t) {
+                    // Covers NPE, OOME, and any other unchecked exception so waiters
+                    // are unblocked immediately rather than hanging for 15 seconds.
+                    mine.completeExceptionally(t);
+                    logger.error("Unexpected error during snapshot fetch for device: {}", deviceName, t);
+                    response.sendError(500, "Unexpected error during snapshot fetch");
                     return null;
                 } finally {
                     pendingFetches.remove(cacheKey, mine);

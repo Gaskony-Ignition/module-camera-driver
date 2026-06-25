@@ -14,6 +14,7 @@ public class MediaProfile {
     private int height;
     private int frameRate;
     private int bitrate;
+    private boolean hasPtz;
 
     public MediaProfile() {
     }
@@ -93,6 +94,17 @@ public class MediaProfile {
 
     public void setBitrate(int bitrate) {
         this.bitrate = bitrate;
+    }
+
+    /**
+     * @return true if this profile carries a PTZConfiguration, i.e. PTZ is usable on it.
+     */
+    public boolean hasPtz() {
+        return hasPtz;
+    }
+
+    public void setHasPtz(boolean hasPtz) {
+        this.hasPtz = hasPtz;
     }
 
     @Override

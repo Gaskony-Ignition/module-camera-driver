@@ -449,8 +449,8 @@ class AuthenticationManagerTest {
         when(req.getHeader("X-Forwarded-For")).thenReturn(null);
         when(req.getHeader("X-Real-IP")).thenReturn(null);
         when(req.getRemoteAddr()).thenReturn(remoteAddr);
-        // isApiKeyValid() tries the "apiKey" query param first, then the header.
-        when(req.getParameter("apiKey")).thenReturn(null);
+        // isApiKeyValid() reads the key from the X-API-Key header only (the query-param
+        // path was removed in v3.0.8 to avoid leaking keys into access logs).
         when(req.getHeader("X-API-Key")).thenReturn(apiKey);
         return req;
     }

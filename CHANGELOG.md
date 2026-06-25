@@ -5,6 +5,46 @@ All notable changes to the Ignition Camera Driver module will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.9] - 2026-06-25
+
+**Type:** PATCH — ONVIF PTZ discovery robustness
+
+### Fixed
+- **PTZ-capable cameras could report no PTZ over ONVIF.** `ONVIFClient.parseServices()` matched service elements by a hardcoded `tds:` XML prefix, so cameras that use a different SOAP prefix had *all* services silently dropped — taking PTZ and ONVIF media discovery with them. Service parsing is now namespace-prefix-agnostic (matched by local name), consistent with `parseMediaProfiles()`.
+- **PTZ is also detected from a media profile's `PTZConfiguration`.** Cameras that advertise PTZ via the profile rather than a discrete PTZ service are now recognised. Added `MediaProfile.hasPtz()`; `CameraDevice` falls back to it when no standalone PTZ service is listed.
+
+### Added
+- Interactive architecture diagram at `docs/architecture.html` — offline, pan/zoom, click-through component map of the whole module.
+
+### Tests
+- Regression tests for non-`tds` prefix service parsing and `PTZConfiguration` detection.
+
+---
+
+## [3.0.8] - 2026-06-23
+
+**Type:** PATCH — security & robustness hardening (deep-review punch list)
+
+### Security
+- **go2rtc API authenticated** — a random per-launch password is written to the go2rtc config and sent as HTTP Basic on every API call, closing the unauthenticated-localhost credential readback (C3).
+- **Session token & API key are header-only** — removed the `?token=` / `?apiKey=` query-param paths that leak into access logs (H6).
+- **ONVIF SOAP redirects are only followed to the same host** — prevents a malicious camera redirecting WS-UsernameToken auth to an external host (H3).
+
+### Fixed
+- **Snapshot device cleanup (C1)** — `forgetDevice()` clears every per-device metric map and cache on shutdown and unblocks in-flight waiters.
+- **Snapshot coalescing hang (C2)** — the winning fetch is wrapped so any unchecked exception completes waiters immediately; join timeout reduced 30s → 15s.
+- **Per-stream bitrate baseline (H1)** — `/metrics` and `/diagnostics` no longer corrupt each other's bitrate deltas.
+- **Diagnostics/metrics/health endpoints rate-limited (H2).**
+- **ONVIF connection-pool leak (H4)** — response entity consumed on non-200.
+- **Device status visibility (H5)** — `deviceStatus` is now volatile and the OPC-UA address-space build is guarded so a node-build failure can't permanently brick the device.
+- IP/host validation wired into config-save via `ValidationUtil.isValidIpOrHost` (M6); device-name pattern widened (M7); periodic expired-token sweep (M1); go2rtc restart counter only resets after stable uptime (M2); frontend clock-skew, refresh button, MSE token-ref and stale-metrics fixes (M5/L5/L6/L7).
+- **`TRUST_FIRST_USE` SSL mode no longer throws** — it falls back to STRICT with a warning instead of bricking ONVIF on save.
+
+### Docs
+- SECURITY.md documents the go2rtc localhost trust boundary; corrected the suite-table module ID.
+
+---
+
 ## [3.0.3] - 2026-06-18
 
 **Type:** PATCH — bug fix / robustness / internal rename

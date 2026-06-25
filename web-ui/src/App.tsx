@@ -48,7 +48,12 @@ function App() {
       }
     } catch {
       attemptsRef.current++
-      setStatus(attemptsRef.current > 2 ? 'disconnected' : 'connecting')
+      if (attemptsRef.current > 2) {
+        setStatus('disconnected')
+        setMetrics(null)
+      } else {
+        setStatus('connecting')
+      }
       intervalRef.current = Math.min(5000 * Math.pow(2, attemptsRef.current), 30000)
     }
 
@@ -85,6 +90,11 @@ function App() {
     localStorage.setItem(STORAGE_KEY, view)
   }, [])
 
+  const handleRefresh = useCallback(() => {
+    checkHealth()
+    fetchMetrics()
+  }, [checkHealth, fetchMetrics])
+
   if (status === 'auth_required') {
     return (
       <div className="app-wrapper">
@@ -118,7 +128,7 @@ function App() {
       case 'diagnostics':
         return <DiagnosticsView />
       default:
-        return <DashboardView health={health} metrics={metrics} onViewChange={handleViewChange} />
+        return <DashboardView health={health} metrics={metrics} onViewChange={handleViewChange} onRefresh={handleRefresh} />
     }
   }
 

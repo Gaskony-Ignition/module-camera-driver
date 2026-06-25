@@ -137,19 +137,17 @@ public class AuthenticationManager {
     }
 
     /**
-     * Validates API key from query parameter or header.
+     * Validates the API key supplied via the {@code X-API-Key} header.
+     *
+     * <p>The query-parameter path ({@code ?apiKey=}) was removed: query strings are
+     * routinely written to gateway/proxy access logs, so accepting the key there leaks
+     * it. Header-only, mirroring the session-token handling.
      *
      * @param request The HTTP request
      * @return true if API key is valid, false otherwise
      */
     private boolean isApiKeyValid(HttpServletRequest request) {
-        // Try query parameter first
-        String apiKey = request.getParameter("apiKey");
-
-        // Try header if not in query parameter
-        if (apiKey == null || apiKey.isEmpty()) {
-            apiKey = request.getHeader("X-API-Key");
-        }
+        String apiKey = request.getHeader("X-API-Key");
 
         if (apiKey == null || apiKey.isEmpty()) {
             return false;

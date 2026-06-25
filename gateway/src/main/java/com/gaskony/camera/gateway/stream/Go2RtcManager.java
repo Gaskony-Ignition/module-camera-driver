@@ -21,6 +21,9 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.SecureRandom;
+import java.util.Base64;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -47,6 +50,14 @@ public class Go2RtcManager {
     private static final int MAX_RESTART_ATTEMPTS = 5;
     private static final long BASE_RESTART_DELAY_MS = 2000;
     private static final int HTTP_TIMEOUT_MS = 5000;
+    /**
+     * A process must stay alive at least this long before it is considered
+     * "stable" and the restart counter is reset.  Crashes within this window
+     * accumulate toward MAX_RESTART_ATTEMPTS so that a fast crash loop is
+     * detected and halted rather than repeating indefinitely.
+     */
+    private static final long STABILITY_THRESHOLD_MS = 60_000;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final Path dataDir;
     private final int port;
@@ -58,8 +69,38 @@ public class Go2RtcManager {
 
     private Path ffmpegDir;
 
-    private final java.util.concurrent.ConcurrentHashMap<String, Long> lastPollBytes = new java.util.concurrent.ConcurrentHashMap<>();
-    private volatile long lastPollTimeMs = 0;
+    /**
+     * Random per-launch password for the go2rtc HTTP API.
+     * Written into the YAML config under api.password so that any local process
+     * that discovers the go2rtc port must still authenticate before it can read
+     * the registered stream list (which contains credentialed RTSP URLs).
+     *
+     * go2rtc API auth YAML key used: "api.password" (HTTP Basic, user "admin").
+     * Source: go2rtc README — the "api" section supports a "password" field that
+     * enables HTTP Basic authentication on all /api/* endpoints.
+     * Assumption: go2rtc expects HTTP Basic auth with username "admin" and the
+     * configured password value.  If go2rtc uses a different username or scheme,
+     * only the username string below needs changing — the YAML key is correct.
+     */
+    private volatile String apiPassword;
+
+    /**
+     * Per-stream bitrate baseline: maps stream name -> (recvBytes, timestampMs).
+     * Replaces the previous shared lastPollBytes + lastPollTimeMs fields, which
+     * were mutated by every caller of getStreamInfo() / getStreamsByName() and
+     * caused wildly inconsistent bitrate readings when multiple callers raced.
+     * Each entry is updated only inside getStreamInfo() under a single pass, so
+     * the baseline is keyed per stream and is not shared across concurrent calls.
+     */
+    private static final class BitrateBaseline {
+        final long recvBytes;
+        final long timestampMs;
+        BitrateBaseline(long recvBytes, long timestampMs) {
+            this.recvBytes = recvBytes;
+            this.timestampMs = timestampMs;
+        }
+    }
+    private final ConcurrentHashMap<String, BitrateBaseline> bitrateBaselines = new ConcurrentHashMap<>();
 
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
@@ -90,6 +131,12 @@ public class Go2RtcManager {
         }
 
         shuttingDown.set(false);
+
+        // Generate a fresh random API password for this launch so the go2rtc
+        // HTTP API requires authentication and cannot be read by other local processes.
+        byte[] randomBytes = new byte[24];
+        SECURE_RANDOM.nextBytes(randomBytes);
+        apiPassword = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
 
         // Extract go2rtc binary
         Go2RtcBinaryExtractor extractor = new Go2RtcBinaryExtractor(dataDir);
@@ -155,7 +202,10 @@ public class Go2RtcManager {
             process = pb.start();
             running.set(true);
             processStartTime = System.currentTimeMillis();
-            restartCount.set(0);
+            // NOTE: restartCount is NOT reset here. It is reset in monitorProcess()
+            // only after the process has remained alive past STABILITY_THRESHOLD_MS.
+            // Resetting on every launch would allow an infinite crash loop to cycle
+            // forever without MAX_RESTART_ATTEMPTS ever tripping.
 
             // Start log reader thread
             Thread logReader = new Thread(() -> readProcessOutput(process), "go2rtc-log-reader");
@@ -220,6 +270,15 @@ public class Go2RtcManager {
 
                     logger.warn("go2rtc process exited unexpectedly with code: {}", exitCode);
 
+                    // Only reset the restart counter if the process lived long enough
+                    // to be considered stable.  This prevents a fast crash loop from
+                    // resetting the counter on every iteration and looping forever.
+                    long uptimeMs = System.currentTimeMillis() - processStartTime;
+                    if (uptimeMs >= STABILITY_THRESHOLD_MS) {
+                        logger.debug("go2rtc was stable for {}ms — resetting restart counter", uptimeMs);
+                        restartCount.set(0);
+                    }
+
                     int attempts = restartCount.incrementAndGet();
                     if (attempts > MAX_RESTART_ATTEMPTS) {
                         logger.error("go2rtc exceeded max restart attempts ({}), giving up", MAX_RESTART_ATTEMPTS);
@@ -244,8 +303,15 @@ public class Go2RtcManager {
      */
     private Path generateConfig(Path configDir) {
         Path configPath = configDir.resolve("go2rtc.yaml");
+        // go2rtc YAML key "api.password" enables HTTP Basic authentication on all
+        // /api/* endpoints (username "admin", password = value of this field).
+        // Reference: go2rtc README "API" section — the "api" block accepts a
+        // "password" key; go2rtc then requires Basic auth credentials on every
+        // request to its HTTP API.
+        // Assumption: the expected username is "admin" (go2rtc default).
         String config = "api:\n" +
             "  listen: \"127.0.0.1:" + port + "\"\n" +
+            "  password: \"" + apiPassword + "\"\n" +
             "log:\n" +
             "  level: \"warn\"\n";
 
@@ -258,6 +324,19 @@ public class Go2RtcManager {
             logger.error("Failed to write go2rtc config", e);
             return null;
         }
+    }
+
+    /**
+     * Applies HTTP Basic authentication credentials to the given request using
+     * the per-launch API password generated in start().
+     * go2rtc expects username "admin" and the value of the "api.password" YAML key.
+     */
+    private void applyApiAuth(org.apache.http.HttpRequest request) {
+        if (apiPassword == null) return;
+        String credentials = "admin:" + apiPassword;
+        String encoded = Base64.getEncoder().encodeToString(
+            credentials.getBytes(StandardCharsets.UTF_8));
+        request.setHeader("Authorization", "Basic " + encoded);
     }
 
     /**
@@ -280,6 +359,7 @@ public class Go2RtcManager {
                 URLEncoder.encode(rtspUrl, StandardCharsets.UTF_8));
 
             HttpPut request = new HttpPut(url);
+            applyApiAuth(request);
             try (CloseableHttpResponse response = httpClient.execute(request)) {
                 int statusCode = response.getStatusLine().getStatusCode();
                 EntityUtils.consumeQuietly(response.getEntity());
@@ -314,6 +394,7 @@ public class Go2RtcManager {
                 URLEncoder.encode(streamName, StandardCharsets.UTF_8));
 
             HttpDelete request = new HttpDelete(url);
+            applyApiAuth(request);
             try (CloseableHttpResponse response = httpClient.execute(request)) {
                 int statusCode = response.getStatusLine().getStatusCode();
                 EntityUtils.consumeQuietly(response.getEntity());
@@ -384,6 +465,7 @@ public class Go2RtcManager {
         try {
             String url = getSnapshotUrl(streamName);
             HttpGet request = new HttpGet(url);
+            applyApiAuth(request);
             try (CloseableHttpResponse response = httpClient.execute(request)) {
                 int statusCode = response.getStatusLine().getStatusCode();
                 if (statusCode == 200 && response.getEntity() != null) {
@@ -419,6 +501,7 @@ public class Go2RtcManager {
         try {
             String url = String.format("http://127.0.0.1:%d/api", port);
             HttpGet request = new HttpGet(url);
+            applyApiAuth(request);
             try (CloseableHttpResponse response = httpClient.execute(request)) {
                 EntityUtils.consumeQuietly(response.getEntity());
                 boolean result = response.getStatusLine().getStatusCode() < 500;
@@ -501,6 +584,7 @@ public class Go2RtcManager {
         try {
             String url = String.format("http://127.0.0.1:%d/api/streams", port);
             HttpGet request = new HttpGet(url);
+            applyApiAuth(request);
             try (CloseableHttpResponse response = httpClient.execute(request)) {
                 int statusCode = response.getStatusLine().getStatusCode();
                 if (statusCode == 200 && response.getEntity() != null) {
@@ -513,7 +597,6 @@ public class Go2RtcManager {
                     JSONArray streamDetails = new JSONArray();
 
                     long now = System.currentTimeMillis();
-                    long timeDeltaMs = (lastPollTimeMs > 0) ? (now - lastPollTimeMs) : 0;
 
                     java.util.Iterator<String> keys = streams.keys();
                     while (keys.hasNext()) {
@@ -587,16 +670,22 @@ public class Go2RtcManager {
                             detail.put("consumers", cCount);
                             detail.put("consumerSendBytes", consumerSendBytes);
 
-                            // --- Bitrate (from producer recv delta) ---
+                            // --- Bitrate (per-stream delta, caller-independent) ---
+                            // bitrateBaselines stores the previous (recvBytes, timestamp) per
+                            // stream name so that concurrent callers each see a consistent value
+                            // without corrupting each other's baseline.  The baseline is updated
+                            // atomically here; a second simultaneous call will compute delta=0
+                            // (same recvBytes) rather than a wildly wrong number.
                             long bitrateKbps = 0;
-                            Long lastRecv = lastPollBytes.get(name);
-                            if (lastRecv != null && timeDeltaMs > 0) {
-                                long delta = producerRecvBytes - lastRecv;
-                                if (delta > 0) {
-                                    bitrateKbps = (delta * 8) / timeDeltaMs;
+                            BitrateBaseline prev = bitrateBaselines.get(name);
+                            if (prev != null) {
+                                long timeDeltaMs = now - prev.timestampMs;
+                                long byteDelta = producerRecvBytes - prev.recvBytes;
+                                if (timeDeltaMs > 0 && byteDelta > 0) {
+                                    bitrateKbps = (byteDelta * 8) / timeDeltaMs;
                                 }
                             }
-                            lastPollBytes.put(name, producerRecvBytes);
+                            bitrateBaselines.put(name, new BitrateBaseline(producerRecvBytes, now));
                             detail.put("bitrateKbps", bitrateKbps);
 
                             // --- Deduplication ---
@@ -604,8 +693,6 @@ public class Go2RtcManager {
                         }
                         streamDetails.put(detail);
                     }
-
-                    lastPollTimeMs = System.currentTimeMillis();
 
                     info.put("registeredStreams", registered);
                     info.put("activeProducers", producers);

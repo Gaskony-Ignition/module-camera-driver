@@ -36,6 +36,10 @@ public class DiagnosticsHandler extends BaseHandler {
             return null;
         }
 
+        if (!RateLimiter.checkRateLimit(requestContext.getRequest(), response)) {
+            return null;
+        }
+
         Map<String, CameraDevice> allDevices = CameraExtensionPoint.getAllDevices();
 
         JSONObject result = new JSONObject();
@@ -96,6 +100,10 @@ public class DiagnosticsHandler extends BaseHandler {
 
         // P3-CD: shared AccessControl pattern.
         if (!requireAuthenticated(requestContext, response)) {
+            return null;
+        }
+
+        if (!RateLimiter.checkRateLimit(requestContext.getRequest(), response)) {
             return null;
         }
 
@@ -178,6 +186,10 @@ public class DiagnosticsHandler extends BaseHandler {
      */
     public Object handleMetrics(RequestContext requestContext, HttpServletResponse response) throws Exception {
         if (!requireAuthenticated(requestContext, response)) {
+            return null;
+        }
+
+        if (!RateLimiter.checkRateLimit(requestContext.getRequest(), response)) {
             return null;
         }
 

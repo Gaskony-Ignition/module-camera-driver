@@ -8,6 +8,7 @@ import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Short-lived bearer tokens that let the Perspective camera components authenticate to the
@@ -47,6 +48,15 @@ public final class SessionTokenStore {
     /** Hard cap on stored tokens — a backstop against unbounded growth. */
     private static final int MAX_TOKENS = 10_000;
 
+    /**
+     * Sweep expired tokens on roughly 1-in-N validate calls.
+     * N=50 gives a probabilistic sweep without paying the cost on every hot path.
+     */
+    private static final int SWEEP_INTERVAL = 50;
+
+    /** Counter used to sample validate calls for periodic sweep. */
+    private static final AtomicLong VALIDATE_COUNTER = new AtomicLong(0);
+
     /** token -&gt; expiry epoch millis. */
     private static final Map<String, Long> TOKENS = new ConcurrentHashMap<>();
 
@@ -79,17 +89,25 @@ public final class SessionTokenStore {
     }
 
     /**
-     * Reads the token from the {@code X-Camera-Token} header (or {@code token} query parameter,
-     * as a fallback for callers that cannot set headers) and validates it.
+     * Reads the token from the {@code X-Camera-Token} request header and validates it.
+     *
+     * <p>The query-parameter fallback ({@code ?token=}) has been intentionally removed: query
+     * parameters are echoed verbatim into gateway access logs and proxy logs, creating a token
+     * leak vector. All callers must present the token via the {@code X-Camera-Token} header.</p>
+     *
+     * <p>On roughly 1-in-{@value #SWEEP_INTERVAL} calls a lightweight sweep removes expired
+     * entries so that stale tokens do not accumulate between {@link #mint()} calls.</p>
      *
      * @param request the HTTP request
-     * @return true if a live, unexpired token was presented
+     * @return true if a live, unexpired token was presented via the header
      */
     public static boolean isValid(HttpServletRequest request) {
-        String token = request.getHeader("X-Camera-Token");
-        if (token == null || token.isEmpty()) {
-            token = request.getParameter("token");
+        // Periodic background sweep — cheap: only runs on every SWEEP_INTERVAL-th validate call.
+        if (VALIDATE_COUNTER.incrementAndGet() % SWEEP_INTERVAL == 0) {
+            purgeExpired();
         }
+
+        String token = request.getHeader("X-Camera-Token");
         if (token == null || token.isEmpty()) {
             return false;
         }

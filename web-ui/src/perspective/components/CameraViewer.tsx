@@ -34,6 +34,16 @@ export function useCameraStream(
     imgRef: React.RefObject<HTMLImageElement | null>
 ) {
     const token = useCameraToken();
+    const tokenRef = useRef<string | null>(token);
+    // Keep the ref in sync with the latest token so fetch closures always read
+    // the current value without re-running the stream effect on every token refresh.
+    // tokenReady flips to true once on the first non-null token so the stream
+    // effect can start; subsequent token refreshes only update the ref silently.
+    const [tokenReady, setTokenReady] = useState<boolean>(token !== null);
+    useEffect(() => {
+        tokenRef.current = token;
+        if (token !== null) setTokenReady(true);
+    }, [token]);
     const [status, setStatus] = useState<StreamStatus>('idle');
     const [error, setError] = useState<string>('');
     const [activeMode, setActiveMode] = useState<'mse' | 'snapshot' | null>(null);
@@ -77,7 +87,7 @@ export function useCameraStream(
             try {
                 const resp = await fetch(
                     API.snapshot(deviceName),
-                    { credentials: 'include', headers: cameraAuthHeaders(token) }
+                    { credentials: 'include', headers: cameraAuthHeaders(tokenRef.current) }
                 );
                 if (!resp.ok) {
                     setStatus('error');
@@ -102,7 +112,7 @@ export function useCameraStream(
 
         fetchSnapshot();
         intervalRef.current = window.setInterval(fetchSnapshot, snapshotInterval);
-    }, [deviceName, snapshotInterval, imgRef, token]);
+    }, [deviceName, snapshotInterval, imgRef]);
 
     const startMse = useCallback(async (fallbackToSnapshot: boolean) => {
         if (!deviceName) return;
@@ -137,7 +147,7 @@ export function useCameraStream(
         try {
             response = await fetch(
                 API.stream(deviceName),
-                { credentials: 'include', headers: cameraAuthHeaders(token), signal: ac.signal }
+                { credentials: 'include', headers: cameraAuthHeaders(tokenRef.current), signal: ac.signal }
             );
         } catch (e: unknown) {
             const err = e as Error;
@@ -238,7 +248,7 @@ export function useCameraStream(
                 setError('Stream lost: ' + err.message);
             }
         }
-    }, [deviceName, videoRef, startSnapshot, token]);
+    }, [deviceName, videoRef, startSnapshot]);
 
     const start = useCallback(() => {
         cleanup();
@@ -248,14 +258,14 @@ export function useCameraStream(
         }
         // Wait for the auth token from the gateway delegate before issuing any request;
         // without it every fetch would 401. The effect re-runs when the token arrives.
-        if (!token) {
+        if (!tokenRef.current) {
             setStatus('loading');
             return;
         }
         if (mode === 'snapshot') startSnapshot();
         else if (mode === 'mse') startMse(false);
         else startMse(true); // auto: try MSE, fallback to snapshot
-    }, [deviceName, mode, cleanup, startSnapshot, startMse, token]);
+    }, [deviceName, mode, cleanup, startSnapshot, startMse, tokenReady]);
 
     useEffect(() => {
         start();

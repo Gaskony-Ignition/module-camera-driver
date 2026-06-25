@@ -126,11 +126,8 @@ public class CameraExtensionPoint extends DeviceExtensionPoint<CameraConfig> {
         String ipAddress = config.connection().ipAddress();
         if (ipAddress == null || ipAddress.trim().isEmpty()) {
             errors.check(false, "IP address is required");
-        } else {
-            String ipRegex = "^((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$";
-            if (!ipAddress.matches(ipRegex)) {
-                errors.check(false, "Invalid IP address format: " + ipAddress);
-            }
+        } else if (!ValidationUtil.isValidIpOrHost(ipAddress.trim())) {
+            errors.check(false, "Invalid IP address or hostname: " + ipAddress);
         }
 
         // Validate port
