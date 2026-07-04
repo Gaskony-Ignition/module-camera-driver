@@ -1,0 +1,76 @@
+/* ==========================================================================
+   PtzPad - PTZ (pan/tilt/zoom) overlay for stream previews
+   Scoped to .app-wrapper to prevent Gateway UI pollution
+   ========================================================================== */
+
+.app-wrapper .ptz-pad {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 6px;
+  background: var(--overlay-dark);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  pointer-events: auto;
+}
+
+.app-wrapper .ptz-pad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 26px);
+  grid-template-rows: repeat(3, 26px);
+  gap: 2px;
+}
+
+.app-wrapper .ptz-btn-spacer {
+  width: 26px;
+  height: 26px;
+}
+
+.app-wrapper .ptz-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.app-wrapper .ptz-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+}
+
+.app-wrapper .ptz-btn:active {
+  background: var(--bg-active);
+}
+
+.app-wrapper .ptz-btn-stop {
+  color: var(--error);
+}
+
+.app-wrapper .ptz-btn-stop:hover {
+  border-color: var(--error);
+}
+
+.app-wrapper .ptz-pad-zoom {
+  display: flex;
+  gap: 2px;
+  width: 100%;
+}
+
+.app-wrapper .ptz-pad-zoom .ptz-btn {
+  flex: 1;
+}

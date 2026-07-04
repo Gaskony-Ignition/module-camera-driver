@@ -31,6 +31,15 @@ public class StreamHandler extends BaseHandler {
     private static final int MAX_CONSECUTIVE_STREAM_ERRORS = 5;
     private static final int MAX_CONCURRENT_STREAMS = 20;
 
+    // Hard ceiling on how long a single proxied stream may run before the handler
+    // returns. A browser that navigates away or reconnects does not always close its
+    // TCP connection promptly, and a low-bitrate stream can keep the gateway blocked
+    // writing into a socket buffer without ever throwing — leaking the route
+    // concurrency slot forever (observed as "Route concurrency limit reached" 503s).
+    // Capping the lifetime guarantees every stream eventually returns and frees its
+    // slot; a still-watching client simply reconnects (one brief keyframe wait).
+    private static final long MAX_STREAM_DURATION_MS = 15 * 60 * 1000L;
+
     /** {@link #proxyStream} result: the upstream stream was proxied to the client successfully. */
     private static final int PROXY_STREAMED = 200;
     /** {@link #proxyStream} result: the upstream source could not be reached / returned no body. */
@@ -120,10 +129,8 @@ public class StreamHandler extends BaseHandler {
             boolean sourceConfigured = false;
             String upstreamFailure = null;
 
-            // Try late go2rtc registration
-            if (!device.isGo2RtcStreamRegistered()) {
-                device.tryRegisterGo2Rtc();
-            }
+            // Try late go2rtc registration (shared with WebRtcHandler — see BaseHandler).
+            ensureGo2RtcRegistered(device);
 
             // Prefer go2rtc MP4 proxy for RTSP streaming
             if (device.isGo2RtcStreamRegistered() && go2RtcManager != null && go2RtcManager.isAvailable()) {
@@ -216,6 +223,10 @@ public class StreamHandler extends BaseHandler {
         logger.info("Starting ONVIF snapshot stream - device: {}, profile: {}, fps: {}", deviceName, profileToken, fps);
 
         while (!Thread.currentThread().isInterrupted()) {
+            if (System.currentTimeMillis() - startTime > MAX_STREAM_DURATION_MS) {
+                logger.info("Snapshot stream hit max duration, closing to free route slot - device: {}", deviceName);
+                break;
+            }
             long frameStart = System.currentTimeMillis();
             try {
                 byte[] frame = device.getClient().getSnapshot(profileToken);
@@ -253,6 +264,10 @@ public class StreamHandler extends BaseHandler {
         logger.info("Starting generic snapshot stream - device: {}, fps: {}", deviceName, fps);
 
         while (!Thread.currentThread().isInterrupted()) {
+            if (System.currentTimeMillis() - startTime > MAX_STREAM_DURATION_MS) {
+                logger.info("Snapshot stream hit max duration, closing to free route slot - device: {}", deviceName);
+                break;
+            }
             long frameStart = System.currentTimeMillis();
             try {
                 byte[] frame = device.getCameraClient().fetchSnapshot();
@@ -329,6 +344,10 @@ public class StreamHandler extends BaseHandler {
                         output.write(buffer, 0, bytesRead);
                         output.flush();
                         totalBytes += bytesRead;
+                        if (System.currentTimeMillis() - startTime > MAX_STREAM_DURATION_MS) {
+                            logger.info("Stream proxy hit max duration, closing to free route slot - device: {}", deviceName);
+                            break;
+                        }
                     }
                 }
 

@@ -25,7 +25,7 @@
     },
     "mode": {
       "type": "string",
-      "enum": ["auto", "mse", "snapshot"],
+      "enum": ["auto", "webrtc", "mse", "snapshot"],
       "default": "auto",
       "description": "Default stream mode for all cells"
     },

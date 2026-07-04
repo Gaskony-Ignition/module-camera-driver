@@ -5,6 +5,118 @@ All notable changes to the Ignition Camera Driver module will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.3] - 2026-07-04
+
+**Type:** PATCH — Dedicated Page boot fix
+
+### Fixed
+- **Dedicated Page showed "CameraConnectionBrowser export was not found or is not a component."** The 3.1.2 shell resolved the UMD global as `exported.default || exported`, but `web-ui/src/index.ts` uses a *named* export (`export { default as CameraConnectionBrowser }`), so the global is a namespace object with the component at `.CameraConnectionBrowser` — the same export name the embedded Config view's SystemJS mount selects. The shell now resolves the named export first (with `.default`/direct-function fallbacks). The readable in-page error worked exactly as designed and made this a one-line diagnosis.
+
+---
+
+## [3.1.2] - 2026-07-03
+
+**Type:** PATCH — Dedicated Page now renders the real dashboard
+
+### Fixed
+- **The Dedicated Page showed an outdated dashboard.** The standalone view iframed a legacy self-contained vanilla-JS page (pre-3.0.7: no JVM-heap/go2rtc memory strip, no Camera Resources table, system-RAM status bar). That 130 KB page is replaced by a 12 KB shell that auth-gates and then loads the **same React app** the embedded Gateway Config view uses (`connectionBrowser.js`, with pinned React 18.3.1 UMD served from the module — still fully self-contained, no CDN). Both entry points now render one dashboard and can never drift apart again. Script/bundle failures show a readable in-page error instead of a blank page.
+
+---
+
+## [3.1.1] - 2026-07-03
+
+**Type:** PATCH — release-readiness review: gateway UI PTZ, static player parity, documentation truth pass
+
+### Added
+- **PTZ pad in the gateway Connection Browser** (Cameras view inline preview, shown only for PTZ-capable devices). Completes the admin workflow: a newly connected camera can now be fully verified — live view, snapshot, PTZ, status — from the gateway, without opening the Designer. Press-and-hold continuous move, zoom in/out, stop; first failed command surfaces a toast.
+
+### Changed
+- **Static pages' player upgraded to WebRTC-first.** `/player` and the standalone/dedicated Connection Browser page shared a stale MSE-only player with none of the leak/latency fixes; it now negotiates WebRTC first (same `/webrtc` signaling), falls back to MSE with live-edge pinning, and carries the generation-guarded teardown. Public `MsePlayer` API unchanged, so the pages needed no edits.
+
+### Fixed (documentation truth pass)
+- WebRTC documented across README, USAGE (new `POST /webrtc` section), SECURITY (port 8555 threat model), CLAUDE.md, and the interactive architecture diagram.
+- `docs/USAGE.md` PTZ documentation was **wrong** — it described a JSON request body; the endpoints take query parameters (and are ContinuousMove, not absolute move). Corrected with the press-and-hold pattern.
+- `docs/IMPLEMENTATION_STATUS.md` was frozen at 3.0.7 — brought current (3.0.8→3.1.1 history, WebRTC/leak/latency features, PTZ semantics).
+- Stale "168 tests" claim corrected to the real counts (535 gateway/common JUnit + 22 web-ui vitest) in all five places.
+- README: broken `docs/SECURITY.md` link fixed; install instructions no longer say `docker restart` (module hot-loads via the Gateway web UI); WebRTC/8555 deployment note added.
+- `docs/PROJECT_CHARTER.md` §2 gains the measured acceptance criteria (A1–A9: ≤1 s WebRTC latency, 10-camera scale, soak, resource hygiene) and the admin-verification workflow as done-criterion #8.
+
+---
+
+## [3.1.0] - 2026-07-03
+
+**Type:** MINOR — WebRTC transport for sub-second live video + unified stream engine
+
+### Added
+- **WebRTC live-video transport (primary).** New `POST /data/camera-driver/webrtc?device=<name>` route proxies the SDP offer/answer exchange to the bundled go2rtc (which stays bound to localhost); media then flows browser ↔ go2rtc over ICE on port 8555. WebRTC does not use an MSE `SourceBuffer`, so steady-state latency is network + decode (~0.3–0.8 s) regardless of the camera's keyframe interval — the GOP now only affects join time. This meets the ≤1 s latency acceptance target that MSE structurally could not on long-GOP cameras.
+- go2rtc config now includes a `webrtc:` block — listener on `:8555` and ICE candidates from an optional operator file (`data/camera-driver/go2rtc/webrtc-candidates.txt`, one `host:port` per line) or auto-detected site-local IPv4 addresses. Docker deployments on bridge networks must publish 8555/tcp+udp and set the candidates file; host-network deployments need nothing.
+- `mode` property on Camera Viewer / Camera Grid gains `webrtc`; `auto` now tries **WebRTC → MSE → snapshot**.
+
+### Changed
+- **One stream engine, everywhere.** The two duplicated MSE implementations (`MsePlayer.ts` used by the Gateway Config UI, and the inline loop in `useCameraStream` used by Perspective) are replaced by a single `CameraStreamEngine` used by all four call sites (Camera Viewer, Camera Grid, GridCell, InlineStream). The engine carries the generation-counter teardown (3.0.13) and MSE live-edge pinning (3.0.14), and guarantees WebRTC/MSE/snapshot attachment points are all reset on stop/switch. This removes the duplication that caused the 3.0.11 fix to land in dead code.
+
+### Tests
+- Gateway: `WebRtcHandlerTest` (auth, validation, 404, missing body, go2rtc-down 502) + Go2RtcManager webrtc-config tests — 468 gateway tests passing.
+- web-ui: engine fallback-ordering tests — 22 vitest tests passing.
+
+---
+
+## [3.0.14] - 2026-07-02
+
+**Type:** PATCH — video-only stream to stop periodic MSE freeze-and-jump
+
+### Fixed
+- **Perspective video froze and jumped every ~8 s.** The gateway proxied go2rtc's fMP4 with **both** the H.264 video track and the camera's AAC audio track. A browser appends that muxed stream into a single MSE `SourceBuffer`, where the playable range is the *intersection* of the audio and video buffered ranges — when the two tracks buffer unevenly (they do here: 10 fps video vs 16 kHz AAC), playback advances in chunks and stalls, producing the multi-second freeze-and-jump observed while watching the on-screen clock. The gateway now requests a **video-only** stream (`stream.mp4?src=…&video=h264,h265`); with a single track there is no A/V intersection to stall on, and it lowers latency and bandwidth. Camera monitoring does not use the audio track.
+- **Live-edge targets relaxed for smoothness.** The 3.0.12/3.0.13 live-edge pin aimed for 0.5 s latency, which a 10 fps / 4 s-GOP stream cannot sustain without starving the decoder. It now targets ~1.5 s of buffer and only hard-seeks when more than 4 s behind — low latency without re-introducing stalls.
+
+### Notes
+- Diagnosed with the bundled ffmpeg against the live go2rtc output: video PTS are monotonic ~10 fps; the muxed A/V interleave (and the browser's single-SourceBuffer intersection) was the stall source, not the video timestamps themselves.
+
+---
+
+## [3.0.13] - 2026-07-01
+
+**Type:** PATCH — stream connection leak → route concurrency exhaustion (503) + reconnect stutter
+
+### Fixed
+- **Streams leaked route concurrency slots, eventually 503-ing all viewers.** Diagnosed on the live gateway: a single Perspective component instance left **5 frozen go2rtc consumers** that never closed. When the browser navigates away or the component reconnects, it did not always close its old stream connection; the gateway, blocked writing a low-bitrate feed into an OS socket buffer, never saw the disconnect, so `handle()` never returned and its route concurrency slot (and the module's stream counter) leaked permanently. Accumulated leaks hit Ignition's per-route concurrency cap → `503 "Route concurrency limit reached"` for new viewers, and starved/among competing streams caused the ~8 s freeze-and-jump seen in the Designer.
+  - **Gateway:** every proxied/polled stream now has a hard `MAX_STREAM_DURATION_MS` (15 min) lifetime, so a handler always returns and frees its slot even if a client vanishes; a still-watching client transparently reconnects.
+  - **Gateway:** the `/stream` and `/snapshot` routes now declare explicit `concurrency(64, 16)` headroom instead of the framework default (tuned for short request/response), which is far too low for a multi-camera Perspective dashboard.
+  - **Client:** `useCameraStream` now uses a generation counter and explicit reader cancellation, so a reconnect/remount deterministically tears down the previous stream (cancels the reader, closes the connection) instead of leaving an orphaned reader draining the feed.
+
+---
+
+## [3.0.12] - 2026-07-01
+
+**Type:** PATCH — PTZ/live-latency fix applied to the correct player
+
+### Fixed
+- **The 3.0.11 live-edge fix was in a file the Perspective view never runs.** `MsePlayer.ts` (edited in 3.0.11) is only used by the Gateway Config UI preview; the Perspective `CameraViewer`/`CameraGrid` components use a *separate inline* MSE reader loop in `useCameraStream`, which had no live-edge control. So the Perspective view still drifted seconds behind the live edge and, sitting in stale buffer, periodically resynchronised with a visible freeze-and-jump (observed ~8 s cadence). The live-edge pinning (gentle 1.1× catch-up for minor drift, hard seek to the live edge past 1.5 s) is now applied directly in `useCameraStream`, so it takes effect in the actual Perspective components.
+
+### Notes
+- Diagnosed against the live gateway: PTZ command → camera is ~50 ms; go2rtc delivers the MP4 smoothly (~150 ms cadence); the gateway proxy flushes per-chunk. The residual latency was entirely browser-side playhead drift in the un-pinned inline loop.
+- The camera (Reolink sub-stream) keyframe interval is fixed at 4 s and cannot be lowered via ONVIF (`SetVideoEncoderConfiguration` reports success then reverts), so first-frame-on-connect can still take up to ~4 s; steady-state tracking after that is ~0.5–1 s.
+
+---
+
+## [3.0.11] - 2026-06-29
+
+**Type:** PATCH — PTZ responsiveness / live-stream latency
+
+### Fixed
+- **PTZ felt laggy and unresponsive in Perspective.** The PTZ command itself reaches the camera in ~50 ms (measured), but the MSE video feed had no live-edge control: the `<video>` playhead drifted further behind the live edge on every decode stall — and a PTZ move causes exactly such a stall (the whole scene changes until the next keyframe). Latency accumulated into multiple seconds, so the picture caught up long after the command landed. `MsePlayer` now continuously pins the playhead near the live edge (gentle 1.1× catch-up for minor drift, hard seek to the live edge past 1.5 s), capping live latency at ~0.5 s. Note: the floor is still bounded by the camera's keyframe/GOP interval — lower the camera's I-frame interval for best results.
+
+---
+
+## [3.0.10] - 2026-06-26
+
+**Type:** PATCH — PTZ control fix
+
+### Fixed
+- **Perspective PTZ controls did nothing.** The `/ptz/move` and `/ptz/stop` routes were registered without an HTTP method, so Ignition's data-route framework defaulted them to GET — but the Camera Viewer's PTZ buttons POST to them. Every move/stop returned **404 "No route match"** and was silently swallowed by the component's fire-and-forget fetch (`.catch(() => {})`), so the camera never received the command. Added `.method(HttpMethod.POST)` to both routes (`/ptz/status` stays GET). PTZ now reaches the camera via ONVIF ContinuousMove/Stop. This was latent — PTZ had never been exercised end-to-end until a PTZ camera was connected.
+
+---
+
 ## [3.0.9] - 2026-06-25
 
 **Type:** PATCH — ONVIF PTZ discovery robustness

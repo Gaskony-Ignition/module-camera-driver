@@ -95,4 +95,23 @@ public abstract class BaseHandler {
     protected void sendAuthenticationRequired(HttpServletResponse response) throws IOException {
         response.sendError(401, "Authentication required. Please log in to the Ignition Gateway or provide an API key.");
     }
+
+    /**
+     * Ensures the device's RTSP stream is registered with go2rtc before it is
+     * proxied (MP4/MJPEG stream or WebRTC signaling). Devices can connect
+     * before go2rtc finishes starting, or discover their RTSP URL only after
+     * initial connection (e.g. via ONVIF), so a late registration attempt is
+     * made here if one has not already succeeded.
+     *
+     * <p>Shared by {@link StreamHandler} and {@link WebRtcHandler} so the
+     * "ensure-then-proxy" ordering lives in exactly one place rather than
+     * being duplicated per handler.</p>
+     *
+     * @param device the resolved camera device
+     */
+    protected void ensureGo2RtcRegistered(CameraDevice device) {
+        if (!device.isGo2RtcStreamRegistered()) {
+            device.tryRegisterGo2Rtc();
+        }
+    }
 }

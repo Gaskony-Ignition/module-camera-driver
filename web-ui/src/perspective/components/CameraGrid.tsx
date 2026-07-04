@@ -134,7 +134,7 @@ function CameraCell({ deviceName, mode, snapshotInterval, showOverlay, showSaveB
                 autoPlay
                 muted
                 playsInline
-                style={{ ...cellStyles.video, display: (status === 'streaming' && activeMode === 'mse') ? 'block' : 'none' }}
+                style={{ ...cellStyles.video, display: (status === 'streaming' && (activeMode === 'mse' || activeMode === 'webrtc')) ? 'block' : 'none' }}
             />
             <img
                 ref={imgRef}

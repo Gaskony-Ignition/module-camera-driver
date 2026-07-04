@@ -156,6 +156,10 @@ const NODES = [
   {id:"page",label:"Page / Log handlers",sub:"UI + gateway log",layer:"handler",x:630,y:540,
     files:["gateway/servlet/handlers/PageHandler.java","handlers/GatewayLogHandler.java","handlers/BaseHandler.java"],
     desc:"Serves the web-ui assets and a gateway-log view. BaseHandler holds shared request plumbing."},
+  {id:"webrtc",label:"WebRtcHandler",sub:"SDP signaling proxy",layer:"handler",x:630,y:640,
+    files:["gateway/servlet/handlers/WebRtcHandler.java"],
+    desc:"WebRTC signaling (v3.1.0): authenticated POST /webrtc relays the browser's SDP offer to go2rtc and returns the answer. Media then flows browser ↔ go2rtc over ICE :8555 — sub-second latency, independent of camera keyframe interval.",
+    changes:["v3.1.0: primary transport; MSE via /stream is the fallback"]},
 
   // core
   {id:"hook",label:"CameraModuleHook",sub:"module entry point",layer:"core",x:930,y:560,
@@ -199,19 +203,19 @@ const NODES = [
   {id:"camera",label:"IP Camera",sub:"ONVIF :8000 · RTSP :554",layer:"external",x:1545,y:170,
     files:["e.g. Reolink RLC-823A 16X @ 10.60.9.148"],
     desc:"The physical camera. ONVIF SOAP on :8000/onvif/device_service; RTSP video on :554. Port 80 here is the web UI (redirects to self-signed HTTPS)."},
-  {id:"go2rtcproc",label:"go2rtc + ffmpeg",sub:"localhost :1984",layer:"external",x:1545,y:470,
+  {id:"go2rtcproc",label:"go2rtc + ffmpeg",sub:"API :1984 · WebRTC :8555",layer:"external",x:1545,y:470,
     files:["bundled binaries, data/camera-driver/"],
-    desc:"Local transcoder turning camera RTSP into browser MSE/MJPEG. API now password-protected on localhost."},
+    desc:"Local transcoder turning camera RTSP into browser WebRTC (ICE :8555, sub-second) or MSE/MJPEG fallback. API password-protected on localhost; ICE candidates from operator file or site-local auto-detect."},
   {id:"opcua",label:"Ignition OPC-UA Server",sub:"address space",layer:"external",x:1545,y:730,
     files:["Ignition platform"],
     desc:"Hosts the camera's OPC-UA nodes (DeviceInfo / MediaProfiles / PTZ / Status) for tags & scripting."},
 ];
 
 const EDGES = [
-  ["webui","routes","HTTP"],["persp","routes","token"],["persp","stream","MSE"],
+  ["webui","routes","HTTP"],["persp","routes","token"],["persp","webrtc","WebRTC"],["persp","stream","MSE fallback"],
   ["routes","cors",""],["routes","rate",""],["routes","auth",""],
-  ["routes","snapshot",""],["routes","stream",""],["routes","ptz",""],["routes","deviceapi",""],["routes","diag",""],["routes","page",""],
-  ["snapshot","device",""],["stream","go2rtc",""],["ptz","device",""],["deviceapi","registry",""],["diag","go2rtc","stats"],["diag","registry",""],
+  ["routes","snapshot",""],["routes","stream",""],["routes","ptz",""],["routes","deviceapi",""],["routes","diag",""],["routes","page",""],["routes","webrtc",""],
+  ["snapshot","device",""],["stream","go2rtc",""],["webrtc","go2rtc","offer/answer"],["ptz","device",""],["deviceapi","registry",""],["diag","go2rtc","stats"],["diag","registry",""],
   ["hook","extpoint","register"],["hook","routes","mount"],["hook","go2rtc","init"],
   ["extpoint","device","creates"],["registry","device",""],
   ["device","config","reads"],["device","onvif",""],["device","generic",""],["device","go2rtc","register"],["device","addr",""],["device","poller","starts"],

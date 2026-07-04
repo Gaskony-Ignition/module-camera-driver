@@ -15,6 +15,7 @@ export interface Device {
   ip?: string
   port?: number
   go2rtcRegistered?: boolean
+  hasPTZ?: boolean
   profiles: MediaProfile[]
 }
 

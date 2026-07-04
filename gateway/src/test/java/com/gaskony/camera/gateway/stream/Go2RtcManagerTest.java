@@ -73,7 +73,15 @@ class Go2RtcManagerTest {
     @Test
     void testGetStreamMp4Url_SimpleStreamName_ReturnsCorrectUrl() {
         String url = manager.getStreamMp4Url("camera1");
-        assertThat(url).isEqualTo("http://127.0.0.1:1984/api/stream.mp4?src=camera1");
+        // Video-only (video=h264,h265, no audio) to avoid MSE A/V-intersection stalls.
+        assertThat(url).isEqualTo("http://127.0.0.1:1984/api/stream.mp4?src=camera1&video=h264,h265");
+    }
+
+    @Test
+    void testGetStreamMp4Url_RequestsVideoOnly_NoAudioTrack() {
+        String url = manager.getStreamMp4Url("cam");
+        assertThat(url).contains("video=h264,h265");
+        assertThat(url).doesNotContain("audio");
     }
 
     @Test
@@ -181,7 +189,7 @@ class Go2RtcManagerTest {
         // Both should share the same host, port, and src param
         assertThat(mp4).startsWith("http://127.0.0.1:1984/");
         assertThat(mjpeg).startsWith("http://127.0.0.1:1984/");
-        assertThat(mp4).endsWith("src=" + streamName);
+        assertThat(mp4).contains("src=" + streamName);   // mp4 also carries &video=… (video-only)
         assertThat(mjpeg).endsWith("src=" + streamName);
 
         // Paths differ
@@ -266,6 +274,130 @@ class Go2RtcManagerTest {
 
         assertThat(mp4).contains("src=" + encoded);
         assertThat(mjpeg).contains("src=" + encoded);
+    }
+
+    // -----------------------------------------------------------------------
+    // getWebRtcSignalingUrl
+    // -----------------------------------------------------------------------
+
+    @Test
+    void testGetWebRtcSignalingUrl_SimpleStreamName_ReturnsCorrectUrl() {
+        String url = manager.getWebRtcSignalingUrl("camera1");
+        assertThat(url).isEqualTo("http://127.0.0.1:1984/api/webrtc?src=camera1");
+    }
+
+    @Test
+    void testGetWebRtcSignalingUrl_ContainsHost_AndPort() {
+        String url = manager.getWebRtcSignalingUrl("cam");
+        assertThat(url).startsWith("http://127.0.0.1:1984/");
+    }
+
+    @Test
+    void testGetWebRtcSignalingUrl_ContainsWebrtcPath() {
+        String url = manager.getWebRtcSignalingUrl("cam");
+        assertThat(url).contains("/api/webrtc");
+    }
+
+    @Test
+    void testGetWebRtcSignalingUrl_StreamNameWithSpaces_IsUrlEncoded() {
+        String url = manager.getWebRtcSignalingUrl("my camera");
+        String encoded = URLEncoder.encode("my camera", StandardCharsets.UTF_8);
+        assertThat(url).contains("src=" + encoded);
+        assertThat(url).doesNotContain("src=my camera");
+    }
+
+    @Test
+    void testGetWebRtcSignalingUrl_StreamNameWithSpecialChars_IsUrlEncoded() {
+        String name = "camera/front+door";
+        String url = manager.getWebRtcSignalingUrl(name);
+        String encoded = URLEncoder.encode(name, StandardCharsets.UTF_8);
+        assertThat(url).contains("src=" + encoded);
+    }
+
+    @Test
+    void testGetWebRtcSignalingUrl_CustomPort_UsesCorrectApiPort() {
+        Go2RtcManager custom = new Go2RtcManager(tempDataDir, 5000);
+        String url = custom.getWebRtcSignalingUrl("cam");
+        assertThat(url).startsWith("http://127.0.0.1:5000/");
+    }
+
+    // -----------------------------------------------------------------------
+    // Generated go2rtc.yaml — webrtc block + candidates
+    // -----------------------------------------------------------------------
+
+    /**
+     * Invokes the private generateConfig(Path) via start()'s effect is not
+     * practical here (start() also launches a real subprocess and requires a
+     * platform binary). Instead we call the package-private config generation
+     * indirectly through reflection, matching this test class's existing
+     * approach of exercising only the parts that don't require a live
+     * subprocess or network calls.
+     */
+    private String generateConfigYaml(Go2RtcManager mgr, Path configDir) throws Exception {
+        var method = Go2RtcManager.class.getDeclaredMethod("generateConfig", Path.class);
+        method.setAccessible(true);
+        // generateConfig() reads the instance's apiPassword field, which is only
+        // set by start(). Set it directly via reflection so we can generate a
+        // realistic config without launching a real go2rtc subprocess.
+        var passwordField = Go2RtcManager.class.getDeclaredField("apiPassword");
+        passwordField.setAccessible(true);
+        passwordField.set(mgr, "test-password");
+
+        Path configPath = (Path) method.invoke(mgr, configDir);
+        assertThat(configPath).isNotNull();
+        return Files.readString(configPath, StandardCharsets.UTF_8);
+    }
+
+    @Test
+    void testGeneratedYaml_ContainsWebRtcListenBlock() throws Exception {
+        Path configDir = tempDataDir.resolve("go2rtc");
+        String yaml = generateConfigYaml(manager, configDir);
+
+        assertThat(yaml).contains("webrtc:");
+        assertThat(yaml).contains("listen: \":8555\"");
+    }
+
+    @Test
+    void testGeneratedYaml_NoCandidatesFile_FallsBackToAutoDetectSection() throws Exception {
+        Path configDir = tempDataDir.resolve("go2rtc");
+        String yaml = generateConfigYaml(manager, configDir);
+
+        // Either real candidates are auto-detected (site-local IPv4 present on
+        // the test host) or the block is explicitly empty - either way the
+        // "candidates:" key must always be present under webrtc:.
+        assertThat(yaml).contains("candidates:");
+    }
+
+    @Test
+    void testGeneratedYaml_CandidatesFilePresent_IsHonoured() throws Exception {
+        Path configDir = tempDataDir.resolve("go2rtc");
+        Files.createDirectories(configDir);
+        Path candidatesFile = configDir.resolve("webrtc-candidates.txt");
+        Files.writeString(candidatesFile,
+            "# comment line, should be ignored\n"
+            + "\n"
+            + "203.0.113.10:8555\n"
+            + "  203.0.113.11:8555  \n",
+            StandardCharsets.UTF_8);
+
+        String yaml = generateConfigYaml(manager, configDir);
+
+        assertThat(yaml).contains("- \"203.0.113.10:8555\"");
+        assertThat(yaml).contains("- \"203.0.113.11:8555\"");
+        // The auto-detect fallback marker text must not appear when the file was used.
+        assertThat(yaml).doesNotContain("auto-detected");
+    }
+
+    @Test
+    void testGeneratedYaml_EmptyCandidatesFile_ProducesEmptyCandidatesList() throws Exception {
+        Path configDir = tempDataDir.resolve("go2rtc");
+        Files.createDirectories(configDir);
+        Path candidatesFile = configDir.resolve("webrtc-candidates.txt");
+        Files.writeString(candidatesFile, "# only comments\n\n", StandardCharsets.UTF_8);
+
+        String yaml = generateConfigYaml(manager, configDir);
+
+        assertThat(yaml).contains("candidates: []");
     }
 
     // -----------------------------------------------------------------------

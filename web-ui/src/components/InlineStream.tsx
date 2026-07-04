@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Square, Copy } from 'lucide-react'
-import { MsePlayer } from '../utils/MsePlayer'
+import { CameraStreamEngine, type CameraTransport } from '../utils/CameraStreamEngine'
+import { API_ENDPOINTS } from '../constants/api'
+import PtzPad from './PtzPad'
 import './InlineStream.css'
 
 interface InlineStreamProps {
@@ -8,57 +10,62 @@ interface InlineStreamProps {
   profileUri: string
   snapshotUri: string
   onClose: () => void
+  /** Whether this device reported PTZ capability — gates the PtzPad overlay. */
+  hasPTZ?: boolean
 }
 
 type StreamState = 'connecting' | 'playing' | 'error'
 
-function InlineStream({ device, profileUri, snapshotUri, onClose }: InlineStreamProps) {
+function InlineStream({ device, profileUri, snapshotUri, onClose, hasPTZ }: InlineStreamProps) {
   const [state, setState] = useState<StreamState>('connecting')
   const [errorMessage, setErrorMessage] = useState('')
+  const [activeTransport, setActiveTransport] = useState<CameraTransport | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
-  const playerRef = useRef<MsePlayer | null>(null)
-
-  const usesMse = MsePlayer.isSupported()
-
-  const handleError = useCallback((msg: string) => {
-    setState('error')
-    setErrorMessage(msg)
-  }, [])
+  const engineRef = useRef<CameraStreamEngine | null>(null)
 
   useEffect(() => {
     if (!profileUri) {
-      handleError('No stream URI available')
+      setState('error')
+      setErrorMessage('No stream URI available')
       return
     }
+    if (!videoRef.current) return
 
-    if (usesMse && videoRef.current) {
-      const player = new MsePlayer(videoRef.current, handleError)
-      playerRef.current = player
+    // The profile token travels as a query param on the already-built stream URL —
+    // reuse it so the snapshot fallback targets the same media profile.
+    const profileToken = new URL(profileUri, window.location.origin).searchParams.get('profile') ?? undefined
 
-      const onPlaying = () => setState('playing')
-      videoRef.current.addEventListener('playing', onPlaying, { once: true })
+    setState('connecting')
+    setErrorMessage('')
+    setActiveTransport(null)
 
-      player.start(profileUri)
+    const engine = new CameraStreamEngine(videoRef.current, imgRef.current, {
+      deviceName: device,
+      streamUrl: profileUri,
+      webrtcUrl: API_ENDPOINTS.webrtc(device),
+      snapshotUrl: API_ENDPOINTS.snapshot(device, profileToken),
+      // Gateway Config UI authenticates via the existing session cookie, not a token header.
+      getAuthHeaders: () => undefined,
+      transportPreference: 'auto',
+      onStatus: (status, detail) => {
+        if (status === 'streaming') {
+          setState('playing')
+          setActiveTransport(detail?.transport ?? null)
+        } else if (status === 'error') {
+          setState('error')
+          setErrorMessage(detail?.error ?? 'Stream failed')
+        }
+      },
+    })
+    engineRef.current = engine
+    engine.start()
 
-      return () => {
-        videoRef.current?.removeEventListener('playing', onPlaying)
-        player.stop()
-        playerRef.current = null
-      }
-    } else if (imgRef.current) {
-      // MJPEG fallback — set img src directly
-      imgRef.current.src = profileUri
+    return () => {
+      engine.stop()
+      engineRef.current = null
     }
-  }, [profileUri, usesMse, handleError])
-
-  const handleImgLoad = useCallback(() => {
-    setState('playing')
-  }, [])
-
-  const handleImgError = useCallback(() => {
-    handleError('Failed to load stream')
-  }, [handleError])
+  }, [device, profileUri])
 
   const copyUri = useCallback((uri: string) => {
     navigator.clipboard.writeText(uri).catch(() => {
@@ -68,6 +75,7 @@ function InlineStream({ device, profileUri, snapshotUri, onClose }: InlineStream
 
   const gatewayUrl = profileUri
   const fullGatewayUrl = `${window.location.origin}${gatewayUrl}`
+  const showVideo = activeTransport === 'webrtc' || activeTransport === 'mse'
 
   return (
     <div className="inline-stream-wrapper">
@@ -83,23 +91,18 @@ function InlineStream({ device, profileUri, snapshotUri, onClose }: InlineStream
       </div>
 
       <div className="stream-container">
-        {usesMse ? (
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            playsInline
-            style={{ display: state !== 'error' ? 'block' : 'none' }}
-          />
-        ) : (
-          <img
-            ref={imgRef}
-            alt="Live Stream"
-            onLoad={handleImgLoad}
-            onError={handleImgError}
-            style={{ display: state !== 'error' ? 'block' : 'none' }}
-          />
-        )}
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          style={{ display: state === 'playing' && showVideo ? 'block' : 'none' }}
+        />
+        <img
+          ref={imgRef}
+          alt="Live Stream"
+          style={{ display: state === 'playing' && !showVideo ? 'block' : 'none' }}
+        />
 
         {state === 'connecting' && (
           <div className="stream-loading">
@@ -113,6 +116,8 @@ function InlineStream({ device, profileUri, snapshotUri, onClose }: InlineStream
             {errorMessage || 'Stream failed'}
           </div>
         )}
+
+        {hasPTZ && <PtzPad deviceName={device} />}
       </div>
 
       <div className="stream-uris">
