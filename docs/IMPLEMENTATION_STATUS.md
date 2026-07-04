@@ -1,9 +1,9 @@
 # Implementation Status
 
 **Project**: Ignition Camera Driver Module
-**Current Version**: 3.0.7
-**Last Updated**: 2026-06-22
-**Status**: Production Ready
+**Current Version**: 3.1.1
+**Last Updated**: 2026-07-03
+**Status**: Release candidate — pending acceptance run (see PROJECT_CHARTER.md §2)
 
 ---
 
@@ -28,7 +28,7 @@ ONVIF — all toggled per device.
 | MJPEG direct streaming | Complete |
 | HTTP snapshot capture | Complete |
 | ONVIF auto-discovery of stream/snapshot URLs | Complete |
-| PTZ status, absolute move, stop | Complete |
+| PTZ status, continuous move (hold-to-move / release-to-stop), stop | Complete |
 | ONVIF periodic polling (ONVIFPoller) | Complete |
 | Auto-reconnect with exponential backoff | Complete |
 | OPC-UA address space (DeviceInfo, MediaProfiles, PTZ, Status) | Complete |
@@ -43,8 +43,9 @@ ONVIF — all toggled per device.
 | `GET /devices` — All devices + status | Complete |
 | `GET /device/:name/status` — Single device status | Complete |
 | `GET /ptz/status` — Current PTZ position | Complete |
-| `POST /ptz/move` — PTZ absolute move | Complete |
-| `POST /ptz/stop` — PTZ stop | Complete |
+| `POST /ptz/move` — PTZ continuous move (query params, hold pattern) | Complete (fixed 3.0.10) |
+| `POST /ptz/stop` — PTZ stop | Complete (fixed 3.0.10) |
+| `POST /webrtc` — WebRTC SDP signaling proxy | Complete (3.1.0) |
 | `GET /health` — Module health + JVM heap stats | Complete |
 | `GET /metrics` — Per-camera resource metrics | Complete (3.0.7) |
 | `GET /diagnostics` — Full internal diagnostics | Complete |
@@ -83,12 +84,17 @@ ONVIF — all toggled per device.
 | ------- | ------ |
 | go2rtc v1.9.4 bundled binary | Complete |
 | ffmpeg bundled binary | Complete |
-| RTSP → MP4/fMP4 via go2rtc | Complete |
+| **WebRTC transport (sub-second latency, GOP-independent)** | Complete (3.1.0) |
+| WebRTC ICE candidates: operator file or site-local auto-detect | Complete (3.1.0) |
+| RTSP → MP4/fMP4 via go2rtc (video-only, avoids MSE A/V stalls) | Complete (3.0.14) |
 | RTSP → MJPEG via ffmpeg | Complete |
 | RTSP → single-frame JPEG via ffmpeg | Complete |
 | go2rtc self-healing restart (5 attempts, exp backoff) | Complete |
-| go2rtc localhost-only binding (127.0.0.1:1984) | Complete |
+| go2rtc API localhost-only binding + per-launch password | Complete (3.0.8) |
 | Per-stream go2rtc consumer / bitrate / track metrics | Complete (3.0.7) |
+| Stream lifetime cap (15 min) — route slots can never leak | Complete (3.0.13) |
+| Unified client stream engine (WebRTC → MSE → snapshot), one implementation for Perspective + Gateway UI + static pages | Complete (3.1.0/3.1.1) |
+| MSE live-edge pinning (bounded fallback latency) | Complete (3.0.14) |
 
 ### Snapshot coalescing cache (3.0.5)
 
@@ -114,19 +120,20 @@ ONVIF — all toggled per device.
 | Dashboard stat cards (devices, running, ONVIF, generic) | Complete |
 | Dashboard memory strip (JVM heap bar + go2rtc RSS) | Complete (3.0.7) |
 | Dashboard per-camera metrics table (viewers, bitrate, tracks, snap latency, errors) | Complete (3.0.7) |
+| PTZ pad in Cameras view inline preview (shown for PTZ-capable devices) | Complete (3.1.1) |
 
 ### Automated test suite
 
-| Component | Tests | Status |
-| --------- | ----- | ------ |
-| ValidationUtil | 87 | Passing |
-| ONVIFAuth | 21 | Passing |
-| XmlUtil | 33 | Passing |
-| ONVIFClient | 27 | Passing |
-| **Total** | **168** | **100% pass rate** |
+| Suite | Tests | Status |
+| ----- | ----- | ------ |
+| Gateway + common (JUnit 5, Mockito 5, AssertJ 3) | 535 | Passing |
+| web-ui (vitest) | 22 | Passing |
+| **Total** | **557** | **100% pass rate** |
 
-Framework: JUnit 5, Mockito 5, AssertJ 3. Execution: ~2 seconds.
-Security tests include XSS, SQL injection, XXE, Billion Laughs, path traversal.
+Gateway coverage includes ValidationUtil, ONVIFAuth/Client, XmlUtil, handlers
+(Stream/Snapshot/Ptz/WebRtc/Diagnostics), Go2RtcManager, AuthenticationManager,
+SessionTokenStore. Security tests include XSS, SQL injection, XXE, Billion
+Laughs, path traversal.
 
 ---
 
@@ -143,6 +150,15 @@ Security tests include XSS, SQL injection, XXE, Billion Laughs, path traversal.
 
 | Version | Date | Changes |
 | ------- | ---- | ------- |
+| 3.1.1 | 2026-07-03 | PTZ pad in the gateway Connection Browser (admin can verify PTZ without the Designer); static pages' player upgraded to WebRTC-first; documentation truth pass (endpoints, test counts, PTZ semantics) |
+| 3.1.0 | 2026-07-03 | **WebRTC transport** — sub-second latency via authenticated `/webrtc` signaling proxy + go2rtc ICE (port 8555); unified client stream engine (WebRTC → MSE → snapshot) replacing duplicated MSE implementations |
+| 3.0.14 | 2026-07-02 | Video-only fMP4 (drops AAC track that stalled MSE playback); MSE live-edge targets relaxed to sustainable values |
+| 3.0.13 | 2026-07-01 | Stream connection leak fixed (15-min lifetime cap + explicit route concurrency + deterministic client teardown) — closes "Route concurrency limit reached" 503s |
+| 3.0.12 | 2026-07-01 | MSE live-edge pinning applied in the Perspective components' own stream loop |
+| 3.0.11 | 2026-06-29 | MSE live-edge pinning (Gateway Config UI player) |
+| 3.0.10 | 2026-06-26 | PTZ routes registered as POST (were defaulting to GET → 404); PTZ verified end-to-end against a live camera |
+| 3.0.9 | 2026-06-25 | ONVIF service parsing made namespace-prefix-agnostic; PTZ also detected from profile `PTZConfiguration`; interactive architecture diagram |
+| 3.0.8 | 2026-06-23 | Security/robustness punch list: go2rtc API password, header-only tokens, same-host SOAP redirects, snapshot coalescing hardening, TRUST_FIRST_USE→STRICT fallback |
 | 3.0.7 | 2026-06-22 | Per-camera resource metrics endpoint (`/metrics`); Dashboard memory strip + Frigate-style camera table; status bar now shows JVM heap (not system RAM); fixed health endpoint field names (`onvifDeviceCount`, `genericCameraCount`) |
 | 3.0.6 | 2026-06-22 | ONVIF SOAP POST redirect following (fix PTZ on cameras that redirect); snapshot broken-pipe demoted to DEBUG |
 | 3.0.5 | 2026-06-22 | Snapshot coalescing cache (one fetch per device+profile, 4s TTL) |
@@ -178,4 +194,4 @@ Security tests include XSS, SQL injection, XXE, Billion Laughs, path traversal.
 
 ---
 
-**Last Review**: 2026-06-22
+**Last Review**: 2026-07-03

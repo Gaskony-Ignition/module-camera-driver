@@ -31,20 +31,49 @@ in-flight fetch. Only the first caller hits the camera; others wait and get the 
 
 ### GET /stream
 
-Returns a live MJPEG stream.
+Returns a live video stream via a server-side fallback chain: go2rtc fMP4
+(`video/mp4`, video-only) when the device has an RTSP source, then native
+MJPEG proxying, then MJPEG built from snapshot polling
+(`multipart/x-mixed-replace`). Check the response `Content-Type` to see which
+you received. Streams self-terminate after 15 minutes (clients reconnect) so
+an abandoned connection can never hold a route slot forever.
 
 **Auth:** Required  
 **Parameters:**
 
 - `device` (required) — device name
-- `profile` (required) — media profile token
-- `fps` (optional) — 1–30, default 10
+- `profile` (optional) — media profile token
+- `fps` (optional) — 1–30, default 10 (snapshot-polling fallback only)
 
 ```
 GET /data/camera-driver/stream?device=FrontDoor&profile=000&fps=15
 ```
 
-**Response:** `multipart/x-mixed-replace; boundary=camera-stream-boundary`
+---
+
+### POST /webrtc
+
+WebRTC signaling (v3.1.0+): exchanges an SDP offer for go2rtc's SDP answer,
+after which media flows browser ↔ go2rtc directly over ICE (port 8555) with
+sub-second latency. Used automatically by the Perspective components and the
+Connection Browser in `auto` mode; MSE via `/stream` is the fallback.
+
+**Auth:** Required  
+**Parameters:** `device` (required, query string)  
+**Body:** the raw SDP offer, `Content-Type: application/sdp`
+
+```
+POST /data/camera-driver/webrtc?device=FrontDoor
+Content-Type: application/sdp
+
+v=0
+o=- 46117327 2 IN IP4 127.0.0.1
+...
+```
+
+**Response:** the raw SDP answer (`application/sdp`); go2rtc negotiation
+errors pass through with their original status code, 502 when go2rtc is
+unreachable.
 
 ---
 
@@ -87,28 +116,34 @@ GET /data/camera-driver/ptz/status?device=FrontDoor&profile=000
 
 ### POST /ptz/move
 
-Sends a PTZ absolute-move command.
+Starts a PTZ **continuous move** (ONVIF ContinuousMove) at the given axis
+speeds. The camera keeps moving until `/ptz/stop` is called — the UI pattern
+is press-and-hold: send `/ptz/move` on press, `/ptz/stop` on release. All
+parameters are query-string; there is no request body.
 
 **Auth:** Required  
-**Body (JSON):** `{ "device": "FrontDoor", "profile": "000", "pan": 0.5, "tilt": 0.2, "zoom": 0.0 }`
+**Parameters:**
+
+- `device` (required) — device name
+- `pan` (optional) — speed −1.0…1.0, default 0
+- `tilt` (optional) — speed −1.0…1.0, default 0
+- `zoom` (optional) — speed −1.0…1.0, default 0
 
 ```
-POST /data/camera-driver/ptz/move
-Content-Type: application/json
+POST /data/camera-driver/ptz/move?device=FrontDoor&pan=0.5&tilt=0&zoom=0
 ```
 
 ---
 
 ### POST /ptz/stop
 
-Stops PTZ movement.
+Stops all PTZ movement. Parameters are query-string; no request body.
 
 **Auth:** Required  
-**Body (JSON):** `{ "device": "FrontDoor", "profile": "000" }`
+**Parameters:** `device` (required)
 
 ```
-POST /data/camera-driver/ptz/stop
-Content-Type: application/json
+POST /data/camera-driver/ptz/stop?device=FrontDoor
 ```
 
 ---

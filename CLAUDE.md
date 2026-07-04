@@ -5,7 +5,7 @@ This file contains module-specific instructions. Shared standards are in `/modul
 ## Project Overview
 
 **Name**: Ignition Camera Driver Module
-**Version**: 3.0.9
+**Version**: 3.1.3
 **Status**: Production Ready
 **Language**: Java 17
 **Framework**: Inductive Automation Ignition SDK 8.3.0
@@ -20,21 +20,28 @@ This file contains module-specific instructions. Shared standards are in `/modul
 ## Quick Start for AI Assistants
 
 ### Essential Reading Order
-1. **This file** - Overall context and architecture
-2. **`.claude/skills/`** - Module-specific skills (`camera-i18n-bugs/SKILL.md`, `camera-protocols/SKILL.md`) — load to avoid hours of debugging
+
+1. **`docs/PROJECT_CHARTER.md`** - Purpose, definition of done, won't-do list — drives all release decisions
+2. **This file** - Overall context and architecture
 3. **`/modules/.claude/skills/`** - Shared skills (building, reviewing, testing, security)
 4. **SECURITY.md** - Security architecture and practices
 5. **README.md** - User-facing documentation
 6. **docs/IMPLEMENTATION_STATUS.md** - Current implementation status
 
+(The former module-local skills `camera-i18n-bugs` and `camera-protocols` were lost
+in the June 2026 data loss and have not been recreated — the surviving knowledge is
+in "Critical Bugs to Avoid" below. Do not go looking for a `.claude/` directory here.)
+
 ### Building the Module
+
 ```bash
 cd /modules/ignition-module-camera-driver
 ./gradlew clean build
-# Output: build/CameraDriver-3.0.9.modl
+# Output: build/CameraDriver-3.1.3.modl
 ```
 
 ### Common Commands
+
 ```bash
 ./gradlew clean build          # Build module
 ./gradlew clean build test     # Build and test
@@ -105,6 +112,7 @@ ignition-module-camera-driver/
 ### Key Components
 
 #### 1. CameraModuleHook (Gateway Entry Point)
+
 - Registers module with Ignition
 - Registers the unified `Camera` extension point (plus the hidden legacy alias)
 - Initialises go2rtc + ffmpeg streaming manager
@@ -112,16 +120,19 @@ ignition-module-camera-driver/
 - Mounts HTTP routes and Gateway Config navigation
 
 #### 2. Camera Device Type (CameraExtensionPoint / CameraDevice)
+
 - **CameraDevice** - Device lifecycle, connection handling, OPC-UA address space
 - **CameraConfig** - Configuration record with per-method toggles (RTSP, MJPEG, Snapshot, ONVIF)
 - **AddressSpaceBuilder** - OPC-UA node hierarchy from camera data
 
 #### 3. Connection Method Layers
+
 - **onvif/** - ONVIF SOAP layer: `ONVIFClient` (SOAP, WS-UsernameToken auth, XXE-protected XML), `ONVIFPoller` (PTZ/status polling), data models
 - **generic/** - URL-based helpers: `GenericCameraClient` (HTTP snapshot fetching), address-space support for direct stream/snapshot URLs
-- **Go2RtcManager** - RTSP-to-browser (MP4/MJPEG) streaming via bundled go2rtc + ffmpeg
+- **Go2RtcManager** - RTSP-to-browser streaming via bundled go2rtc + ffmpeg: WebRTC (primary, sub-second; signaling proxied through `WebRtcHandler`, media over ICE port 8555) with fMP4/MSE and snapshot fallbacks. Client side is one shared `CameraStreamEngine` (web-ui/src/utils/) used by Perspective components, the Gateway Config UI, and the static pages' player — never fork it per-scope
 
 #### 4. Shared HTTP Endpoints (CameraRoutes)
+
 - `/data/camera-driver/snapshot` - JPEG snapshots
 - `/data/camera-driver/stream` - MJPEG/stream output
 - `/data/camera-driver/devices` - List all devices
@@ -132,6 +143,7 @@ ignition-module-camera-driver/
 All methods belong to the single `Camera` device type and can be enabled in any combination per device.
 
 ### ONVIF
+
 - ONVIF SOAP protocol (Profile S/T)
 - WS-UsernameToken authentication (SHA-1 digest)
 - Service discovery, media profiles, PTZ control
@@ -140,6 +152,7 @@ All methods belong to the single `Camera` device type and can be enabled in any 
 - Auto-reconnect with exponential backoff
 
 ### RTSP / MJPEG / Snapshot
+
 - Connects via direct URLs (RTSP, MJPEG, HTTP snapshot), entered manually or auto-detected via ONVIF
 - go2rtc + ffmpeg for RTSP-to-browser streaming
 - Fallback chain: go2rtc RTSP -> native MJPEG -> snapshot polling
@@ -148,15 +161,18 @@ All methods belong to the single `Camera` device type and can be enabled in any 
 ## Security Architecture
 
 ### HTTP Endpoint Authentication (v2.2.0+)
+
 1. **Session Authentication** - Ignition Gateway sessions
 2. **Basic Authentication** - With account lockout (5 failures = 15min lockout)
 3. **API Key Authentication** - SHA-256 hashed keys
 
 ### Per-IP Rate Limiting
+
 - 600 requests/minute per IP (deliberately high to support Perspective polling many cameras)
 - Proxy-aware (X-Forwarded-For, X-Real-IP)
 
 ### XML Security
+
 - XXE protection on all XML parsing
 - XML injection prevention with proper escaping
 
@@ -174,19 +190,22 @@ All methods belong to the single `Camera` device type and can be enabled in any 
 ## Critical Bugs to Avoid
 
 ### Bug #1: Display Names as "?...?"
+
 **Cause**: Resource bundle not registered with BundleUtil
 **Fix**: Register in CameraModuleHook.startup()
+
 ```java
 BundleUtil.get().addBundle("Camera", CameraExtensionPoint.class, "Camera");
 ```
 
 ### Bug #2: Property File Location
+
 Properties file must be in exact package structure:
 `gateway/src/main/resources/com/gaskony/camera/gateway/device/Camera.properties`
 
 ## Automated Test Suite
 
-- **168 tests** with 100% pass rate
+- **557 tests** with 100% pass rate (535 gateway/common JUnit + 22 web-ui vitest)
 - **Framework**: JUnit 5.10.1, Mockito 5.8.0, AssertJ 3.25.1
 - **Coverage**: ValidationUtil (87), ONVIFAuth (21), XmlUtil (33), ONVIFClient (27)
 - **Security tests**: XSS, SQL injection, XXE, Billion Laughs, path traversal
@@ -194,11 +213,13 @@ Properties file must be in exact package structure:
 ## Working with This Project
 
 ### Before Making Changes
-1. Load the module skills in `.claude/skills/` (avoid repeated mistakes)
+
+1. Load the relevant shared skills from `/modules/.claude/skills/`
 2. Check SECURITY.md (security requirements)
 3. Review docs/IMPLEMENTATION_STATUS.md (what's done)
 
 ### Making Changes
+
 1. Follow existing code patterns
 2. Validate all user inputs
 3. Escape XML properly (use XmlUtil)
@@ -206,9 +227,10 @@ Properties file must be in exact package structure:
 5. Update CHANGELOG.md
 
 ### Note on Package and Class Names
-Java packages are `com.gaskony.camera.*` as of v3.0.0 (renamed from `com.onvif.driver.*`). The module entry point and shared routes are now `CameraModuleHook` and `CameraRoutes` (renamed from `ONVIFModuleHook` / `ONVIFRoutes`). Classes that genuinely implement the ONVIF protocol keep the `ONVIF` prefix — `ONVIFClient`, `ONVIFAuth`, `ONVIFService`, `ONVIFPoller`, plus the data models `DeviceInformation`, `MediaProfile`, `PTZStatus` — because they describe the protocol, not the package vendor. The module ID is `com.gaskony.camera.opcua` (was `com.onvif.driver.opcua` pre-v3.0.0). Existing pre-v3.0.0 device profiles load via the hidden legacy alias type `com.onvif.driver.Camera` — see `MIGRATION-v3.md`.
+
+Java packages are `com.gaskony.camera.*` as of v3.0.0 (renamed from `com.onvif.driver.*`). The module entry point and shared routes are now `CameraModuleHook` and `CameraRoutes` (renamed from `ONVIFModuleHook` / `ONVIFRoutes`). Classes that genuinely implement the ONVIF protocol keep the `ONVIF` prefix — `ONVIFClient`, `ONVIFAuth`, `ONVIFService`, `ONVIFPoller`, plus the data models `DeviceInformation`, `MediaProfile`, `PTZStatus` — because they describe the protocol, not the package vendor. The module ID is `com.gaskony.camera.opcua` (was `com.onvif.driver.opcua` pre-v3.0.0). Existing pre-v3.0.0 device profiles load via the hidden legacy alias type `com.onvif.driver.Camera`.
 
 ---
 
-**Last Updated**: 2026-02-11
-**Document Version**: 3.0.9
+**Last Updated**: 2026-07-03
+**Document Version**: 3.1.3

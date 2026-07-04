@@ -180,6 +180,25 @@ are registered.
 - **Stream proxy**: the module's own stream proxy never logs source URLs, so credentials do not
   leak into gateway logs.
 
+## WebRTC Transport (v3.1.0+)
+
+WebRTC playback introduces one new network listener and one new endpoint; both are constrained:
+
+- **Signaling is authenticated**: browsers never talk to go2rtc directly. The SDP offer/answer
+  exchange goes through `POST /data/camera-driver/webrtc`, which enforces the same
+  authentication (session / Basic / API key / Perspective session token) and per-IP rate
+  limiting as every other module endpoint. The gateway then relays the exchange to go2rtc's
+  localhost API with the per-launch Basic auth password.
+- **Media listener (port 8555, TCP+UDP)**: go2rtc listens for ICE/DTLS media connections on
+  8555. This port carries **no plaintext video**: media is SRTP, keyed via the DTLS handshake
+  whose fingerprints are pinned in the SDP exchange — which only an authenticated client can
+  perform. An attacker connecting to 8555 without a signaled session cannot negotiate a stream.
+- **ICE candidates**: advertised candidates are auto-detected site-local IPv4 addresses, or an
+  operator-controlled allowlist file (`data/camera-driver/go2rtc/webrtc-candidates.txt`).
+  No STUN/TURN servers are contacted — no traffic leaves the local network for negotiation.
+- **Exposure guidance**: do not port-forward 8555 to untrusted networks. For remote viewing,
+  front the gateway with a VPN, as with the rest of the Ignition web interface.
+
 ## XML Security
 
 ### XXE Protection
