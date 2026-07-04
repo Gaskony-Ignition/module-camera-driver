@@ -17,12 +17,19 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Enumeration;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -47,6 +54,20 @@ public class Go2RtcManager {
     private static final Logger logger = LoggerFactory.getLogger(Go2RtcManager.class);
 
     private static final int DEFAULT_PORT = 1984;
+    /**
+     * Port go2rtc listens on for WebRTC (ICE/DTLS/SRTP over UDP, with a TCP
+     * fallback). This is a fixed, separate port from the HTTP API port — go2rtc
+     * offers it as the address browsers connect their media transport to after
+     * the SDP signaling exchange (proxied by {@code WebRtcHandler}) completes.
+     */
+    private static final int WEBRTC_PORT = 8555;
+    /**
+     * Optional operator-supplied file of WebRTC ICE candidate addresses, one
+     * "host:port" entry per line ('#' comments and blank lines ignored). Lives
+     * alongside go2rtc.yaml (i.e. {@code <dataDir>/camera-driver/go2rtc/}).
+     * When absent, candidates are auto-detected from local network interfaces.
+     */
+    private static final String WEBRTC_CANDIDATES_FILENAME = "webrtc-candidates.txt";
     private static final int MAX_RESTART_ATTEMPTS = 5;
     private static final long BASE_RESTART_DELAY_MS = 2000;
     private static final int HTTP_TIMEOUT_MS = 5000;
@@ -309,9 +330,23 @@ public class Go2RtcManager {
         // "password" key; go2rtc then requires Basic auth credentials on every
         // request to its HTTP API.
         // Assumption: the expected username is "admin" (go2rtc default).
+        //
+        // WebRTC: the bundled go2rtc has built-in WebRTC support. "listen" is the
+        // local port go2rtc offers ICE/DTLS/SRTP media transport on (separate from
+        // the signaling exchange, which is proxied via the HTTP API by
+        // WebRtcHandler); "candidates" is the list of host:port pairs go2rtc
+        // advertises to browsers as reachable addresses for that port.
+        // NOTE for Docker deployments: the container's own interface IPs are not
+        // reachable from the host/LAN, so an operator MUST publish 8555/tcp AND
+        // 8555/udp on the container and populate webrtc-candidates.txt (in this
+        // same directory) with the host-reachable IP — see
+        // loadWebRtcCandidatesFromFile().
         String config = "api:\n" +
             "  listen: \"127.0.0.1:" + port + "\"\n" +
             "  password: \"" + apiPassword + "\"\n" +
+            "webrtc:\n" +
+            "  listen: \":" + WEBRTC_PORT + "\"\n" +
+            buildWebRtcCandidatesYaml(configDir) +
             "log:\n" +
             "  level: \"warn\"\n";
 
@@ -327,11 +362,119 @@ public class Go2RtcManager {
     }
 
     /**
+     * Builds the YAML "candidates:" list under the "webrtc:" block.
+     *
+     * <p>Prefers an operator-supplied {@value #WEBRTC_CANDIDATES_FILENAME} file
+     * (one "host:port" entry per line, '#' comments and blank lines ignored)
+     * when present, falling back to auto-detecting non-loopback site-local
+     * IPv4 addresses from the host's network interfaces.</p>
+     *
+     * @param configDir directory containing (or to contain) the candidates file,
+     *                  same directory as go2rtc.yaml
+     * @return a YAML fragment for the "candidates:" key, newline-terminated
+     */
+    private String buildWebRtcCandidatesYaml(Path configDir) {
+        List<String> fileCandidates = loadWebRtcCandidatesFromFile(configDir);
+        List<String> candidates;
+        String source;
+        if (fileCandidates != null) {
+            candidates = fileCandidates;
+            source = WEBRTC_CANDIDATES_FILENAME;
+        } else {
+            candidates = autoDetectWebRtcCandidates();
+            source = "auto-detected non-loopback site-local network interface addresses";
+        }
+
+        if (candidates.isEmpty()) {
+            logger.info("No WebRTC candidates configured (source: {}) - browsers on other "
+                + "hosts may fail to establish a WebRTC connection", source);
+            return "  candidates: []\n";
+        }
+
+        // Candidate values are bare host:port pairs (no credentials) - safe to log.
+        logger.info("WebRTC candidates configured from {}: {}", source, candidates);
+
+        StringBuilder yaml = new StringBuilder("  candidates:\n");
+        for (String candidate : candidates) {
+            yaml.append("    - \"").append(candidate).append("\"\n");
+        }
+        return yaml.toString();
+    }
+
+    /**
+     * Reads {@value #WEBRTC_CANDIDATES_FILENAME} from the given directory if it
+     * exists.
+     *
+     * @param configDir directory to look for the candidates file in
+     * @return the trimmed, non-comment, non-blank lines from the file, or
+     *         {@code null} if the file does not exist (signalling the caller to
+     *         fall back to auto-detection)
+     */
+    private List<String> loadWebRtcCandidatesFromFile(Path configDir) {
+        Path candidatesFile = configDir.resolve(WEBRTC_CANDIDATES_FILENAME);
+        if (!Files.isRegularFile(candidatesFile)) {
+            return null;
+        }
+
+        List<String> candidates = new ArrayList<>();
+        try {
+            for (String line : Files.readAllLines(candidatesFile, StandardCharsets.UTF_8)) {
+                String trimmed = line.trim();
+                if (trimmed.isEmpty() || trimmed.startsWith("#")) {
+                    continue;
+                }
+                candidates.add(trimmed);
+            }
+        } catch (IOException e) {
+            logger.warn("Failed to read WebRTC candidates file {}: {}", candidatesFile, e.getMessage());
+        }
+        return candidates;
+    }
+
+    /**
+     * Auto-detects WebRTC candidate addresses from the host's network
+     * interfaces: every non-loopback, up interface's site-local IPv4 addresses,
+     * paired with {@link #WEBRTC_PORT}.
+     *
+     * @return detected "host:port" candidates (possibly empty, never null)
+     */
+    private List<String> autoDetectWebRtcCandidates() {
+        List<String> candidates = new ArrayList<>();
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface iface = interfaces.nextElement();
+                if (iface.isLoopback() || !iface.isUp()) {
+                    continue;
+                }
+                Enumeration<InetAddress> addresses = iface.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress addr = addresses.nextElement();
+                    if (addr instanceof Inet4Address && !addr.isLoopbackAddress() && addr.isSiteLocalAddress()) {
+                        candidates.add(addr.getHostAddress() + ":" + WEBRTC_PORT);
+                    }
+                }
+            }
+        } catch (SocketException e) {
+            logger.warn("Failed to enumerate network interfaces for WebRTC candidate auto-detection: {}",
+                e.getMessage());
+        }
+        return candidates;
+    }
+
+    /**
      * Applies HTTP Basic authentication credentials to the given request using
      * the per-launch API password generated in start().
      * go2rtc expects username "admin" and the value of the "api.password" YAML key.
+     *
+     * <p>Public so that other classes proxying directly to a go2rtc {@code /api/*}
+     * endpoint (currently {@code WebRtcHandler}, for WebRTC signaling) can apply
+     * the exact same credentials rather than duplicating the password/encoding
+     * logic.</p>
+     *
+     * @param request the outgoing request to add the Authorization header to
      */
-    private void applyApiAuth(org.apache.http.HttpRequest request) {
+    public void applyApiAuth(org.apache.http.HttpRequest request) {
         if (apiPassword == null) return;
         String credentials = "admin:" + apiPassword;
         String encoded = Base64.getEncoder().encodeToString(
@@ -432,7 +575,29 @@ public class Go2RtcManager {
      * @return Full URL to go2rtc's MP4 stream endpoint
      */
     public String getStreamMp4Url(String streamName) {
-        return String.format("http://127.0.0.1:%d/api/stream.mp4?src=%s",
+        // Request a VIDEO-ONLY fMP4 (video=h264,h265 selects any video codec and
+        // excludes audio). When the browser appends a muxed audio+video fMP4 into a
+        // single MSE SourceBuffer, the playable range is the intersection of both
+        // tracks; if the AAC audio track buffers unevenly against video, playback
+        // advances in chunks and stalls (observed as periodic multi-second
+        // freeze-and-jump). Camera monitoring does not need audio, and dropping it
+        // removes that entire class of MSE stall while lowering latency/bandwidth.
+        return String.format("http://127.0.0.1:%d/api/stream.mp4?src=%s&video=h264,h265",
+            port,
+            URLEncoder.encode(streamName, StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Gets the WebRTC signaling URL from go2rtc for the given stream name.
+     * A browser's SDP offer is POSTed to this endpoint (Content-Type:
+     * application/sdp) and go2rtc responds with its SDP answer — see
+     * {@code WebRtcHandler}, which proxies this exchange.
+     *
+     * @param streamName Stream name
+     * @return Full URL to go2rtc's WebRTC signaling endpoint
+     */
+    public String getWebRtcSignalingUrl(String streamName) {
+        return String.format("http://127.0.0.1:%d/api/webrtc?src=%s",
             port,
             URLEncoder.encode(streamName, StandardCharsets.UTF_8));
     }

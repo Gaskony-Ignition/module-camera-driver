@@ -22,6 +22,8 @@ public final class CameraDriverPaths {
 
     public static final String ROUTE_SNAPSHOT          = "/snapshot";
     public static final String ROUTE_STREAM            = "/stream";
+    /** WebRTC signaling proxy: POSTs a browser SDP offer through to go2rtc's WebRTC endpoint. */
+    public static final String ROUTE_WEBRTC            = "/webrtc";
     public static final String ROUTE_DEVICES           = "/devices";
     public static final String ROUTE_DEVICE_STATUS     = "/device/:name/status";
     public static final String ROUTE_CONNECTION_BROWSER = "/connection-browser";

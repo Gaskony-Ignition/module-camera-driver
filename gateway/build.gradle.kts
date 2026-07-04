@@ -105,7 +105,8 @@ val downloadGo2Rtc by tasks.registering {
                 ant.invokeMethod("get", mapOf(
                     "src" to "https://github.com/AlexxIT/go2rtc/releases/download/v${go2rtcVersion}/go2rtc_win64.zip",
                     "dest" to windowsZipFile,
-                    "skipexisting" to "true"
+                    "skipexisting" to "true",
+                    "maxtime" to "300"
                 ))
                 ant.invokeMethod("unzip", mapOf("src" to windowsZipFile, "dest" to outputDir))
                 File(outputDir, "go2rtc.exe").renameTo(windowsExeFile)
@@ -142,7 +143,8 @@ val downloadFfmpeg by tasks.registering {
                 ant.invokeMethod("get", mapOf(
                     "src" to "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz",
                     "dest" to tarFile,
-                    "skipexisting" to "true"
+                    "skipexisting" to "true",
+                    "maxtime" to "300"
                 ))
                 // Extract just the ffmpeg binary from the tarball
                 exec {
@@ -166,7 +168,8 @@ val downloadFfmpeg by tasks.registering {
                 ant.invokeMethod("get", mapOf(
                     "src" to "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-arm64-static.tar.xz",
                     "dest" to tarFile,
-                    "skipexisting" to "true"
+                    "skipexisting" to "true",
+                    "maxtime" to "300"
                 ))
                 exec {
                     commandLine("bash", "-c",
@@ -189,7 +192,8 @@ val downloadFfmpeg by tasks.registering {
                 ant.invokeMethod("get", mapOf(
                     "src" to "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
                     "dest" to zipFile,
-                    "skipexisting" to "true"
+                    "skipexisting" to "true",
+                    "maxtime" to "300"
                 ))
                 ant.invokeMethod("unzip", mapOf("src" to zipFile, "dest" to outputDir))
                 // Find the extracted ffmpeg.exe (nested in a version-named folder)
