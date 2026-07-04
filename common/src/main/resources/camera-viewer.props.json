@@ -8,9 +8,9 @@
     },
     "mode": {
       "type": "string",
-      "enum": ["auto", "mse", "snapshot"],
+      "enum": ["auto", "webrtc", "mse", "snapshot"],
       "default": "auto",
-      "description": "Stream mode: auto (MSE with snapshot fallback), mse (live only), snapshot (polling only)"
+      "description": "Stream mode: auto (WebRTC, then MSE, then snapshot fallback), webrtc (live only), mse (live only), snapshot (polling only)"
     },
     "snapshotInterval": {
       "type": "number",

@@ -36,6 +36,10 @@ export const API_ENDPOINTS = {
     return url
   },
 
+  /** POST — WebRTC signaling: raw SDP offer body in, raw SDP answer out. */
+  webrtc: (device: string) =>
+    `${DATA_BASE}/webrtc?device=${encodeURIComponent(device)}`,
+
   /** GET — single device status. */
   deviceStatus: (name: string) =>
     `${DATA_BASE}/device/${encodeURIComponent(name)}/status`,

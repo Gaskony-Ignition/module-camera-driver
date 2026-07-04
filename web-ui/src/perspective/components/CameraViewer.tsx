@@ -7,10 +7,11 @@ import {
     PropertyTree,
     SizeObject,
 } from '@inductiveautomation/perspective-client';
-import { StreamMode, StreamStatus } from '../types';
+import { StreamMode, StreamStatus, ActiveTransport } from '../types';
 import { CAMERA_THEME } from '../theme';
 import { API } from '../../api/paths';
 import { CameraAuthDelegate, cameraAuthHeaders, cameraTokenHolder, useCameraToken } from '../cameraAuth';
+import { CameraStreamEngine } from '../../utils/CameraStreamEngine';
 
 export const CAMERA_VIEWER_TYPE = 'cam.display.camera-viewer';
 
@@ -46,209 +47,16 @@ export function useCameraStream(
     }, [token]);
     const [status, setStatus] = useState<StreamStatus>('idle');
     const [error, setError] = useState<string>('');
-    const [activeMode, setActiveMode] = useState<'mse' | 'snapshot' | null>(null);
-    const abortRef = useRef<AbortController | null>(null);
-    const intervalRef = useRef<number | null>(null);
-    const mediaSourceRef = useRef<MediaSource | null>(null);
+    const [activeMode, setActiveMode] = useState<ActiveTransport>(null);
+    const engineRef = useRef<CameraStreamEngine | null>(null);
 
     const cleanup = useCallback(() => {
-        if (abortRef.current) {
-            abortRef.current.abort();
-            abortRef.current = null;
-        }
-        if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-        }
-        if (mediaSourceRef.current && mediaSourceRef.current.readyState === 'open') {
-            try { mediaSourceRef.current.endOfStream(); } catch (e) { /* expected if already ended */ }
-        }
-        mediaSourceRef.current = null;
-        if (videoRef.current) {
-            const oldSrc = videoRef.current.src;
-            videoRef.current.src = '';
-            if (oldSrc.startsWith('blob:')) URL.revokeObjectURL(oldSrc);
-        }
-        if (imgRef.current) {
-            const oldSrc = imgRef.current.src;
-            imgRef.current.src = '';
-            if (oldSrc.startsWith('blob:')) URL.revokeObjectURL(oldSrc);
+        if (engineRef.current) {
+            engineRef.current.stop();
+            engineRef.current = null;
         }
         setActiveMode(null);
-    }, [imgRef, videoRef]);
-
-    const startSnapshot = useCallback(() => {
-        if (!deviceName) return;
-        setActiveMode('snapshot');
-        setStatus('loading');
-        setError('');
-
-        const fetchSnapshot = async () => {
-            try {
-                const resp = await fetch(
-                    API.snapshot(deviceName),
-                    { credentials: 'include', headers: cameraAuthHeaders(tokenRef.current) }
-                );
-                if (!resp.ok) {
-                    setStatus('error');
-                    setError(resp.status === 401 ? 'Authentication required' : `HTTP ${resp.status}`);
-                    return;
-                }
-                const blob = await resp.blob();
-                if (imgRef.current) {
-                    const oldSrc = imgRef.current.src;
-                    imgRef.current.src = URL.createObjectURL(blob);
-                    if (oldSrc.startsWith('blob:')) URL.revokeObjectURL(oldSrc);
-                    setStatus('streaming');
-                }
-            } catch (e: unknown) {
-                const err = e as Error;
-                if (err.name !== 'AbortError') {
-                    setStatus('error');
-                    setError(err.message || 'Snapshot failed');
-                }
-            }
-        };
-
-        fetchSnapshot();
-        intervalRef.current = window.setInterval(fetchSnapshot, snapshotInterval);
-    }, [deviceName, snapshotInterval, imgRef]);
-
-    const startMse = useCallback(async (fallbackToSnapshot: boolean) => {
-        if (!deviceName) return;
-        if (!('MediaSource' in window)) {
-            if (fallbackToSnapshot) { startSnapshot(); return; }
-            setStatus('error');
-            setError('MediaSource not supported');
-            return;
-        }
-
-        setStatus('loading');
-        setError('');
-
-        const videoEl = videoRef.current;
-        if (!videoEl) return;
-
-        setActiveMode('mse');
-        const ms = new MediaSource();
-        mediaSourceRef.current = ms;
-
-        const sourceOpenPromise = new Promise<void>((resolve) => {
-            if (ms.readyState === 'open') resolve();
-            else ms.addEventListener('sourceopen', () => resolve(), { once: true });
-        });
-
-        videoEl.src = URL.createObjectURL(ms);
-
-        const ac = new AbortController();
-        abortRef.current = ac;
-
-        let response: Response;
-        try {
-            response = await fetch(
-                API.stream(deviceName),
-                { credentials: 'include', headers: cameraAuthHeaders(tokenRef.current), signal: ac.signal }
-            );
-        } catch (e: unknown) {
-            const err = e as Error;
-            if (err.name !== 'AbortError') {
-                if (fallbackToSnapshot) { startSnapshot(); return; }
-                setStatus('error');
-                setError('Failed to connect: ' + err.message);
-            }
-            return;
-        }
-
-        if (!response.ok) {
-            if (fallbackToSnapshot && response.status !== 401) { startSnapshot(); return; }
-            setStatus('error');
-            setError(
-                response.status === 401 ? 'Authentication required' :
-                response.status === 404 ? `Device not found: ${deviceName}` :
-                `HTTP ${response.status}`
-            );
-            return;
-        }
-
-        await sourceOpenPromise;
-
-        const contentType = (response.headers.get('Content-Type') || '')
-            .replace(/;\s*charset=[^;]*/i, '').trim();
-        let mimeCodec = contentType;
-        if (!mimeCodec || !MediaSource.isTypeSupported(mimeCodec)) {
-            const fallbacks = [
-                'video/mp4; codecs="avc1.640029,mp4a.40.2"',
-                'video/mp4; codecs="avc1.640029"',
-                'video/mp4; codecs="avc1.42E01E"'
-            ];
-            mimeCodec = fallbacks.find(c => MediaSource.isTypeSupported(c)) || '';
-            if (!mimeCodec) {
-                if (fallbackToSnapshot) { startSnapshot(); return; }
-                setStatus('error');
-                setError('H.264 MP4 playback not supported');
-                return;
-            }
-        }
-
-        const sourceBuffer = ms.addSourceBuffer(mimeCodec);
-        sourceBuffer.mode = 'segments';
-
-        videoEl.addEventListener('playing', () => setStatus('streaming'), { once: true });
-
-        try {
-            const reader = response.body!.getReader();
-
-            for (;;) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                if (sourceBuffer.updating) {
-                    await new Promise<void>(r => sourceBuffer.addEventListener('updateend', () => r(), { once: true }));
-                }
-
-                try {
-                    sourceBuffer.appendBuffer(value);
-                    await new Promise<void>(r => sourceBuffer.addEventListener('updateend', () => r(), { once: true }));
-                } catch (e: unknown) {
-                    const err = e as Error;
-                    if (err.name === 'QuotaExceededError') {
-                        if (sourceBuffer.buffered.length > 0 && !sourceBuffer.updating) {
-                            const end = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
-                            sourceBuffer.remove(0, Math.max(0, end - 5));
-                            await new Promise<void>(r => sourceBuffer.addEventListener('updateend', () => r(), { once: true }));
-                            sourceBuffer.appendBuffer(value);
-                            await new Promise<void>(r => sourceBuffer.addEventListener('updateend', () => r(), { once: true }));
-                        }
-                    } else {
-                        break;
-                    }
-                }
-
-                // Trim buffer to ~30s
-                try {
-                    if (!sourceBuffer.updating && sourceBuffer.buffered.length > 0) {
-                        const start = sourceBuffer.buffered.start(0);
-                        const end = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
-                        if (end - start > 30) {
-                            sourceBuffer.remove(0, end - 15);
-                            await new Promise<void>(r => sourceBuffer.addEventListener('updateend', () => r(), { once: true }));
-                        }
-                    }
-                } catch (e) { /* buffer trim is best-effort */ }
-            }
-
-            if (fallbackToSnapshot) { startSnapshot(); return; }
-            setStatus('error');
-            setError('Stream ended');
-        } catch (e: unknown) {
-            const err = e as Error;
-            if (err.name !== 'AbortError') {
-                if (fallbackToSnapshot) { startSnapshot(); return; }
-                setStatus('error');
-                setError('Stream lost: ' + err.message);
-            }
-        }
-    }, [deviceName, videoRef, startSnapshot]);
+    }, []);
 
     const start = useCallback(() => {
         cleanup();
@@ -262,15 +70,35 @@ export function useCameraStream(
             setStatus('loading');
             return;
         }
-        if (mode === 'snapshot') startSnapshot();
-        else if (mode === 'mse') startMse(false);
-        else startMse(true); // auto: try MSE, fallback to snapshot
-    }, [deviceName, mode, cleanup, startSnapshot, startMse, tokenReady]);
+        const videoEl = videoRef.current;
+        if (!videoEl) return;
+
+        setError('');
+        const engine = new CameraStreamEngine(videoEl, imgRef.current, {
+            deviceName,
+            streamUrl: API.stream(deviceName),
+            webrtcUrl: API.webrtc(deviceName),
+            snapshotUrl: API.snapshot(deviceName),
+            snapshotIntervalMs: snapshotInterval,
+            // Re-read on every request so a token refresh mid-stream is always honoured.
+            getAuthHeaders: () => cameraAuthHeaders(tokenRef.current),
+            transportPreference: mode,
+            onStatus: (engineStatus, detail) => {
+                setStatus(engineStatus === 'connecting' ? 'loading' : engineStatus);
+                setError(engineStatus === 'error' ? (detail?.error ?? 'Stream error') : '');
+                if (detail?.transport) setActiveMode(detail.transport);
+            },
+        });
+        engineRef.current = engine;
+        engine.start();
+    }, [deviceName, mode, snapshotInterval, cleanup, videoRef, imgRef]);
 
     useEffect(() => {
         start();
         return cleanup;
-    }, [start, cleanup]);
+        // tokenReady is intentionally included: it gates the initial start() until the
+        // auth token has arrived, then triggers exactly one restart once it does.
+    }, [start, cleanup, tokenReady]);
 
     return { status, error, activeMode, retry: start };
 }
@@ -278,7 +106,7 @@ export function useCameraStream(
 /** Downloads a snapshot JPEG for the given device. */
 export function saveSnapshot(
     deviceName: string,
-    activeMode: 'mse' | 'snapshot' | null,
+    activeMode: ActiveTransport,
     imgRef: React.RefObject<HTMLImageElement | null>
 ) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -291,7 +119,7 @@ export function saveSnapshot(
         a.download = filename;
         a.click();
     } else {
-        // In MSE mode or no blob available, fetch a fresh snapshot
+        // In WebRTC/MSE mode or no blob available, fetch a fresh snapshot
         fetch(API.snapshot(deviceName), { credentials: 'include', headers: cameraAuthHeaders(cameraTokenHolder.get()) })
             .then(r => r.blob())
             .then(blob => {
@@ -508,7 +336,7 @@ function CameraViewerComponent(props: CameraViewerProps) {
                 autoPlay
                 muted
                 playsInline
-                style={{ ...styles.video(objectFit), display: (status === 'streaming' && activeMode === 'mse') ? 'block' : 'none' }}
+                style={{ ...styles.video(objectFit), display: (status === 'streaming' && (activeMode === 'mse' || activeMode === 'webrtc')) ? 'block' : 'none' }}
             />
             <img
                 ref={imgRef}

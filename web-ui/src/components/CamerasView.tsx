@@ -269,6 +269,7 @@ function CamerasView({ onViewChange: _onViewChange }: CamerasViewProps) {
                               profileUri={activeStream.streamUri}
                               snapshotUri={activeStream.snapshotUri}
                               onClose={handleCloseStream}
+                              hasPTZ={device.hasPTZ}
                             />
                           )}
                         </div>

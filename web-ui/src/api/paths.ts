@@ -16,6 +16,9 @@ export const API = {
     /** Open an MSE / MJPEG stream for a device. */
     stream: (device: string) =>
         `${DATA_BASE}/stream?device=${encodeURIComponent(device)}`,
+    /** WebRTC signaling endpoint — POST a raw SDP offer, receive a raw SDP answer. */
+    webrtc: (device: string) =>
+        `${DATA_BASE}/webrtc?device=${encodeURIComponent(device)}`,
     /** List all registered devices. */
     devices: `${DATA_BASE}/devices`,
     /** Get status for a single named device. */

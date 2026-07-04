@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react'
 import { Play, Square, Camera } from 'lucide-react'
 import { API_ENDPOINTS } from '../constants/api'
-import { MsePlayer } from '../utils/MsePlayer'
+import { CameraStreamEngine } from '../utils/CameraStreamEngine'
 import type { Device, GridEvent } from '../types/device'
 
 interface GridCellProps {
@@ -19,7 +19,7 @@ function GridCell({ cellIndex, devices, selectedCamera, onCameraChange, onEvent 
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
-  const playerRef = useRef<MsePlayer | null>(null)
+  const engineRef = useRef<CameraStreamEngine | null>(null)
   const streamingRef = useRef(false)
   const snapshotTimerRef = useRef<number | null>(null)
 
@@ -68,35 +68,35 @@ function GridCell({ cellIndex, devices, selectedCamera, onCameraChange, onEvent 
   // -- Stream controls -----------------------------------------------------
 
   const startStream = useCallback(() => {
-    if (!device || device.status !== 'Running') return
+    if (!device || device.status !== 'Running' || !videoRef.current) return
     const profileToken = device.profiles?.[0]?.token ?? ''
-    const streamUrl = API_ENDPOINTS.stream(device.name, profileToken, 10)
 
     streamingRef.current = true
 
-    if (device.go2rtcRegistered && MsePlayer.isSupported() && videoRef.current) {
-      // MSE streaming
-      const video = videoRef.current
-      video.style.display = 'block'
-      if (imgRef.current) imgRef.current.style.display = 'none'
-
-      const player = new MsePlayer(video, (msg) => {
-        onEvent({
-          time: new Date().toLocaleTimeString(),
-          camera: device.name,
-          message: `Stream error: ${msg}`,
-        })
-      })
-      playerRef.current = player
-      player.start(streamUrl)
-    } else {
-      // MJPEG fallback via img
-      if (imgRef.current) {
-        imgRef.current.src = streamUrl
-        imgRef.current.style.display = 'block'
-      }
-      if (videoRef.current) videoRef.current.style.display = 'none'
-    }
+    const engine = new CameraStreamEngine(videoRef.current, imgRef.current, {
+      deviceName: device.name,
+      streamUrl: API_ENDPOINTS.stream(device.name, profileToken, 10),
+      webrtcUrl: API_ENDPOINTS.webrtc(device.name),
+      snapshotUrl: API_ENDPOINTS.snapshot(device.name, profileToken),
+      // Gateway Config UI authenticates via the existing session cookie, not a token header.
+      getAuthHeaders: () => undefined,
+      transportPreference: 'auto',
+      onStatus: (status, detail) => {
+        if (status === 'streaming') {
+          const showVideo = detail?.transport === 'webrtc' || detail?.transport === 'mse'
+          if (videoRef.current) videoRef.current.style.display = showVideo ? 'block' : 'none'
+          if (imgRef.current) imgRef.current.style.display = showVideo ? 'none' : 'block'
+        } else if (status === 'error') {
+          onEvent({
+            time: new Date().toLocaleTimeString(),
+            camera: device.name,
+            message: `Stream error: ${detail?.error ?? 'unknown error'}`,
+          })
+        }
+      },
+    })
+    engineRef.current = engine
+    engine.start()
 
     onEvent({
       time: new Date().toLocaleTimeString(),
@@ -106,13 +106,12 @@ function GridCell({ cellIndex, devices, selectedCamera, onCameraChange, onEvent 
   }, [device, onEvent])
 
   const stopStream = useCallback(() => {
-    if (playerRef.current) {
-      playerRef.current.stop()
-      playerRef.current = null
+    if (engineRef.current) {
+      engineRef.current.stop()
+      engineRef.current = null
     }
     if (videoRef.current) {
       videoRef.current.pause()
-      videoRef.current.src = ''
       videoRef.current.style.display = 'none'
     }
     if (streamingRef.current && device) {
