@@ -366,6 +366,18 @@ class Go2RtcManagerTest {
         // the test host) or the block is explicitly empty - either way the
         // "candidates:" key must always be present under webrtc:.
         assertThat(yaml).contains("candidates:");
+
+        // "ice_servers: []" (disabling go2rtc's default Google STUN server) must
+        // track candidate presence exactly: it is only emitted once at least one
+        // explicit candidate is advertised (STUN would otherwise be redundant
+        // for a LAN-only deployment - see buildWebRtcCandidatesYaml). Whether the
+        // test host itself has a site-local IPv4 interface is non-deterministic,
+        // so assert the invariant rather than one specific outcome.
+        if (yaml.contains("candidates: []")) {
+            assertThat(yaml).doesNotContain("ice_servers");
+        } else {
+            assertThat(yaml).contains("ice_servers: []");
+        }
     }
 
     @Test
@@ -386,6 +398,11 @@ class Go2RtcManagerTest {
         assertThat(yaml).contains("- \"203.0.113.11:8555\"");
         // The auto-detect fallback marker text must not appear when the file was used.
         assertThat(yaml).doesNotContain("auto-detected");
+        // Explicit candidates are configured, so go2rtc's default STUN server
+        // (stun.l.google.com:19302) must be disabled - it adds nothing here and,
+        // per live-system reproduction, can stall ICE gathering past
+        // WebRtcHandler's 10s signaling read timeout.
+        assertThat(yaml).contains("ice_servers: []");
     }
 
     @Test
@@ -398,6 +415,10 @@ class Go2RtcManagerTest {
         String yaml = generateConfigYaml(manager, configDir);
 
         assertThat(yaml).contains("candidates: []");
+        // No explicit candidates configured - leave go2rtc's default STUN server
+        // in place (it's still the only way to get any server-reflexive
+        // candidate in this case), so no "ice_servers" override is emitted.
+        assertThat(yaml).doesNotContain("ice_servers");
     }
 
     // -----------------------------------------------------------------------
