@@ -104,6 +104,27 @@ const DEFAULT_SNAPSHOT_INTERVAL_MS = 5000;
 const ICE_GATHERING_TIMEOUT_MS = 2000;
 /** WebRTC: how long to wait for the 'playing' event before treating the connection as failed. */
 const WEBRTC_PLAYING_TIMEOUT_MS = 10000;
+/**
+ * WebRTC: 'disconnected' can be a transient ICE hiccup (a brief network blip that
+ * self-heals), so a post-'playing' 'disconnected' state is only treated as dead after this
+ * long spent continuously disconnected. 'failed'/'closed' get no grace period -- WebRTC does
+ * not recover from either on its own, so waiting would just delay the inevitable teardown.
+ */
+export const WEBRTC_DISCONNECT_GRACE_MS = 5000;
+/**
+ * WebRTC: maximum bounded reconnect attempts after a post-'playing' disruption when the
+ * transport preference is explicitly 'webrtc' (not consulted in 'auto' mode, which falls
+ * through to MSE instead -- MSE has its own independent reconnect budget).
+ */
+export const WEBRTC_MAX_RECONNECTS = 3;
+/** WebRTC: backoff delay (ms) before each bounded reconnect attempt, indexed by attempt number. */
+export const WEBRTC_RECONNECT_BACKOFF_MS = [1000, 2000, 4000];
+/**
+ * WebRTC: the post-'playing' reconnect budget is only restored after this long of sustained
+ * healthy playback -- mirrors MSE_RECONNECT_RESET_MS below (fix for the same "any bare
+ * 'playing' event hands back the full budget, even a one-frame flicker" failure mode).
+ */
+export const WEBRTC_RECONNECT_RESET_MS = 10000;
 
 /**
  * MSE: how long to wait for the 'playing' event before treating a connected-but-silent
@@ -123,6 +144,13 @@ export const MSE_STALL_POLL_INTERVAL_MS = 2000;
 export const MSE_MAX_RECONNECTS = 5;
 /** MSE: backoff delay (ms) before each reconnect attempt, indexed by attempt number. */
 export const MSE_RECONNECT_BACKOFF_MS = [500, 1000, 2000, 4000, 8000];
+/**
+ * MSE: the reconnect budget is only restored after this long of sustained healthy playback
+ * since 'playing' fired. A bare 'playing' event alone (e.g. a one-frame flicker inside a
+ * connect-play-stall loop) must NOT hand back the full budget -- otherwise such a loop
+ * retries forever at the fastest backoff tier instead of ever exhausting and falling through.
+ */
+export const MSE_RECONNECT_RESET_MS = 10000;
 
 const MSE_CODEC_FALLBACKS = [
     'video/mp4; codecs="avc1.640029,mp4a.40.2"',
@@ -153,6 +181,17 @@ export class CameraStreamEngine {
     private pc: RTCPeerConnection | null = null;
     private webrtcPlayingTimer: number | null = null;
     private webrtcPlayingListener: (() => void) | null = null;
+    private webrtcReconnectTimer: number | null = null;
+    private webrtcReconnectAttempts = 0;
+    private webrtcDisconnectGraceTimer: number | null = null;
+    private webrtcHealthResetTimer: number | null = null;
+    /**
+     * Bumped on every physical WebRTC connection attempt (fresh start AND each post-'playing'
+     * bounded reconnect). Mirrors mseAttemptId below: lets a superseded attempt's still-pending
+     * async continuations (or timers) recognise they're stale even though the logical run id
+     * (runId) hasn't changed.
+     */
+    private webrtcAttemptId = 0;
 
     // MSE transport state
     private mediaSource: MediaSource | null = null;
@@ -165,6 +204,7 @@ export class CameraStreamEngine {
     private mseLastPlayheadProgressAt = 0;
     private mseReconnectTimer: number | null = null;
     private mseReconnectAttempts = 0;
+    private mseHealthResetTimer: number | null = null;
     /**
      * Bumped on every physical MSE connection attempt (fresh start AND each auto-reconnect).
      * Unlike `runId` (which only changes on stop()/a newer start()), this lets a superseded
@@ -211,6 +251,9 @@ export class CameraStreamEngine {
     // ── WebRTC transport ──────────────────────────────────────────────────────
 
     private async runWebrtc(myRunId: number, fallbackChain: boolean): Promise<void> {
+        const myAttemptId = ++this.webrtcAttemptId;
+        const isCurrent = () => this.runId === myRunId && this.webrtcAttemptId === myAttemptId;
+
         const { deviceName, webrtcUrl, getAuthHeaders, onStatus } = this.options;
         if (!deviceName) return;
 
@@ -229,11 +272,15 @@ export class CameraStreamEngine {
         const pc = new RTCPeerConnection({ iceServers: [] });
         this.pc = pc;
 
-        let settled = false;
+        // `connected` flips true the first time this attempt reaches 'playing'. Before that,
+        // pc.onconnectionstatechange runs the original "initial connect failed" path
+        // (finishFailure — immediate, no grace/retry, matches pre-fix behaviour). After that,
+        // it hands off to handleWebrtcPostPlayingState, the new post-'playing' recovery path
+        // (fix: CRITICAL — WebRTC previously did nothing at all once 'playing' had fired once).
+        let connected = false;
+
         const finishFailure = (message: string) => {
-            if (settled) return;
-            settled = true;
-            if (this.runId !== myRunId) return; // superseded — a newer run already tore this down
+            if (connected || !isCurrent()) return;
             this.teardownWebrtc();
             if (fallbackChain) {
                 void this.runMse(myRunId, true);
@@ -243,25 +290,30 @@ export class CameraStreamEngine {
         };
 
         pc.onconnectionstatechange = () => {
-            if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-                finishFailure(`WebRTC connection ${pc.connectionState}`);
+            if (!isCurrent()) return;
+            const state = pc.connectionState;
+            if (!connected) {
+                if (state === 'failed' || state === 'disconnected') {
+                    finishFailure(`WebRTC connection ${state}`);
+                }
+                return;
             }
+            this.handleWebrtcPostPlayingState(myRunId, myAttemptId, fallbackChain, state);
         };
 
         pc.ontrack = (event: RTCTrackEvent) => {
-            if (this.runId !== myRunId) return;
+            if (!isCurrent()) return;
             this.video.srcObject = event.streams[0];
             this.video.play().catch(() => { /* autoplay may need a user gesture; 'playing' timeout covers it */ });
         };
 
         const onPlaying = () => {
-            if (settled) return;
-            settled = true;
-            if (this.runId !== myRunId) return;
-            if (this.webrtcPlayingTimer !== null) {
-                window.clearTimeout(this.webrtcPlayingTimer);
-                this.webrtcPlayingTimer = null;
-            }
+            if (connected || !isCurrent()) return;
+            connected = true;
+            this.clearWebrtcPlayingWatchdog();
+            // Don't hand the reconnect budget straight back on a bare 'playing' — only after
+            // it's been sustained (see WEBRTC_RECONNECT_RESET_MS / fix #5's MSE equivalent).
+            this.startWebrtcHealthResetTimer(myRunId, myAttemptId);
             onStatus('streaming', { transport: 'webrtc' });
         };
         this.video.addEventListener('playing', onPlaying, { once: true });
@@ -276,7 +328,7 @@ export class CameraStreamEngine {
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
             await this.waitForIceGatheringComplete(pc);
-            if (this.runId !== myRunId) return;
+            if (!isCurrent()) return;
 
             const response = await fetch(webrtcUrl, {
                 method: 'POST',
@@ -291,11 +343,115 @@ export class CameraStreamEngine {
             }
 
             const answerSdp = await response.text();
-            if (this.runId !== myRunId) return;
+            if (!isCurrent()) return;
             await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
         } catch (e: unknown) {
             const err = e as Error;
             finishFailure('WebRTC setup failed: ' + err.message);
+        }
+    }
+
+    /**
+     * Handles a pc.connectionState change reported AFTER this attempt has already reached
+     * 'playing' once. This is the recovery path that previously didn't exist at all: a
+     * connection drop here used to do nothing (dead RTCPeerConnection behind a still-LIVE
+     * badge). 'failed'/'closed' are immediately fatal; 'disconnected' gets a short grace
+     * period since it can be a transient ICE hiccup that self-heals.
+     */
+    private handleWebrtcPostPlayingState(
+        myRunId: number,
+        myAttemptId: number,
+        fallbackChain: boolean,
+        state: RTCPeerConnectionState,
+    ): void {
+        if (state === 'failed' || state === 'closed') {
+            this.clearWebrtcDisconnectGraceTimer();
+            this.handleWebrtcDisruption(myRunId, fallbackChain, `WebRTC connection ${state}`);
+            return;
+        }
+        if (state === 'disconnected') {
+            if (this.webrtcDisconnectGraceTimer !== null) return; // grace period already running
+            this.webrtcDisconnectGraceTimer = window.setTimeout(() => {
+                this.webrtcDisconnectGraceTimer = null;
+                if (this.runId !== myRunId || this.webrtcAttemptId !== myAttemptId) return;
+                this.handleWebrtcDisruption(myRunId, fallbackChain, 'WebRTC connection disconnected');
+            }, WEBRTC_DISCONNECT_GRACE_MS);
+            return;
+        }
+        // Any other state (typically back to 'connected') means a 'disconnected' blip
+        // recovered on its own — cancel the grace timer, take no further action.
+        this.clearWebrtcDisconnectGraceTimer();
+    }
+
+    /**
+     * Called once a post-'playing' WebRTC disruption is confirmed fatal (immediately for
+     * 'failed'/'closed', or after the grace period for a still-'disconnected' connection).
+     * Tears down the dead attempt and either falls through to MSE ('auto' mode — MSE has its
+     * own reconnect/hardening) or, in explicit 'webrtc' mode, retries a bounded number of
+     * times with backoff before reporting the error — mirrors handleMseDisruption.
+     */
+    private handleWebrtcDisruption(myRunId: number, fallbackChain: boolean, reason: string): void {
+        if (this.runId !== myRunId) return; // superseded — a newer run already tore this down
+        this.teardownWebrtcAttempt();
+
+        if (fallbackChain) {
+            void this.runMse(myRunId, true);
+            return;
+        }
+
+        if (this.webrtcReconnectAttempts < WEBRTC_MAX_RECONNECTS) {
+            const delay = WEBRTC_RECONNECT_BACKOFF_MS[this.webrtcReconnectAttempts];
+            this.webrtcReconnectAttempts++;
+            this.webrtcReconnectTimer = window.setTimeout(() => {
+                this.webrtcReconnectTimer = null;
+                if (this.runId !== myRunId) return; // stop()/newer start() cancelled us
+                void this.runWebrtc(myRunId, false);
+            }, delay);
+            return;
+        }
+
+        this.webrtcReconnectAttempts = 0;
+        this.options.onStatus('error', { transport: 'webrtc', error: reason });
+    }
+
+    private startWebrtcHealthResetTimer(myRunId: number, myAttemptId: number): void {
+        this.clearWebrtcHealthResetTimer();
+        this.webrtcHealthResetTimer = window.setTimeout(() => {
+            this.webrtcHealthResetTimer = null;
+            if (this.runId !== myRunId || this.webrtcAttemptId !== myAttemptId) return;
+            this.webrtcReconnectAttempts = 0;
+        }, WEBRTC_RECONNECT_RESET_MS);
+    }
+
+    private clearWebrtcHealthResetTimer(): void {
+        if (this.webrtcHealthResetTimer !== null) {
+            window.clearTimeout(this.webrtcHealthResetTimer);
+            this.webrtcHealthResetTimer = null;
+        }
+    }
+
+    private clearWebrtcDisconnectGraceTimer(): void {
+        if (this.webrtcDisconnectGraceTimer !== null) {
+            window.clearTimeout(this.webrtcDisconnectGraceTimer);
+            this.webrtcDisconnectGraceTimer = null;
+        }
+    }
+
+    private clearWebrtcReconnectTimer(): void {
+        if (this.webrtcReconnectTimer !== null) {
+            window.clearTimeout(this.webrtcReconnectTimer);
+            this.webrtcReconnectTimer = null;
+        }
+    }
+
+    private clearWebrtcPlayingWatchdog(): void {
+        if (this.webrtcPlayingTimer !== null) {
+            window.clearTimeout(this.webrtcPlayingTimer);
+            this.webrtcPlayingTimer = null;
+        }
+        if (this.webrtcPlayingListener) {
+            this.video.removeEventListener('playing', this.webrtcPlayingListener);
+            this.webrtcPlayingListener = null;
         }
     }
 
@@ -317,15 +473,24 @@ export class CameraStreamEngine {
         });
     }
 
+    /** Full WebRTC teardown: cancels any pending bounded reconnect (and resets its budget) on
+     *  top of tearing down the current physical attempt. Called by stop() and by the MSE
+     *  transport when it takes over the video element. */
     private teardownWebrtc(): void {
-        if (this.webrtcPlayingTimer !== null) {
-            window.clearTimeout(this.webrtcPlayingTimer);
-            this.webrtcPlayingTimer = null;
-        }
-        if (this.webrtcPlayingListener) {
-            this.video.removeEventListener('playing', this.webrtcPlayingListener);
-            this.webrtcPlayingListener = null;
-        }
+        this.clearWebrtcReconnectTimer();
+        this.webrtcReconnectAttempts = 0;
+        this.teardownWebrtcAttempt();
+    }
+
+    /** Tears down only the current physical attempt's resources (pc, watchdogs, grace/health
+     *  timers) — used both by teardownWebrtc() and, mid-session, by handleWebrtcDisruption()
+     *  just before scheduling a bounded reconnect. Bumps webrtcAttemptId so any of this
+     *  attempt's still-pending continuations/timers recognise they're stale. */
+    private teardownWebrtcAttempt(): void {
+        this.webrtcAttemptId++;
+        this.clearWebrtcPlayingWatchdog();
+        this.clearWebrtcDisconnectGraceTimer();
+        this.clearWebrtcHealthResetTimer();
         if (this.pc) {
             this.pc.onconnectionstatechange = null;
             this.pc.ontrack = null;
@@ -402,13 +567,21 @@ export class CameraStreamEngine {
         if (!isCurrent()) return; // superseded while connecting
 
         if (!response.ok) {
-            if (fallbackToSnapshot && response.status !== 401) { this.runSnapshot(myRunId); return; }
-            onStatus('error', {
-                transport: 'mse',
-                error: response.status === 401 ? 'Authentication required'
-                    : response.status === 404 ? `Device not found: ${deviceName}`
-                    : `HTTP ${response.status}`,
-            });
+            // 401/404 are permanent misconfigurations (bad credentials / camera renamed or
+            // removed) -- retrying won't help, so these keep the original immediate behaviour.
+            if (response.status === 401) {
+                onStatus('error', { transport: 'mse', error: 'Authentication required' });
+                return;
+            }
+            if (response.status === 404) {
+                if (fallbackToSnapshot) { this.runSnapshot(myRunId); return; }
+                onStatus('error', { transport: 'mse', error: `Device not found: ${deviceName}` });
+                return;
+            }
+            // Anything else (e.g. a transient 503 while the gateway/go2rtc restarts) deserves
+            // the same bounded backoff a network-level fetch failure already gets below --
+            // previously this went straight to fallback/error with zero retries (fix #4).
+            this.handleMseDisruption(myRunId, fallbackToSnapshot, `HTTP ${response.status}`);
             return;
         }
 
@@ -437,7 +610,10 @@ export class CameraStreamEngine {
         const onPlaying = () => {
             if (!isCurrent()) return;
             this.clearMsePlayingWatchdog();
-            this.mseReconnectAttempts = 0; // a successful connection earns back the full retry budget
+            // Don't hand the retry budget straight back on a bare 'playing' -- a connect-play-
+            // stall loop would then retry forever at the fastest backoff tier. Only a *sustained*
+            // healthy period earns it back (see startMseHealthResetTimer / MSE_RECONNECT_RESET_MS).
+            this.startMseHealthResetTimer(myRunId, myAttemptId);
             this.startMseStallWatchdog(myRunId, myAttemptId, fallbackToSnapshot);
             onStatus('streaming', { transport: 'mse' });
         };
@@ -591,6 +767,25 @@ export class CameraStreamEngine {
         }
     }
 
+    /** Starts (restarting if one is already running) the sustained-health timer that hands
+     *  the reconnect budget back after 'playing' has held for MSE_RECONNECT_RESET_MS without
+     *  a disruption. Cancelled by teardownMseAttempt() the moment anything goes wrong. */
+    private startMseHealthResetTimer(myRunId: number, myAttemptId: number): void {
+        this.clearMseHealthResetTimer();
+        this.mseHealthResetTimer = window.setTimeout(() => {
+            this.mseHealthResetTimer = null;
+            if (this.runId !== myRunId || this.mseAttemptId !== myAttemptId) return;
+            this.mseReconnectAttempts = 0;
+        }, MSE_RECONNECT_RESET_MS);
+    }
+
+    private clearMseHealthResetTimer(): void {
+        if (this.mseHealthResetTimer !== null) {
+            window.clearTimeout(this.mseHealthResetTimer);
+            this.mseHealthResetTimer = null;
+        }
+    }
+
     private waitForUpdate(sourceBuffer: SourceBuffer): Promise<void> {
         if (!sourceBuffer.updating) return Promise.resolve();
         return new Promise((resolve) => {
@@ -615,6 +810,7 @@ export class CameraStreamEngine {
         this.mseAttemptId++;
         this.clearMsePlayingWatchdog();
         this.clearMseStallWatchdog();
+        this.clearMseHealthResetTimer();
         if (this.reader) {
             try { this.reader.cancel(); } catch { /* reader already closed */ }
             this.reader = null;

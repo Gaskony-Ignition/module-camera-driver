@@ -317,4 +317,152 @@ class StreamHandlerTest {
         // stall) rather than misreported as a connect failure.
         verify(response, never()).sendError(eq(502), anyString());
     }
+
+    // -----------------------------------------------------------------------
+    // Abandoned-writer accounting — unbounded native-thread-growth fix.
+    //
+    // Each write-stall timeout leaves its writer thread running (it cannot be
+    // force-unblocked — see the class-level comment on writeStallTimeoutMs), so
+    // proxyStream() tracks how many such threads are currently outstanding and
+    // refuses to start new proxied streams once MAX_ABANDONED_WRITERS is reached.
+    // -----------------------------------------------------------------------
+
+    /** Polls {@link StreamHandler#getAbandonedWriterCountForTesting()} until it
+     *  matches {@code expected}, failing the assertion if it never does within
+     *  {@code timeoutMs}. */
+    private void awaitAbandonedWriterCount(int expected, long timeoutMs) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            if (StreamHandler.getAbandonedWriterCountForTesting() == expected) {
+                return;
+            }
+            Thread.sleep(20);
+        }
+        Assertions.assertThat(StreamHandler.getAbandonedWriterCountForTesting()).isEqualTo(expected);
+    }
+
+    /** A {@link ServletOutputStream} whose write(byte[], int, int) blocks forever
+     *  (until manually released), simulating a permanently abandoned writer thread. */
+    private ServletOutputStream blockingOutputStream(CountDownLatch release) {
+        return new ServletOutputStream() {
+            @Override
+            public boolean isReady() {
+                return true;
+            }
+
+            @Override
+            public void setWriteListener(WriteListener listener) {
+                // Not used in the blocking write path under test.
+            }
+
+            @Override
+            public void write(int b) {
+                // Unused: StreamHandler always calls the write(byte[], int, int) overload.
+            }
+
+            @Override
+            public void write(byte[] b, int off, int len) throws IOException {
+                try {
+                    release.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("interrupted", e);
+                }
+            }
+        };
+    }
+
+    @Test
+    void testProxyStream_WriteStall_IncrementsThenDecrementsAbandonedWriterCount() throws Exception {
+        authenticatedRequest();
+        when(requestContext.getParameter("device")).thenReturn("StallCam");
+        deviceStreamingFrom(startUpstreamServer(64 * 1024));
+        StreamHandler.setWriteStallTimeoutMsForTesting(200);
+
+        CountDownLatch release = new CountDownLatch(1);
+        when(response.getOutputStream()).thenReturn(blockingOutputStream(release));
+
+        Assertions.assertThat(StreamHandler.getAbandonedWriterCountForTesting()).isZero();
+
+        handler.handle(requestContext, response);
+
+        // The stalled write's thread was left running (abandoned) and counted exactly once.
+        Assertions.assertThat(StreamHandler.getAbandonedWriterCountForTesting()).isEqualTo(1);
+
+        // Release the blocked writer thread so its write finally completes — the
+        // completion hook must decrement the counter back out.
+        release.countDown();
+        awaitAbandonedWriterCount(0, 5000);
+    }
+
+    @Test
+    void testProxyStream_AtAbandonedWriterCeiling_RefusesNewStreamsUntilCountDrops() throws Exception {
+        authenticatedRequest();
+        when(requestContext.getParameter("device")).thenReturn("StallCam");
+        String upstreamUrl = startUpstreamServer(1024 * 1024);
+        StreamHandler.setWriteStallTimeoutMsForTesting(50);
+
+        // Drive the abandoned-writer count up to MAX_ABANDONED_WRITERS (16) with
+        // permanently-stalled writes (latches deliberately never released — this
+        // reproduces the unbounded accumulation the ceiling exists to stop).
+        for (int i = 0; i < 16; i++) {
+            deviceStreamingFrom(upstreamUrl);
+            when(response.getOutputStream()).thenReturn(blockingOutputStream(new CountDownLatch(1)));
+            handler.handle(requestContext, response);
+        }
+        Assertions.assertThat(StreamHandler.getAbandonedWriterCountForTesting()).isEqualTo(16);
+        // None of the ceiling-building requests were reported as a failure to the
+        // client — some bytes were already in flight before each stall, same as
+        // the single-stall case above.
+        verify(response, never()).sendError(eq(502), anyString());
+
+        // The next request must be refused outright at the ceiling (no 17th
+        // abandoned writer thread spun up) rather than spinning up an unbounded
+        // number of blocked threads.
+        deviceStreamingFrom(upstreamUrl);
+        handler.handle(requestContext, response);
+
+        Assertions.assertThat(StreamHandler.getAbandonedWriterCountForTesting()).isEqualTo(16);
+        verify(response).sendError(eq(502), contains("unavailable"));
+    }
+
+    @Test
+    void testShutdownWriteExecutor_ThenNewStream_WorksViaFreshExecutor() throws Exception {
+        authenticatedRequest();
+        when(requestContext.getParameter("device")).thenReturn("StallCam");
+        deviceStreamingFrom(startUpstreamServer(8192));
+
+        // Simulate CameraModuleHook.shutdown() tearing down the static write
+        // executor — e.g. a module restart within the same JVM.
+        StreamHandler.shutdownWriteExecutor();
+
+        ServletOutputStream discardingStream = new ServletOutputStream() {
+            @Override
+            public boolean isReady() {
+                return true;
+            }
+
+            @Override
+            public void setWriteListener(WriteListener listener) {
+                // Not used.
+            }
+
+            @Override
+            public void write(int b) {
+                // unused
+            }
+
+            @Override
+            public void write(byte[] b, int off, int len) {
+                // Accept and discard - simulates a normal, reading client.
+            }
+        };
+        when(response.getOutputStream()).thenReturn(discardingStream);
+
+        // Must not NPE and must actually proxy the stream via the lazily
+        // recreated executor, not fail because the old one was shut down.
+        handler.handle(requestContext, response);
+
+        verify(response, never()).sendError(anyInt(), anyString());
+    }
 }

@@ -1,6 +1,6 @@
 {
     "name": "camera_driver_webui",
-    "version": "3.1.8",
+    "version": "3.1.9",
     "description": "Camera Driver Module WebUI Component",
     "main": "build/dist/index.js",
     "scripts": {

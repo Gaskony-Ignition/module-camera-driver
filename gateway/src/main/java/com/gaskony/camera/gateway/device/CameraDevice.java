@@ -694,14 +694,17 @@ public class CameraDevice extends ManagedAddressSpaceWithLifecycle implements De
         return info;
     }
 
-    /** Media profiles from the connect-time cache (lazy single fetch if cold). */
+    /** Media profiles from the connect-time cache (lazy single fetch if cold).
+     *  Returns a defensive deep copy — {@link MediaProfile} exposes public setters
+     *  (used only during XML parsing today) so callers must not receive the live
+     *  cached instances. */
     public List<MediaProfile> getMediaProfilesCached() throws IOException {
         List<MediaProfile> profiles = cachedMediaProfiles;
         if (profiles == null && onvifClient != null) {
             profiles = onvifClient.getMediaProfiles();
             cachedMediaProfiles = profiles;
         }
-        return profiles;
+        return copyMediaProfiles(profiles);
     }
 
     /** RTSP stream URI for a profile, cached after the first lookup. */
@@ -751,10 +754,25 @@ public class CameraDevice extends ManagedAddressSpaceWithLifecycle implements De
     }
 
     /** Media profiles from the connect-time cache, or null if cold. Never blocks on I/O.
-     *  Returns a defensive copy so callers can't mutate the cached list. */
+     *  Returns a defensive deep copy — {@link MediaProfile} exposes public setters
+     *  (used only during XML parsing today) so both the list and its elements are
+     *  copied; callers must not mutate the cached list OR its MediaProfile elements. */
     public List<MediaProfile> peekMediaProfiles() {
-        List<MediaProfile> profiles = cachedMediaProfiles;
-        return profiles == null ? null : new ArrayList<>(profiles);
+        return copyMediaProfiles(cachedMediaProfiles);
+    }
+
+    /** Deep-copies a MediaProfile list (new list, new MediaProfile instances) so
+     *  callers never receive a reference to the live cached list or its mutable
+     *  elements. Returns null if {@code profiles} is null. */
+    private static List<MediaProfile> copyMediaProfiles(List<MediaProfile> profiles) {
+        if (profiles == null) {
+            return null;
+        }
+        List<MediaProfile> copy = new ArrayList<>(profiles.size());
+        for (MediaProfile profile : profiles) {
+            copy.add(new MediaProfile(profile));
+        }
+        return copy;
     }
 
     /** RTSP stream URI for a profile from cache, or null if not yet looked up. Never blocks on I/O. */

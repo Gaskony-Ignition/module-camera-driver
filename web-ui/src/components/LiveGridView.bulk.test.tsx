@@ -118,6 +118,45 @@ describe('LiveGridView bulk controls', () => {
     // Cells already streaming must not create fresh engines.
     expect(engineInstances).toHaveLength(2)
   })
+
+  /**
+   * Regression test for fix #1 (HIGH, reproduction-confirmed): GridCell is keyed by
+   * `${activeGroup}-${gridSize}-${i}`, so a grid-resize remounts every cell from scratch.
+   * Before the fix, GridCell's lastBulkSeqRef always started at 0, so a nonzero bulkCommand.seq
+   * already in effect looked "new" to the freshly-mounted cell and got replayed -- silently
+   * auto-starting a stream the user never asked for on the new layout. Reproduced by: click
+   * Stream All, then resize the grid (which is exactly what pressing "3" does) -- both new
+   * cells auto-started engines. Asserts no NEW engine.start() calls happen purely from the
+   * remount; only an actual fresh Stream All click after the resize should start anything.
+   */
+  it('a grid-size change (remount via key change) does not replay a stale bulk command', async () => {
+    render(<LiveGridView />)
+
+    await waitFor(() => {
+      expect(screen.getAllByText('CamA').length).toBeGreaterThan(0)
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /stream all/i }))
+    await waitFor(() => expect(engineInstances).toHaveLength(2))
+    expect(engineInstances[0].start).toHaveBeenCalledTimes(1)
+    expect(engineInstances[1].start).toHaveBeenCalledTimes(1)
+
+    // Resize the grid -- this changes every GridCell's key (`${activeGroup}-${gridSize}-${i}`),
+    // unmounting and remounting all cells, exactly like the reproduction's "press 3" step.
+    fireEvent.change(screen.getByTitle('Grid size'), { target: { value: '3x3' } })
+
+    // The remounted cells for CamA/CamB must NOT auto-start just from being mounted with the
+    // still-nonzero bulkCommand.seq already in effect -- no new CameraStreamEngine should be
+    // constructed at all, since nothing (button click) actually requested a new stream.
+    await waitFor(() => {
+      expect(screen.getAllByText('CamA').length).toBeGreaterThan(0)
+    })
+    expect(engineInstances).toHaveLength(2)
+
+    // A genuine fresh Stream All click after the resize must still work normally.
+    fireEvent.click(screen.getByRole('button', { name: /stream all/i }))
+    await waitFor(() => expect(engineInstances).toHaveLength(4))
+  })
 })
 
 describe('LiveGridView effective assignments (default group auto-fill)', () => {
@@ -221,6 +260,42 @@ describe('LiveGridView effective assignments (default group auto-fill)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /stream all/i }))
     await waitFor(() => expect(engineInstances).toHaveLength(1))
+  })
+
+  /**
+   * Regression test for fix #3 (MEDIUM): a stored manual assignment pointing at a device
+   * that has since been deleted/renamed used to still count as "placed" forever, permanently
+   * excluding its cell from auto-fill even though it renders as an empty-looking cell (no
+   * matching device to select). The fix treats a stale assignment as empty for auto-fill
+   * purposes in the default group, without deleting the stored value (the camera might
+   * reconnect later under the same name).
+   */
+  it('a stale manual assignment to a deleted device frees its cell for auto-fill (default group)', async () => {
+    vi.mocked(apiGet).mockResolvedValueOnce({
+      // CamA was manually assigned to cell 0 but no longer exists; CamB still does; CamC is
+      // a newly-connected device that should be able to claim CamA's now-stale slot.
+      devices: ['CamB', 'CamC'].map(makeDevice),
+    })
+    localStorage.setItem('camera-driver-grid-size', '2x2') // capacity 4
+    localStorage.setItem(
+      'camera-driver-grid-groups',
+      JSON.stringify({ __default__: { name: 'All Cameras', assignments: { 0: 'CamA', 1: 'CamB' } } })
+    )
+
+    const { container } = render(<LiveGridView />)
+
+    await waitFor(() => {
+      expect(container.querySelectorAll('.grid-overlay-name')).toHaveLength(2)
+    })
+    // Cell 1 keeps its manual CamB placement; cell 0's stale CamA slot is freed and
+    // auto-filled with the only unplaced device, CamC -- not left empty forever.
+    const names = Array.from(container.querySelectorAll('.grid-overlay-name')).map(el => el.textContent)
+    expect(names).toEqual(['CamC', 'CamB'])
+
+    // The stored assignment itself must be untouched (not deleted) -- confirmed indirectly:
+    // Stream All must only start the 2 currently-resolvable cameras, not error on the stale one.
+    fireEvent.click(screen.getByRole('button', { name: /stream all/i }))
+    await waitFor(() => expect(engineInstances).toHaveLength(2))
   })
 
   it('explicitly clearing an auto-filled cell keeps it empty instead of immediately re-filling it', async () => {
