@@ -149,7 +149,9 @@ function GridCell({ cellIndex, devices, selectedCamera, onCameraChange, onEvent,
       engineRef.current = null
     }
     if (videoRef.current) {
-      videoRef.current.pause()
+      // pause() can throw in some environments (e.g. jsdom, or a video element with no
+      // attached media yet) -- defensive, consistent with the engine's own try/catch style.
+      try { videoRef.current.pause() } catch { /* ignore */ }
       videoRef.current.style.display = 'none'
     }
     if (streamingRef.current && device) {
@@ -181,7 +183,16 @@ function GridCell({ cellIndex, devices, selectedCamera, onCameraChange, onEvent,
   // -- Bulk Stream All / Stop All ------------------------------------------
   // LiveGridView broadcasts a {seq, action} command; each cell applies it once
   // per seq. Guarded by a ref so re-renders never replay an old command.
-  const lastBulkSeqRef = useRef(0)
+  //
+  // Initialised to the MOUNT-TIME command's seq (not 0): LiveGridView keys cells by
+  // `${activeGroup}-${gridSize}-${i}`, so a grid-resize or group-switch remounts every
+  // cell from scratch. If this started at 0, a previously-applied nonzero seq would look
+  // "new" on the fresh mount and get replayed -- silently auto-starting a stream the user
+  // never asked for on the new grid layout (regression, reproduction-confirmed: Stream All,
+  // then press "3" to resize, both new cells auto-started). Starting from the command
+  // that's already live at mount time means only a genuinely NEW seq (a fresh button
+  // press after mount) is treated as unapplied.
+  const lastBulkSeqRef = useRef(bulkCommand?.seq ?? 0)
   useEffect(() => {
     if (!bulkCommand || bulkCommand.seq === 0 || bulkCommand.seq === lastBulkSeqRef.current) return
     lastBulkSeqRef.current = bulkCommand.seq

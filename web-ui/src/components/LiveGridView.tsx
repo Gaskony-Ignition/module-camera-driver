@@ -148,6 +148,7 @@ function LiveGridView() {
 
     const dim = getGridDimension(gridSize)
     const totalCells = dim.cols * dim.rows
+    const currentDeviceNames = new Set(devices.map(d => d.name))
 
     const effective: Record<number, string> = {}
     const placedDeviceNames = new Set<string>()
@@ -155,7 +156,13 @@ function LiveGridView() {
 
     for (let i = 0; i < totalCells; i++) {
       const value = stored[i]
-      if (value && value !== CLEARED_MARKER) {
+      // A stored assignment whose device no longer exists (deleted/renamed) must NOT count as
+      // "placed" forever -- otherwise its cell is permanently excluded from auto-fill even
+      // though it renders empty (GridCell can't find a matching device either), and a newly
+      // connected camera can never take the slot. Treat it as empty for auto-fill purposes
+      // without touching the stored value itself -- the camera might come back, and if it
+      // does `currentDeviceNames.has(value)` becomes true again and its placement is restored.
+      if (value && value !== CLEARED_MARKER && currentDeviceNames.has(value)) {
         effective[i] = value
         placedDeviceNames.add(value)
       } else if (value !== CLEARED_MARKER) {

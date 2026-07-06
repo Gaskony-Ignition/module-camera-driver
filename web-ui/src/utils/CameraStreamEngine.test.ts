@@ -4,8 +4,13 @@ import {
     CameraStreamEngine,
     MSE_PLAYING_TIMEOUT_MS,
     MSE_STALL_TIMEOUT_MS,
+    MSE_STALL_POLL_INTERVAL_MS,
     MSE_MAX_RECONNECTS,
     MSE_RECONNECT_BACKOFF_MS,
+    MSE_RECONNECT_RESET_MS,
+    WEBRTC_DISCONNECT_GRACE_MS,
+    WEBRTC_MAX_RECONNECTS,
+    WEBRTC_RECONNECT_BACKOFF_MS,
 } from './CameraStreamEngine';
 
 /**
@@ -249,7 +254,7 @@ describe('CameraStreamEngine MSE resilience (watchdog, stall, bounded reconnect)
         engine.stop();
     });
 
-    it("reaching 'playing' clears the watchdog and resets the reconnect budget", async () => {
+    it("reaching 'playing' clears the watchdog immediately, but the reconnect budget is only restored after a sustained healthy period (fix #5)", async () => {
         const video = document.createElement('video');
         const onStatus = vi.fn();
 
@@ -269,21 +274,67 @@ describe('CameraStreamEngine MSE resilience (watchdog, stall, bounded reconnect)
         // MSE_PLAYING_TIMEOUT_MS afterwards must not trip anything belonging to this attempt.
         video.dispatchEvent(new Event('playing'));
         expect(onStatus).toHaveBeenCalledWith('streaming', { transport: 'mse' });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((engine as any).mseReconnectAttempts).toBe(0);
 
         // A stall consumes one slot of the reconnect budget.
         await vi.advanceTimersByTimeAsync(MSE_STALL_TIMEOUT_MS);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         expect((engine as any).mseReconnectAttempts).toBe(1);
 
-        // The reconnect attempt reaches 'playing' again — the budget must be given back in
-        // full, not left at "4 remaining", so a later, unrelated stall isn't judged against
-        // an already-half-spent budget.
+        // The reconnect attempt reaches 'playing' again.
         await vi.advanceTimersByTimeAsync(MSE_RECONNECT_BACKOFF_MS[0]);
         video.dispatchEvent(new Event('playing'));
+
+        // Regression guard for fix #5: a bare 'playing' event (e.g. a one-frame flicker) must
+        // NOT immediately hand the budget back — otherwise a connect-play-stall loop would
+        // retry forever at the fastest backoff tier instead of ever exhausting.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((engine as any).mseReconnectAttempts).toBe(1);
+
+        // Only once playback has been healthy for the full sustained-health window is the
+        // budget restored in full, not left at "4 remaining". Advance the playhead alongside
+        // the clock so the stall watchdog (which polls every MSE_STALL_POLL_INTERVAL_MS and
+        // would otherwise see a frozen currentTime and re-trigger a stall of its own before
+        // the longer health-reset window elapses) sees genuine progress throughout.
+        for (let elapsed = 0; elapsed < MSE_RECONNECT_RESET_MS; elapsed += MSE_STALL_POLL_INTERVAL_MS) {
+            video.currentTime = elapsed / 1000 + 1;
+            await vi.advanceTimersByTimeAsync(MSE_STALL_POLL_INTERVAL_MS);
+        }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         expect((engine as any).mseReconnectAttempts).toBe(0);
+
+        engine.stop();
+    });
+
+    it('fix #5 regression: a stall shortly after reconnecting (before the health-reset window elapses) consumes a further budget slot instead of a freshly-reset one', async () => {
+        const video = document.createElement('video');
+        const onStatus = vi.fn();
+
+        const engine = new CameraStreamEngine(video, null, {
+            deviceName: 'Front Camera',
+            streamUrl: '/data/camera-driver/stream?device=Front%20Camera',
+            webrtcUrl: '/data/camera-driver/webrtc?device=Front%20Camera',
+            getAuthHeaders: () => undefined,
+            transportPreference: 'mse',
+            onStatus,
+        });
+
+        engine.start();
+        await vi.advanceTimersByTimeAsync(0);
+
+        video.dispatchEvent(new Event('playing'));
+        await vi.advanceTimersByTimeAsync(MSE_STALL_TIMEOUT_MS); // attempt #1 stalls -> attempts = 1
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((engine as any).mseReconnectAttempts).toBe(1);
+
+        await vi.advanceTimersByTimeAsync(MSE_RECONNECT_BACKOFF_MS[0]); // attempt #2 begins
+        video.dispatchEvent(new Event('playing')); // flickers healthy briefly
+
+        // A second stall arrives well before MSE_RECONNECT_RESET_MS has elapsed since this
+        // 'playing' -- the flicker must not have handed the budget back, so this consumes the
+        // budget's *next* slot (2), not a freshly-reset one (which would show 1 again).
+        await vi.advanceTimersByTimeAsync(MSE_STALL_TIMEOUT_MS);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((engine as any).mseReconnectAttempts).toBe(2);
 
         engine.stop();
     });
@@ -317,5 +368,398 @@ describe('CameraStreamEngine MSE resilience (watchdog, stall, bounded reconnect)
 
         expect(fetchMock).toHaveBeenCalledTimes(1);
         expect(onStatus.mock.calls.length).toBe(callsBeforeStop);
+    });
+});
+
+/**
+ * Fix #4 (MEDIUM): a non-2xx response on the initial MSE connect used to bypass the bounded
+ * reconnect entirely -- a transient 503 (gateway/go2rtc restarting) got zero retries, while a
+ * network-level fetch failure (a rejected fetch() promise) already got the full budget. 401
+ * and 404 are permanent misconfigurations (bad credentials / camera renamed or removed) and
+ * must keep reporting immediately with no retry.
+ */
+describe('CameraStreamEngine MSE non-2xx connect handling (fix #4)', () => {
+    let originalCreateObjectURL: typeof URL.createObjectURL | undefined;
+    let originalRevokeObjectURL: typeof URL.revokeObjectURL | undefined;
+
+    class FakeSourceBuffer extends EventTarget {
+        updating = false;
+        mode = 'segments';
+        buffered = { length: 0, start: () => 0, end: () => 0 };
+        appendBuffer(): void {
+            this.updating = true;
+            queueMicrotask(() => {
+                this.updating = false;
+                this.dispatchEvent(new Event('updateend'));
+            });
+        }
+        remove(): void { /* not exercised by these tests */ }
+    }
+
+    class FakeMediaSource extends EventTarget {
+        static isTypeSupported(): boolean { return true; }
+        readyState: string = 'open';
+        addSourceBuffer(): FakeSourceBuffer { return new FakeSourceBuffer(); }
+        endOfStream(): void { this.readyState = 'ended'; }
+    }
+
+    function hangingReader() {
+        return { read: () => new Promise<{ done: boolean; value?: Uint8Array }>(() => { /* never settles */ }), cancel: vi.fn() };
+    }
+
+    function mseOkResponse() {
+        return {
+            ok: true,
+            status: 200,
+            headers: { get: (name: string) => (name === 'Content-Type' ? 'video/mp4; codecs="avc1.640029"' : null) },
+            body: { getReader: hangingReader },
+        };
+    }
+
+    function mseErrorResponse(status: number) {
+        return { ok: false, status };
+    }
+
+    let fetchMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+        originalCreateObjectURL = URL.createObjectURL;
+        originalRevokeObjectURL = URL.revokeObjectURL;
+        URL.createObjectURL = vi.fn(() => 'blob:mock-url');
+        URL.revokeObjectURL = vi.fn();
+        vi.stubGlobal('MediaSource', FakeMediaSource);
+        vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+        URL.createObjectURL = originalCreateObjectURL as typeof URL.createObjectURL;
+        URL.revokeObjectURL = originalRevokeObjectURL as typeof URL.revokeObjectURL;
+        vi.unstubAllGlobals();
+    });
+
+    it('a transient 503 on initial connect gets the same bounded backoff as a network failure, and recovers', async () => {
+        let call = 0;
+        fetchMock = vi.fn(() => {
+            call++;
+            return Promise.resolve(call === 1 ? mseErrorResponse(503) : mseOkResponse());
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const video = document.createElement('video');
+        const onStatus = vi.fn();
+        const engine = new CameraStreamEngine(video, null, {
+            deviceName: 'Front Camera',
+            streamUrl: '/data/camera-driver/stream?device=Front%20Camera',
+            webrtcUrl: '/data/camera-driver/webrtc?device=Front%20Camera',
+            getAuthHeaders: () => undefined,
+            transportPreference: 'mse',
+            onStatus,
+        });
+
+        engine.start();
+        await vi.advanceTimersByTimeAsync(0); // first attempt gets the 503
+
+        // Must not have given up outright -- it's retrying, not erroring.
+        expect(onStatus).not.toHaveBeenCalledWith('error', expect.anything());
+
+        await vi.advanceTimersByTimeAsync(MSE_RECONNECT_BACKOFF_MS[0]); // backoff elapses, second attempt fires
+        await vi.advanceTimersByTimeAsync(0); // let the second (successful) fetch settle
+
+        video.dispatchEvent(new Event('playing'));
+        expect(onStatus).toHaveBeenCalledWith('streaming', { transport: 'mse' });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+
+        engine.stop();
+    });
+
+    it('a 401 on initial connect reports an error immediately with no retry', async () => {
+        fetchMock = vi.fn(() => Promise.resolve(mseErrorResponse(401)));
+        vi.stubGlobal('fetch', fetchMock);
+
+        const video = document.createElement('video');
+        const onStatus = vi.fn();
+        const engine = new CameraStreamEngine(video, null, {
+            deviceName: 'Front Camera',
+            streamUrl: '/data/camera-driver/stream?device=Front%20Camera',
+            webrtcUrl: '/data/camera-driver/webrtc?device=Front%20Camera',
+            getAuthHeaders: () => undefined,
+            transportPreference: 'mse',
+            onStatus,
+        });
+
+        engine.start();
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(onStatus).toHaveBeenCalledWith('error', { transport: 'mse', error: 'Authentication required' });
+
+        // No retry -- advancing well past every backoff tier must not produce a second fetch.
+        await vi.advanceTimersByTimeAsync(Math.max(...MSE_RECONNECT_BACKOFF_MS) * 2);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        engine.stop();
+    });
+
+    it('a 404 on initial connect (device not found) still reports an error immediately with no retry', async () => {
+        fetchMock = vi.fn(() => Promise.resolve(mseErrorResponse(404)));
+        vi.stubGlobal('fetch', fetchMock);
+
+        const video = document.createElement('video');
+        const onStatus = vi.fn();
+        const engine = new CameraStreamEngine(video, null, {
+            deviceName: 'Front Camera',
+            streamUrl: '/data/camera-driver/stream?device=Front%20Camera',
+            webrtcUrl: '/data/camera-driver/webrtc?device=Front%20Camera',
+            getAuthHeaders: () => undefined,
+            transportPreference: 'mse',
+            onStatus,
+        });
+
+        engine.start();
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(onStatus).toHaveBeenCalledWith('error', { transport: 'mse', error: 'Device not found: Front Camera' });
+
+        await vi.advanceTimersByTimeAsync(Math.max(...MSE_RECONNECT_BACKOFF_MS) * 2);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        engine.stop();
+    });
+});
+
+/**
+ * Fix #2 (CRITICAL): before this fix, once a WebRTC connection reached 'playing' once, the
+ * `settled` flag permanently disabled pc.onconnectionstatechange handling -- a later
+ * connection drop ('failed'/'disconnected'/'closed') did nothing at all: no teardown, no
+ * fallback, a dead RTCPeerConnection left behind a still-LIVE badge. jsdom has no
+ * RTCPeerConnection implementation at all, so (mirroring the MediaSource stubbing used for
+ * the MSE resilience tests above) a minimal fake stands in: enough to drive the offer/answer
+ * handshake and to let the test directly fire connectionState transitions.
+ */
+describe('CameraStreamEngine WebRTC post-playing failure recovery (fix #2)', () => {
+    let originalCreateObjectURL: typeof URL.createObjectURL | undefined;
+    let originalRevokeObjectURL: typeof URL.revokeObjectURL | undefined;
+
+    type ConnState = 'new' | 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed';
+
+    class FakePeerConnection {
+        iceGatheringState = 'complete';
+        connectionState: ConnState = 'new';
+        localDescription: { sdp: string } | null = null;
+        onconnectionstatechange: (() => void) | null = null;
+        ontrack: ((event: unknown) => void) | null = null;
+
+        addTransceiver(): void { /* no-op */ }
+        async createOffer(): Promise<{ type: 'offer'; sdp: string }> {
+            return { type: 'offer', sdp: 'fake-offer-sdp' };
+        }
+        async setLocalDescription(desc: { sdp: string }): Promise<void> { this.localDescription = desc; }
+        async setRemoteDescription(): Promise<void> { /* no-op */ }
+        addEventListener(): void { /* iceGatheringState is already 'complete'; never invoked */ }
+        removeEventListener(): void { /* no-op */ }
+        close(): void { this.connectionState = 'closed'; }
+
+        /** Test helper: drives a connectionState transition and fires the handler, exactly
+         *  like a real RTCPeerConnection would on the browser's own ICE/DTLS state machine. */
+        setConnectionState(state: ConnState): void {
+            this.connectionState = state;
+            this.onconnectionstatechange?.();
+        }
+    }
+
+    class FakeSourceBuffer extends EventTarget {
+        updating = false;
+        mode = 'segments';
+        buffered = { length: 0, start: () => 0, end: () => 0 };
+        appendBuffer(): void {
+            this.updating = true;
+            queueMicrotask(() => {
+                this.updating = false;
+                this.dispatchEvent(new Event('updateend'));
+            });
+        }
+        remove(): void { /* not exercised by these tests */ }
+    }
+
+    class FakeMediaSource extends EventTarget {
+        static isTypeSupported(): boolean { return true; }
+        readyState: string = 'open';
+        addSourceBuffer(): FakeSourceBuffer { return new FakeSourceBuffer(); }
+        endOfStream(): void { this.readyState = 'ended'; }
+    }
+
+    function hangingReader() {
+        return { read: () => new Promise<{ done: boolean; value?: Uint8Array }>(() => { /* never settles */ }), cancel: vi.fn() };
+    }
+
+    let pcInstances: FakePeerConnection[];
+    let fetchMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+        originalCreateObjectURL = URL.createObjectURL;
+        originalRevokeObjectURL = URL.revokeObjectURL;
+        URL.createObjectURL = vi.fn(() => 'blob:mock-url');
+        URL.revokeObjectURL = vi.fn();
+
+        pcInstances = [];
+        vi.stubGlobal('RTCPeerConnection', vi.fn().mockImplementation(() => {
+            const pc = new FakePeerConnection();
+            pcInstances.push(pc);
+            return pc;
+        }));
+        vi.stubGlobal('MediaSource', FakeMediaSource);
+
+        fetchMock = vi.fn((url: unknown) => {
+            const u = typeof url === 'string' ? url : '';
+            if (u.includes('/webrtc')) {
+                return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('fake-answer-sdp') });
+            }
+            if (u.includes('/stream')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    headers: { get: (name: string) => (name === 'Content-Type' ? 'video/mp4; codecs="avc1.640029"' : null) },
+                    body: { getReader: hangingReader },
+                });
+            }
+            const blob = new Blob(['fake-jpeg'], { type: 'image/jpeg' });
+            return Promise.resolve({ ok: true, status: 200, blob: () => Promise.resolve(blob) });
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+        URL.createObjectURL = originalCreateObjectURL as typeof URL.createObjectURL;
+        URL.revokeObjectURL = originalRevokeObjectURL as typeof URL.revokeObjectURL;
+        vi.unstubAllGlobals();
+    });
+
+    it("a post-'playing' 'failed' state tears the connection down and falls through to MSE in 'auto' mode", async () => {
+        const video = document.createElement('video');
+        const img = document.createElement('img');
+        const onStatus = vi.fn();
+
+        const engine = new CameraStreamEngine(video, img, {
+            deviceName: 'Front Camera',
+            streamUrl: '/data/camera-driver/stream?device=Front%20Camera',
+            webrtcUrl: '/data/camera-driver/webrtc?device=Front%20Camera',
+            snapshotUrl: '/data/camera-driver/snapshot?device=Front%20Camera',
+            getAuthHeaders: () => undefined,
+            transportPreference: 'auto',
+            onStatus,
+        });
+
+        engine.start();
+        await vi.advanceTimersByTimeAsync(0); // let the offer/answer handshake settle
+
+        video.dispatchEvent(new Event('playing'));
+        expect(onStatus).toHaveBeenCalledWith('streaming', { transport: 'webrtc' });
+
+        // The connection dies post-playing -- before the fix this did nothing at all.
+        pcInstances[0].setConnectionState('failed');
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(onStatus).toHaveBeenCalledWith('connecting', { transport: 'mse' });
+
+        engine.stop();
+    });
+
+    it("a post-'playing' 'disconnected' state that recovers within the grace period takes no action", async () => {
+        const video = document.createElement('video');
+        const onStatus = vi.fn();
+
+        const engine = new CameraStreamEngine(video, null, {
+            deviceName: 'Front Camera',
+            streamUrl: '/data/camera-driver/stream?device=Front%20Camera',
+            webrtcUrl: '/data/camera-driver/webrtc?device=Front%20Camera',
+            getAuthHeaders: () => undefined,
+            transportPreference: 'auto',
+            onStatus,
+        });
+
+        engine.start();
+        await vi.advanceTimersByTimeAsync(0);
+        video.dispatchEvent(new Event('playing'));
+
+        pcInstances[0].setConnectionState('disconnected');
+        // Recovers comfortably inside the grace period.
+        await vi.advanceTimersByTimeAsync(WEBRTC_DISCONNECT_GRACE_MS - 1000);
+        pcInstances[0].setConnectionState('connected');
+
+        // Advancing well past the grace period afterwards must not trigger a delayed teardown
+        // or fallback -- the transient blip already recovered.
+        await vi.advanceTimersByTimeAsync(WEBRTC_DISCONNECT_GRACE_MS * 2);
+
+        expect(onStatus).not.toHaveBeenCalledWith('connecting', { transport: 'mse' });
+        expect(onStatus).not.toHaveBeenCalledWith('error', expect.anything());
+
+        engine.stop();
+    });
+
+    it('stop() cancels a pending WebRTC disconnect-grace timer -- no leaked fallback/error after stop', async () => {
+        const video = document.createElement('video');
+        const onStatus = vi.fn();
+
+        const engine = new CameraStreamEngine(video, null, {
+            deviceName: 'Front Camera',
+            streamUrl: '/data/camera-driver/stream?device=Front%20Camera',
+            webrtcUrl: '/data/camera-driver/webrtc?device=Front%20Camera',
+            getAuthHeaders: () => undefined,
+            transportPreference: 'auto',
+            onStatus,
+        });
+
+        engine.start();
+        await vi.advanceTimersByTimeAsync(0);
+        video.dispatchEvent(new Event('playing'));
+
+        pcInstances[0].setConnectionState('disconnected');
+        const callsBeforeStop = onStatus.mock.calls.length;
+
+        engine.stop();
+
+        // If the grace timer wasn't cancelled, this would eventually invoke the MSE fallback.
+        await vi.advanceTimersByTimeAsync(WEBRTC_DISCONNECT_GRACE_MS * 2);
+
+        expect(onStatus.mock.calls.length).toBe(callsBeforeStop);
+    });
+
+    it("explicit 'webrtc' preference retries a bounded number of times after post-playing failures, then reports an error", async () => {
+        const video = document.createElement('video');
+        const onStatus = vi.fn();
+
+        const engine = new CameraStreamEngine(video, null, {
+            deviceName: 'Front Camera',
+            streamUrl: '/data/camera-driver/stream?device=Front%20Camera',
+            webrtcUrl: '/data/camera-driver/webrtc?device=Front%20Camera',
+            getAuthHeaders: () => undefined,
+            transportPreference: 'webrtc',
+            onStatus,
+        });
+
+        engine.start();
+        await vi.advanceTimersByTimeAsync(0);
+        video.dispatchEvent(new Event('playing'));
+
+        for (let i = 0; i < WEBRTC_MAX_RECONNECTS; i++) {
+            pcInstances[pcInstances.length - 1].setConnectionState('failed');
+            await vi.advanceTimersByTimeAsync(WEBRTC_RECONNECT_BACKOFF_MS[i]); // backoff elapses, next attempt starts
+            await vi.advanceTimersByTimeAsync(0); // let that attempt's handshake settle
+            video.dispatchEvent(new Event('playing')); // this attempt reaches playing again
+        }
+
+        // One more failure exhausts the budget -- reports the error instead of retrying again.
+        pcInstances[pcInstances.length - 1].setConnectionState('failed');
+
+        expect(onStatus).toHaveBeenLastCalledWith('error', { transport: 'webrtc', error: 'WebRTC connection failed' });
+        expect(pcInstances).toHaveLength(1 + WEBRTC_MAX_RECONNECTS);
+
+        // Exhausting the budget must not have fallen through to MSE (explicit mode, not auto).
+        expect(onStatus).not.toHaveBeenCalledWith('connecting', { transport: 'mse' });
+
+        engine.stop();
     });
 });
