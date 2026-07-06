@@ -1,9 +1,9 @@
 # Implementation Status
 
 **Project**: Ignition Camera Driver Module
-**Current Version**: 3.1.8
+**Current Version**: 3.1.9
 **Last Updated**: 2026-07-06
-**Status**: Production ready — acceptance run passed 2026-07-06 (see "Acceptance run" below and PROJECT_CHARTER.md §2)
+**Status**: Production ready — acceptance run passed 2026-07-06 (see "Acceptance run" below and PROJECT_CHARTER.md §2); 3.1.9 carries the pre-release adversarial-review fixes
 
 ---
 
@@ -126,10 +126,10 @@ ONVIF — all toggled per device.
 
 | Suite | Tests | Status |
 | ----- | ----- | ------ |
-| Gateway (JUnit 5, Mockito 5, AssertJ 3) | 485 | Passing |
+| Gateway (JUnit 5, Mockito 5, AssertJ 3) | 489 | Passing |
 | Common (JUnit 5) | 67 | Passing |
-| web-ui (vitest) | 33 | Passing |
-| **Total** | **585** | **100% pass rate** |
+| web-ui (vitest) | 43 | Passing |
+| **Total** | **599** | **100% pass rate** |
 
 Gateway coverage includes ValidationUtil, ONVIFAuth/Client, XmlUtil, handlers
 (Stream/Snapshot/Ptz/WebRtc/Diagnostics), Go2RtcManager, AuthenticationManager,
@@ -175,6 +175,7 @@ the 15-minute hard cap); 3.1.8 fixes it and was re-verified clean.
 
 | Version | Date | Changes |
 | ------- | ---- | ------- |
+| 3.1.9 | 2026-07-06 | Pre-release adversarial-review fixes: WebRTC mid-stream drop recovery (grace period + bounded retry + MSE fallthrough); grid resize/group switch no longer replays the last bulk command; stale assignments no longer block auto-fill; transient MSE connect errors get the bounded retry; stream-write executor shut down with the module; abandoned-writer thread cap (16); unconditional `ice_servers: []`; MediaProfile deep copies |
 | 3.1.8 | 2026-07-06 | Gateway MSE proxy consumer leak fixed — a client that disconnects without a clean TCP close no longer holds its upstream go2rtc connection open (per-write 20 s stall backstop); found by the 10-camera soak |
 | 3.1.7 | 2026-07-06 | Live View "All Cameras" group auto-populates every connected camera (no manual cell assignment); Stream All streams them all |
 | 3.1.6 | 2026-07-06 | WebRTC signaling no longer times out (go2rtc STUN disabled when explicit candidates exist — was falling back to MSE); MSE hardened (connect/stall watchdogs, bounded auto-reconnect); per-cell transport badge (WebRTC/MSE/Snapshot) + fallback event; device-list endpoint no longer makes live SOAP calls on a cold cache |

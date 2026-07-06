@@ -5,6 +5,23 @@ All notable changes to the Ignition Camera Driver module will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.9] - 2026-07-06
+
+**Type:** PATCH — pre-release review fixes (adversarial review of 3.1.4–3.1.8)
+
+### Fixed
+- **WebRTC streams now recover from a mid-stream connection drop.** Once a WebRTC stream reached 'playing', a later connection failure (Wi-Fi rebind, go2rtc hiccup) did nothing — frozen frame behind a LIVE badge, dead RTCPeerConnection leaked. The engine now handles post-playing state changes: 'failed'/'closed' are immediately fatal, 'disconnected' gets a 5 s grace period; a confirmed drop falls through to MSE in auto mode, or retries WebRTC (3 attempts, backed off) in explicit mode. The retry budget only restores after 10 s of sustained health.
+- **Grid resize or group switch no longer replays the last Stream All / Stop All.** Grid cells remount on resize/group change and treated the already-applied bulk command as new, silently auto-starting every visible camera. Cells now treat the mount-time command sequence as already applied (regression test added).
+- **A stale cell assignment to a deleted/renamed camera no longer blocks auto-fill.** The cell is treated as empty until the device reappears; the stored assignment is preserved so a returning camera regains its place.
+- **Transient HTTP errors (e.g. 503 during a gateway restart) on MSE connect now get the bounded reconnect** instead of failing immediately; 401/404 remain immediate, as those are permanent misconfigurations.
+- **The MSE reconnect budget no longer resets on a one-frame flicker** — only after 10 s of sustained playback, so a connect-play-stall loop can't retry forever at the fastest backoff tier.
+- **Stream-write executor is now shut down with the module** (was a static pool that outlived module shutdown, pinning the classloader on redeploy) and lazily recreated on module restart; a request racing shutdown fails cleanly.
+- **Abandoned stream-writer threads are now counted and capped** (ceiling 16): each write-stall event pins one uninterruptible thread, and unbounded accumulation could exhaust JVM native threads. At the ceiling, new proxied streams are refused with a clear log message until the count drops; threads that eventually complete are un-counted.
+- **`ice_servers: []` is now always emitted** in the go2rtc config (previously skipped when no WebRTC candidates were detected — exactly the constrained-network case where the STUN stall bites hardest).
+- **`MediaProfile` results are deep-copied** from the device cache (`peekMediaProfiles()` and `getMediaProfilesCached()`), closing a shared-mutable-state hazard.
+
+---
+
 ## [3.1.8] - 2026-07-06
 
 **Type:** PATCH — MSE stream proxy consumer leak (found by the 10-camera soak)

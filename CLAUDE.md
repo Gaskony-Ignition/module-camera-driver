@@ -5,7 +5,7 @@ This file contains module-specific instructions. Shared standards are in `/modul
 ## Project Overview
 
 **Name**: Ignition Camera Driver Module
-**Version**: 3.1.8
+**Version**: 3.1.9
 **Status**: Production Ready
 **Language**: Java 17
 **Framework**: Inductive Automation Ignition SDK 8.3.0
@@ -37,7 +37,7 @@ in "Critical Bugs to Avoid" below. Do not go looking for a `.claude/` directory 
 ```bash
 cd /modules/ignition-module-camera-driver
 ./gradlew clean build
-# Output: build/CameraDriver-3.1.8.modl
+# Output: build/CameraDriver-3.1.9.modl
 ```
 
 ### Common Commands
@@ -205,7 +205,7 @@ Properties file must be in exact package structure:
 
 ## Automated Test Suite
 
-- **557 tests** with 100% pass rate (535 gateway/common JUnit + 22 web-ui vitest)
+- **599 tests** with 100% pass rate (556 gateway/common JUnit + 43 web-ui vitest)
 - **Framework**: JUnit 5.10.1, Mockito 5.8.0, AssertJ 3.25.1
 - **Coverage**: ValidationUtil (87), ONVIFAuth (21), XmlUtil (33), ONVIFClient (27)
 - **Security tests**: XSS, SQL injection, XXE, Billion Laughs, path traversal
@@ -233,4 +233,4 @@ Java packages are `com.gaskony.camera.*` as of v3.0.0 (renamed from `com.onvif.d
 ---
 
 **Last Updated**: 2026-07-03
-**Document Version**: 3.1.8
+**Document Version**: 3.1.9
