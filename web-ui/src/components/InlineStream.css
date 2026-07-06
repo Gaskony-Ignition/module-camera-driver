@@ -20,6 +20,12 @@
   border-bottom: 1px solid var(--card-border);
 }
 
+.app-wrapper .inline-stream-live-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .app-wrapper .live-indicator {
   display: inline-flex;
   align-items: center;
@@ -31,6 +37,23 @@
   font-weight: 600;
   color: var(--success);
 }
+
+/* Transport visibility: which transport is actually live, so a silent WebRTC->MSE (or
+   MSE->Snapshot) fallback can never masquerade as "just laggy". */
+.app-wrapper .transport-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.app-wrapper .transport-badge.transport-webrtc { background: var(--accent-secondary-bg); color: var(--success); }
+.app-wrapper .transport-badge.transport-mse { background: var(--accent-warning-bg); color: var(--warning); }
+.app-wrapper .transport-badge.transport-snapshot { background: var(--accent-error-bg); color: var(--error); }
 
 .app-wrapper .live-dot {
   width: 7px;

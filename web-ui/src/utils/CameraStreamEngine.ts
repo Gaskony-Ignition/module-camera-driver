@@ -25,6 +25,24 @@ export interface EngineStatusDetail {
     error?: string;
 }
 
+/** Short, user-facing label for a transport — shared by every engine consumer's UI badge
+ *  so the wording can never drift between GridCell, InlineStream and Perspective. */
+export function transportLabel(transport: CameraTransport): string {
+    switch (transport) {
+        case 'webrtc': return 'WebRTC';
+        case 'mse': return 'MSE';
+        case 'snapshot': return 'Snapshot';
+        default: return transport;
+    }
+}
+
+/** Human-readable description of an automatic transport downgrade, for UI event logs.
+ *  Exposed so every consumer reports the same wording instead of re-deriving it. */
+export function describeTransportFallback(previous: CameraTransport, next: CameraTransport): string {
+    const suffix = next === 'snapshot' ? ' (~1fps)' : '';
+    return `${transportLabel(previous)} unavailable — using ${transportLabel(next)} fallback${suffix}`;
+}
+
 export interface CameraStreamEngineOptions {
     deviceName: string;
     /** MSE stream endpoint (raw MP4 fragments). */
@@ -87,6 +105,25 @@ const ICE_GATHERING_TIMEOUT_MS = 2000;
 /** WebRTC: how long to wait for the 'playing' event before treating the connection as failed. */
 const WEBRTC_PLAYING_TIMEOUT_MS = 10000;
 
+/**
+ * MSE: how long to wait for the 'playing' event before treating a connected-but-silent
+ * stream (200 OK, MediaSource opened, but no decodable video ever arrives — bad keyframe,
+ * codec edge case, a producer that sends nothing) as a failure. Longer than the WebRTC
+ * timeout because MSE has no ICE/signaling handshake to amortise against — the whole
+ * budget is available for the first keyframe over a slow link.
+ * Exported (with the other MSE resilience constants below) so tests can drive fake
+ * timers by the exact values rather than duplicating magic numbers.
+ */
+export const MSE_PLAYING_TIMEOUT_MS = 12000;
+/** MSE: how long the playhead may sit frozen (no currentTime progress) before it's a stall. */
+export const MSE_STALL_TIMEOUT_MS = 8000;
+/** MSE: how often to sample the playhead while checking for a stall. */
+export const MSE_STALL_POLL_INTERVAL_MS = 2000;
+/** MSE: maximum number of automatic reconnect attempts before falling through/erroring. */
+export const MSE_MAX_RECONNECTS = 5;
+/** MSE: backoff delay (ms) before each reconnect attempt, indexed by attempt number. */
+export const MSE_RECONNECT_BACKOFF_MS = [500, 1000, 2000, 4000, 8000];
+
 const MSE_CODEC_FALLBACKS = [
     'video/mp4; codecs="avc1.640029,mp4a.40.2"',
     'video/mp4; codecs="avc1.640029"',
@@ -121,6 +158,21 @@ export class CameraStreamEngine {
     private mediaSource: MediaSource | null = null;
     private reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     private abortController: AbortController | null = null;
+    private msePlayingTimer: number | null = null;
+    private msePlayingListener: (() => void) | null = null;
+    private mseStallPollTimer: number | null = null;
+    private mseLastPlayheadValue = -1;
+    private mseLastPlayheadProgressAt = 0;
+    private mseReconnectTimer: number | null = null;
+    private mseReconnectAttempts = 0;
+    /**
+     * Bumped on every physical MSE connection attempt (fresh start AND each auto-reconnect).
+     * Unlike `runId` (which only changes on stop()/a newer start()), this lets a superseded
+     * *attempt* within the same logical run — e.g. a stall-triggered reconnect — invalidate
+     * the previous attempt's still-suspended `reader.read()` continuation so it can never
+     * double-report or double-schedule a retry once the next attempt has taken over.
+     */
+    private mseAttemptId = 0;
 
     // Snapshot transport state
     private snapshotTimer: number | null = null;
@@ -287,7 +339,26 @@ export class CameraStreamEngine {
 
     // ── MSE transport ─────────────────────────────────────────────────────────
 
+    /**
+     * Entry point for a fresh logical MSE session — called by start() and by the WebRTC
+     * fallback chain. Always begins with a full reconnect budget; the budget is consumed
+     * only by attemptMse()'s own internal reconnect loop (see handleMseDisruption), never
+     * reset mid-session except when a reconnect actually reaches 'playing' again.
+     */
     private async runMse(myRunId: number, fallbackToSnapshot: boolean): Promise<void> {
+        this.clearMseReconnectTimer();
+        this.mseReconnectAttempts = 0;
+        return this.attemptMse(myRunId, fallbackToSnapshot);
+    }
+
+    /** One physical MSE connection attempt (initial or reconnect). */
+    private async attemptMse(myRunId: number, fallbackToSnapshot: boolean): Promise<void> {
+        // Bumped for every attempt so a superseded attempt's still-suspended continuations
+        // (e.g. an old reader.read() awaiting after a stall triggered a reconnect) can tell
+        // they're stale even though the logical run id (myRunId) hasn't changed.
+        const myAttemptId = ++this.mseAttemptId;
+        const isCurrent = () => this.runId === myRunId && this.mseAttemptId === myAttemptId;
+
         const { deviceName, streamUrl, getAuthHeaders, onStatus } = this.options;
         if (!deviceName) return;
 
@@ -322,12 +393,13 @@ export class CameraStreamEngine {
             response = await fetch(streamUrl, { credentials: 'include', headers: getAuthHeaders(), signal: ac.signal });
         } catch (e: unknown) {
             const err = e as Error;
-            if (err.name !== 'AbortError') {
-                if (fallbackToSnapshot) { this.runSnapshot(myRunId); return; }
-                onStatus('error', { transport: 'mse', error: 'Failed to connect: ' + err.message });
+            if (err.name !== 'AbortError' && isCurrent()) {
+                this.handleMseDisruption(myRunId, fallbackToSnapshot, 'Failed to connect: ' + err.message);
             }
             return;
         }
+
+        if (!isCurrent()) return; // superseded while connecting
 
         if (!response.ok) {
             if (fallbackToSnapshot && response.status !== 401) { this.runSnapshot(myRunId); return; }
@@ -340,9 +412,8 @@ export class CameraStreamEngine {
             return;
         }
 
-        if (this.runId !== myRunId) return; // superseded while connecting
         await sourceOpenPromise;
-        if (this.runId !== myRunId) return;
+        if (!isCurrent()) return;
 
         const contentType = (response.headers.get('Content-Type') || '')
             .replace(/;\s*charset=[^;]*/i, '').trim();
@@ -359,7 +430,28 @@ export class CameraStreamEngine {
         const sourceBuffer = ms.addSourceBuffer(mimeCodec);
         sourceBuffer.mode = 'segments';
 
-        this.video.addEventListener('playing', () => onStatus('streaming', { transport: 'mse' }), { once: true });
+        // Watchdog: a 200 response and an opened MediaSource don't guarantee decodable
+        // video ever arrives (bad keyframe, codec edge case, a producer that sends
+        // nothing) — without this the cell would show black forever with no error and
+        // no fallback. Mirrors the WebRTC 'playing' watchdog pattern.
+        const onPlaying = () => {
+            if (!isCurrent()) return;
+            this.clearMsePlayingWatchdog();
+            this.mseReconnectAttempts = 0; // a successful connection earns back the full retry budget
+            this.startMseStallWatchdog(myRunId, myAttemptId, fallbackToSnapshot);
+            onStatus('streaming', { transport: 'mse' });
+        };
+        this.video.addEventListener('playing', onPlaying, { once: true });
+        this.msePlayingListener = onPlaying;
+
+        this.msePlayingTimer = window.setTimeout(() => {
+            this.msePlayingTimer = null;
+            if (!isCurrent()) return;
+            this.handleMseDisruption(
+                myRunId, fallbackToSnapshot,
+                `No video within ${MSE_PLAYING_TIMEOUT_MS / 1000}s of starting MSE`
+            );
+        }, MSE_PLAYING_TIMEOUT_MS);
 
         try {
             const reader = response.body!.getReader();
@@ -368,8 +460,8 @@ export class CameraStreamEngine {
             for (;;) {
                 const { done, value } = await reader.read();
                 if (done) break;
-                // A newer stream superseded us — stop draining so this connection closes.
-                if (this.runId !== myRunId) break;
+                // A newer attempt (reconnect) or a newer run superseded us — stop draining.
+                if (!isCurrent()) break;
 
                 if (sourceBuffer.updating) {
                     await this.waitForUpdate(sourceBuffer);
@@ -410,16 +502,92 @@ export class CameraStreamEngine {
                 pinPlayheadToLiveEdge(this.video, sourceBuffer);
             }
 
-            // Don't mutate shared state if a newer stream has already taken over.
-            if (this.runId !== myRunId) return;
-            if (fallbackToSnapshot) { this.runSnapshot(myRunId); return; }
-            onStatus('error', { transport: 'mse', error: 'Stream ended' });
+            // Don't mutate shared state if a newer attempt/run has already taken over.
+            if (!isCurrent()) return;
+            this.handleMseDisruption(myRunId, fallbackToSnapshot, 'Stream ended');
         } catch (e: unknown) {
             const err = e as Error;
-            if (err.name !== 'AbortError' && this.runId === myRunId) {
-                if (fallbackToSnapshot) { this.runSnapshot(myRunId); return; }
-                onStatus('error', { transport: 'mse', error: 'Stream lost: ' + err.message });
+            if (err.name !== 'AbortError' && isCurrent()) {
+                this.handleMseDisruption(myRunId, fallbackToSnapshot, 'Stream lost: ' + err.message);
             }
+        }
+    }
+
+    /**
+     * Called whenever an MSE run ends unexpectedly (reader `done`, a non-Abort error, the
+     * 'playing' watchdog firing, or a detected stall) while still current. Tears down the
+     * failed attempt's resources and either schedules a bounded, backed-off reconnect or —
+     * once MSE_MAX_RECONNECTS is exhausted — falls through to snapshot (if allowed) or
+     * reports the error, exactly like the pre-reconnect behaviour did on the first failure.
+     */
+    private handleMseDisruption(myRunId: number, fallbackToSnapshot: boolean, reason: string): void {
+        if (this.runId !== myRunId) return; // superseded — a newer run already tore this down
+        this.teardownMseAttempt();
+
+        if (this.mseReconnectAttempts < MSE_MAX_RECONNECTS) {
+            const delay = MSE_RECONNECT_BACKOFF_MS[this.mseReconnectAttempts];
+            this.mseReconnectAttempts++;
+            this.mseReconnectTimer = window.setTimeout(() => {
+                this.mseReconnectTimer = null;
+                if (this.runId !== myRunId) return; // stop()/newer start() cancelled us
+                void this.attemptMse(myRunId, fallbackToSnapshot);
+            }, delay);
+            return;
+        }
+
+        this.mseReconnectAttempts = 0;
+        if (fallbackToSnapshot) { this.runSnapshot(myRunId); return; }
+        this.options.onStatus('error', { transport: 'mse', error: reason });
+    }
+
+    /** Polls the playhead for a frozen picture while an MSE attempt is streaming.
+     *  A deliberate seek from pinPlayheadToLiveEdge() still advances currentTime (either
+     *  a hard jump or continued playback), so it is never mistaken for a stall — only a
+     *  genuinely frozen playhead over MSE_STALL_TIMEOUT_MS trips this. */
+    private startMseStallWatchdog(myRunId: number, myAttemptId: number, fallbackToSnapshot: boolean): void {
+        this.clearMseStallWatchdog();
+        this.mseLastPlayheadValue = this.video.currentTime;
+        this.mseLastPlayheadProgressAt = Date.now();
+        this.mseStallPollTimer = window.setInterval(() => {
+            if (this.runId !== myRunId || this.mseAttemptId !== myAttemptId) {
+                this.clearMseStallWatchdog();
+                return;
+            }
+            const now = Date.now();
+            if (this.video.currentTime > this.mseLastPlayheadValue) {
+                this.mseLastPlayheadValue = this.video.currentTime;
+                this.mseLastPlayheadProgressAt = now;
+                return;
+            }
+            if (now - this.mseLastPlayheadProgressAt >= MSE_STALL_TIMEOUT_MS) {
+                this.clearMseStallWatchdog();
+                this.handleMseDisruption(myRunId, fallbackToSnapshot, 'MSE playback stalled');
+            }
+        }, MSE_STALL_POLL_INTERVAL_MS);
+    }
+
+    private clearMsePlayingWatchdog(): void {
+        if (this.msePlayingTimer !== null) {
+            window.clearTimeout(this.msePlayingTimer);
+            this.msePlayingTimer = null;
+        }
+        if (this.msePlayingListener) {
+            this.video.removeEventListener('playing', this.msePlayingListener);
+            this.msePlayingListener = null;
+        }
+    }
+
+    private clearMseStallWatchdog(): void {
+        if (this.mseStallPollTimer !== null) {
+            window.clearInterval(this.mseStallPollTimer);
+            this.mseStallPollTimer = null;
+        }
+    }
+
+    private clearMseReconnectTimer(): void {
+        if (this.mseReconnectTimer !== null) {
+            window.clearTimeout(this.mseReconnectTimer);
+            this.mseReconnectTimer = null;
         }
     }
 
@@ -430,7 +598,23 @@ export class CameraStreamEngine {
         });
     }
 
+    /** Full MSE teardown: cancels any pending reconnect (and resets the attempt budget)
+     *  on top of tearing down the current physical attempt. Called by stop() and by the
+     *  other transports when they take over the video element. */
     private teardownMse(): void {
+        this.clearMseReconnectTimer();
+        this.mseReconnectAttempts = 0;
+        this.teardownMseAttempt();
+    }
+
+    /** Tears down only the current physical attempt's resources (reader, fetch, MediaSource,
+     *  watchdogs) — used both by teardownMse() and, mid-session, by handleMseDisruption()
+     *  just before scheduling a reconnect. Bumps mseAttemptId so any of this attempt's
+     *  still-suspended continuations recognise they're stale and stop acting. */
+    private teardownMseAttempt(): void {
+        this.mseAttemptId++;
+        this.clearMsePlayingWatchdog();
+        this.clearMseStallWatchdog();
         if (this.reader) {
             try { this.reader.cancel(); } catch { /* reader already closed */ }
             this.reader = null;

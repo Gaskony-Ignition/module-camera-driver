@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Square, Copy } from 'lucide-react'
-import { CameraStreamEngine, type CameraTransport } from '../utils/CameraStreamEngine'
+import { CameraStreamEngine, transportLabel, type CameraTransport } from '../utils/CameraStreamEngine'
 import { API_ENDPOINTS } from '../constants/api'
 import PtzPad from './PtzPad'
 import './InlineStream.css'
@@ -80,9 +80,16 @@ function InlineStream({ device, profileUri, snapshotUri, onClose, hasPTZ }: Inli
   return (
     <div className="inline-stream-wrapper">
       <div className="inline-stream-header">
-        <span className="live-indicator">
-          <span className="live-dot" />
-          LIVE - {device}
+        <span className="inline-stream-live-group">
+          <span className="live-indicator">
+            <span className="live-dot" />
+            LIVE - {device}
+          </span>
+          {state === 'playing' && activeTransport && (
+            <span className={`transport-badge transport-${activeTransport}`}>
+              {transportLabel(activeTransport)}
+            </span>
+          )}
         </span>
         <button className="btn btn-sm btn-danger" onClick={onClose}>
           <Square size={12} />
