@@ -19,7 +19,14 @@ import org.apache.http.impl.client.HttpClientBuilder;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Handles MJPEG stream requests for Camera devices.
@@ -40,6 +47,39 @@ public class StreamHandler extends BaseHandler {
     // slot; a still-watching client simply reconnects (one brief keyframe wait).
     private static final long MAX_STREAM_DURATION_MS = 15 * 60 * 1000L;
 
+    // Per-write liveness backstop for proxyStream(). MAX_STREAM_DURATION_MS above only
+    // caps how long an orphaned upstream connection can accumulate — it does not stop
+    // accumulation, and a soak test showed 5 stale go2rtc consumers per viewed camera
+    // after 30 minutes (each held open the whole time, still being fed by go2rtc).
+    //
+    // A disconnect via a clean TCP close (browser tab close, or the client-side MSE
+    // engine's reader.cancel()+abortController.abort() on reconnect) IS detected
+    // promptly: write()/flush() throws within about a second in that case, verified
+    // against this exact Jetty version. The gap is a client that goes away without a
+    // clean close — network drop, laptop sleep, a genuinely blackholed connection —
+    // where the OS send buffer simply fills and output.write() blocks without ever
+    // throwing, for as long as the OS's own (multi-minute) retransmission timeout.
+    //
+    // A blocking java.io write cannot be interrupted or force-unblocked from another
+    // thread on this stack (confirmed: closing the OutputStream from a watchdog thread
+    // did not unblock a write already stuck inside the syscall). So instead of trying to
+    // unblock the write, each write is run on a dedicated per-stream thread with a bounded
+    // wait: if it does not complete within WRITE_STALL_TIMEOUT_MS, we treat the client as
+    // gone, close the upstream go2rtc/MJPEG connection (freeing the go2rtc consumer slot
+    // immediately, matching the proven ~6s go2rtc reap-on-close behaviour), and return.
+    // The stuck writer thread may itself remain blocked until the OS eventually times out
+    // the dead socket — an accepted trade-off: one pinned daemon thread per stall event is
+    // vastly cheaper than an upstream connection that keeps accumulating indefinitely.
+    private static final long DEFAULT_WRITE_STALL_TIMEOUT_MS = 20_000L;
+    private static volatile long writeStallTimeoutMs = DEFAULT_WRITE_STALL_TIMEOUT_MS;
+
+    private static final AtomicLong writeThreadCounter = new AtomicLong();
+    private static final ExecutorService STREAM_WRITE_EXECUTOR = Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "camera-stream-writer-" + writeThreadCounter.incrementAndGet());
+        t.setDaemon(true);
+        return t;
+    });
+
     /** {@link #proxyStream} result: the upstream stream was proxied to the client successfully. */
     private static final int PROXY_STREAMED = 200;
     /** {@link #proxyStream} result: the upstream source could not be reached / returned no body. */
@@ -59,6 +99,12 @@ public class StreamHandler extends BaseHandler {
 
     public static void resetCounters() {
         activeStreams.set(0);
+        writeStallTimeoutMs = DEFAULT_WRITE_STALL_TIMEOUT_MS;
+    }
+
+    /** Test seam: shrink the write-stall timeout so tests don't have to wait 20s. */
+    static void setWriteStallTimeoutMsForTesting(long ms) {
+        writeStallTimeoutMs = ms;
     }
 
     public Object handle(RequestContext requestContext, HttpServletResponse response) throws Exception {
@@ -338,21 +384,57 @@ public class StreamHandler extends BaseHandler {
                 byte[] buffer = new byte[8192];
                 int bytesRead;
                 long totalBytes = 0;
+                boolean writeStalled = false;
 
                 try (var inputStream = entity.getContent()) {
                     while ((bytesRead = inputStream.read(buffer)) != -1) {
-                        output.write(buffer, 0, bytesRead);
-                        output.flush();
-                        totalBytes += bytesRead;
+                        int lengthToWrite = bytesRead;
+                        // Run the write on a dedicated thread so a client that stops reading
+                        // (dead/blackholed connection, no clean TCP close) can be bounded by
+                        // WRITE_STALL_TIMEOUT_MS instead of blocking this loop — and the
+                        // upstream go2rtc/MJPEG connection below — for up to the full 15
+                        // minute MAX_STREAM_DURATION_MS cap. See the field comment above
+                        // writeStallTimeoutMs for why we don't try to force the write itself
+                        // to unblock.
+                        Future<?> writeResult = STREAM_WRITE_EXECUTOR.submit(() -> {
+                            output.write(buffer, 0, lengthToWrite);
+                            output.flush();
+                            return null; // Callable<Void>, not Runnable — write()/flush() throw checked IOException
+                        });
+                        try {
+                            writeResult.get(writeStallTimeoutMs, TimeUnit.MILLISECONDS);
+                        } catch (TimeoutException te) {
+                            logger.info("Stream proxy write stalled after {} ms (client not reading — "
+                                + "likely gone without a clean disconnect), closing upstream - device: {}",
+                                writeStallTimeoutMs, deviceName);
+                            writeStalled = true;
+                            break;
+                        } catch (ExecutionException ee) {
+                            Throwable cause = ee.getCause();
+                            if (cause instanceof IOException ioe) {
+                                throw ioe;
+                            }
+                            throw new IOException("Stream proxy write failed for device " + deviceName, cause);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            writeStalled = true;
+                            break;
+                        }
+
+                        totalBytes += lengthToWrite;
                         if (System.currentTimeMillis() - startTime > MAX_STREAM_DURATION_MS) {
                             logger.info("Stream proxy hit max duration, closing to free route slot - device: {}", deviceName);
                             break;
                         }
                     }
                 }
+                // Closing this try-with-resources block (inputStream, then upstream, then
+                // proxyClient) tears down the connection to go2rtc/the MJPEG source right
+                // here, whether we got here via clean stream end, the duration cap, or a
+                // detected write stall — go2rtc reaps its consumer within ~6s of that close.
 
-                logger.info("Stream proxy ended - device: {}, bytes: {}, duration: {} ms",
-                    deviceName, totalBytes, System.currentTimeMillis() - startTime);
+                logger.info("Stream proxy ended - device: {}, bytes: {}, duration: {} ms, writeStalled: {}",
+                    deviceName, totalBytes, System.currentTimeMillis() - startTime, writeStalled);
                 return PROXY_STREAMED;
             }
         } catch (IOException e) {
