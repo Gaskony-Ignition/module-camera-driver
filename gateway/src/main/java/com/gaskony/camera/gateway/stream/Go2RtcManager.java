@@ -362,22 +362,23 @@ public class Go2RtcManager {
     }
 
     /**
-     * Builds the YAML "candidates:" (and, when non-empty, "ice_servers:") lines
-     * under the "webrtc:" block.
+     * Builds the YAML "candidates:" and "ice_servers:" lines under the
+     * "webrtc:" block.
      *
      * <p>Prefers an operator-supplied {@value #WEBRTC_CANDIDATES_FILENAME} file
      * (one "host:port" entry per line, '#' comments and blank lines ignored)
      * when present, falling back to auto-detecting non-loopback site-local
      * IPv4 addresses from the host's network interfaces.</p>
      *
-     * <p>When at least one candidate is configured, also emits
-     * {@code ice_servers: []} to disable go2rtc's default Google STUN server —
-     * see the inline comment below for why.</p>
+     * <p>{@code ice_servers: []} is emitted unconditionally, including when no
+     * candidates are configured at all — see the inline comment below for why
+     * that no-candidates case is exactly the constrained-network deployment
+     * most likely to be hurt by the default STUN server's gathering stall.</p>
      *
      * @param configDir directory containing (or to contain) the candidates file,
      *                  same directory as go2rtc.yaml
-     * @return a YAML fragment for the "candidates:" (and possibly "ice_servers:")
-     *         keys, newline-terminated
+     * @return a YAML fragment for the "candidates:" and "ice_servers:" keys,
+     *         newline-terminated
      */
     private String buildWebRtcCandidatesYaml(Path configDir) {
         List<String> fileCandidates = loadWebRtcCandidatesFromFile(configDir);
@@ -391,23 +392,9 @@ public class Go2RtcManager {
             source = "auto-detected non-loopback site-local network interface addresses";
         }
 
-        if (candidates.isEmpty()) {
-            logger.info("No WebRTC candidates configured (source: {}) - browsers on other "
-                + "hosts may fail to establish a WebRTC connection", source);
-            return "  candidates: []\n";
-        }
-
-        // Candidate values are bare host:port pairs (no credentials) - safe to log.
-        logger.info("WebRTC candidates configured from {}: {}", source, candidates);
-
-        StringBuilder yaml = new StringBuilder("  candidates:\n");
-        for (String candidate : candidates) {
-            yaml.append("    - \"").append(candidate).append("\"\n");
-        }
-
-        // Disable go2rtc's default STUN server (stun.l.google.com:19302) once explicit
-        // candidates are configured. This is a LAN-only deployment (candidates are either
-        // operator-supplied or auto-detected site-local addresses) so a STUN-derived
+        // Disable go2rtc's default STUN server (stun.l.google.com:19302) unconditionally.
+        // This is a LAN-only deployment (candidates are either operator-supplied or
+        // auto-detected site-local addresses, or there are none at all) so a STUN-derived
         // server-reflexive candidate adds nothing beyond what "candidates" above already
         // advertises. It does, however, cost real time: go2rtc will not answer an SDP
         // offer until ICE gathering completes, and STUN gathering against an unreachable
@@ -418,6 +405,25 @@ public class Go2RtcManager {
         // browser WebRTC attempt was falling back to MSE. See go2rtc 1.9.4
         // internal/webrtc/webrtc.go: webrtc.ice_servers defaults to
         // [{urls: [stun:stun.l.google.com:19302]}]; an empty list disables STUN gathering.
+        //
+        // Crucially, this must NOT be conditioned on candidates being non-empty: an
+        // empty candidate list is the constrained-network case (no operator file, no
+        // auto-detected site-local address) most likely to hit a slow/unreachable STUN
+        // server in the first place, so leaving the default STUN server enabled there
+        // would silently reintroduce the exact 5-10s stall this fix exists to prevent.
+        if (candidates.isEmpty()) {
+            logger.info("No WebRTC candidates configured (source: {}) - browsers on other "
+                + "hosts may fail to establish a WebRTC connection", source);
+            return "  candidates: []\n  ice_servers: []\n";
+        }
+
+        // Candidate values are bare host:port pairs (no credentials) - safe to log.
+        logger.info("WebRTC candidates configured from {}: {}", source, candidates);
+
+        StringBuilder yaml = new StringBuilder("  candidates:\n");
+        for (String candidate : candidates) {
+            yaml.append("    - \"").append(candidate).append("\"\n");
+        }
         yaml.append("  ice_servers: []\n");
         return yaml.toString();
     }

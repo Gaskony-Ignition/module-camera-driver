@@ -149,9 +149,27 @@ class CameraDeviceTest {
 
         List<MediaProfile> result = device.peekMediaProfiles();
 
-        // Defensive copy: equal by content, but a distinct instance so callers
-        // can't mutate the cached list.
+        // Defensive DEEP copy: equal by content, but a distinct list instance,
+        // AND distinct element instances — MediaProfile is setter-mutable, so
+        // callers must not be able to reach (and mutate) the cached objects.
         assertThat(result).isEqualTo(cached).isNotSameAs(cached);
+        assertThat(result.get(0)).isNotSameAs(cached.get(0));
+        verifyNoInteractions(onvifClientMock);
+    }
+
+    @Test
+    void testGetMediaProfilesCached_WarmCache_ReturnsDeepCopy() throws Exception {
+        MediaProfile profile = new MediaProfile("token1", "MainStream");
+        List<MediaProfile> cached = List.of(profile);
+        setField("cachedMediaProfiles", cached);
+        setField("onvifClient", onvifClientMock);
+
+        List<MediaProfile> result = device.getMediaProfilesCached();
+
+        // Same hazard as peekMediaProfiles() — getMediaProfilesCached() previously
+        // returned the live cached list reference with no copy at all.
+        assertThat(result).isEqualTo(cached).isNotSameAs(cached);
+        assertThat(result.get(0)).isNotSameAs(cached.get(0));
         verifyNoInteractions(onvifClientMock);
     }
 

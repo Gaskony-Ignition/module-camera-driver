@@ -23,8 +23,10 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -73,12 +75,104 @@ public class StreamHandler extends BaseHandler {
     private static final long DEFAULT_WRITE_STALL_TIMEOUT_MS = 20_000L;
     private static volatile long writeStallTimeoutMs = DEFAULT_WRITE_STALL_TIMEOUT_MS;
 
+    // Ceiling on abandoned (stalled-write) stream-writer threads outstanding at once.
+    // Each stall event pins one daemon thread that may never return (see
+    // abandonedWriterCount below and the field comment on writeStallTimeoutMs for why
+    // it can't be force-unblocked). A cached pool never reclaims those threads, so an
+    // unbounded run of stalls against alive-but-not-reading peers (zero-window ACKs
+    // keep the write technically "in progress" instead of throwing) can exhaust native
+    // threads and take down the whole gateway JVM. Once at/over this ceiling,
+    // proxyStream() refuses to start new proxied streams until the count drops.
+    private static final int MAX_ABANDONED_WRITERS = 16;
+
+    /**
+     * Count of stream-writer threads currently considered abandoned — i.e. a write
+     * stalled past {@link #writeStallTimeoutMs} and the thread running it was left
+     * running (blocked in a syscall we cannot interrupt) rather than being reclaimed.
+     * Incremented in the write-stall {@code TimeoutException} handler in
+     * {@link #proxyStream}; decremented if/when that same abandoned write eventually
+     * returns or throws — see the {@code abandonedClaimed} CAS handoff there, which
+     * coordinates the race between "the write stalled" and "the write completed
+     * anyway" so each abandoned write is counted exactly once.
+     */
+    private static final AtomicInteger abandonedWriterCount = new AtomicInteger(0);
+
     private static final AtomicLong writeThreadCounter = new AtomicLong();
-    private static final ExecutorService STREAM_WRITE_EXECUTOR = Executors.newCachedThreadPool(r -> {
-        Thread t = new Thread(r, "camera-stream-writer-" + writeThreadCounter.incrementAndGet());
-        t.setDaemon(true);
-        return t;
-    });
+
+    /**
+     * Static, cached-thread-pool executor backing the bounded stream writes in
+     * {@link #proxyStream}. Guarded by {@link #getStreamWriteExecutor()} /
+     * {@link #shutdownWriteExecutor()} below so it can be cleanly shut down on
+     * module shutdown() yet still work if the module is restarted within the same
+     * JVM (the field is static, so it otherwise would not survive a shutdown).
+     */
+    private static volatile ExecutorService streamWriteExecutor = newStreamWriteExecutor();
+
+    private static ExecutorService newStreamWriteExecutor() {
+        return Executors.newCachedThreadPool(r -> {
+            Thread t = new Thread(r, "camera-stream-writer-" + writeThreadCounter.incrementAndGet());
+            t.setDaemon(true);
+            return t;
+        });
+    }
+
+    /**
+     * Returns the current stream-write executor, lazily recreating it if a previous
+     * {@link #shutdownWriteExecutor()} call shut it down. The executor is static so
+     * it must keep working across a module stop/start within the same JVM — a fresh
+     * executor is created on first use after shutdown rather than requiring an
+     * explicit re-initialisation call.
+     */
+    private static ExecutorService getStreamWriteExecutor() {
+        ExecutorService executor = streamWriteExecutor;
+        if (executor != null && !executor.isShutdown()) {
+            return executor;
+        }
+        synchronized (StreamHandler.class) {
+            if (streamWriteExecutor == null || streamWriteExecutor.isShutdown()) {
+                streamWriteExecutor = newStreamWriteExecutor();
+            }
+            return streamWriteExecutor;
+        }
+    }
+
+    /**
+     * Shuts down the static stream-write executor. Called from
+     * {@code CameraModuleHook.shutdown()} alongside the module's other executors.
+     * Mirrors the go2rtc-start-executor shutdown pattern: request an orderly
+     * shutdown, wait briefly, then force it if writers are still stuck (which is
+     * expected — abandoned writer threads from stalled writes are, by design,
+     * blocked in an uninterruptible syscall; see the class-level write-stall
+     * comment). A stream request that races this shutdown will either be served by
+     * a freshly (lazily) recreated executor, or — in the narrow window where it
+     * grabbed the about-to-be-shutdown executor an instant before this method's
+     * {@code shutdown()} call — fail cleanly with a caught
+     * {@link RejectedExecutionException} in {@link #proxyStream}, never an NPE.
+     */
+    public static void shutdownWriteExecutor() {
+        ExecutorService executor;
+        synchronized (StreamHandler.class) {
+            executor = streamWriteExecutor;
+            // Clear the reference now so the next getStreamWriteExecutor() call
+            // (e.g. a module restart within this JVM) lazily creates a fresh pool
+            // instead of reusing (or racing to reuse) the one being shut down.
+            streamWriteExecutor = null;
+        }
+        if (executor == null) {
+            return;
+        }
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(3, TimeUnit.SECONDS)) {
+                logger.warn("Stream write executor did not finish within 3s — forcing shutdown "
+                    + "(abandoned writer threads from stalled writes cannot be interrupted cleanly)");
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
 
     /** {@link #proxyStream} result: the upstream stream was proxied to the client successfully. */
     private static final int PROXY_STREAMED = 200;
@@ -100,11 +194,17 @@ public class StreamHandler extends BaseHandler {
     public static void resetCounters() {
         activeStreams.set(0);
         writeStallTimeoutMs = DEFAULT_WRITE_STALL_TIMEOUT_MS;
+        abandonedWriterCount.set(0);
     }
 
     /** Test seam: shrink the write-stall timeout so tests don't have to wait 20s. */
     static void setWriteStallTimeoutMsForTesting(long ms) {
         writeStallTimeoutMs = ms;
+    }
+
+    /** Test seam: read the current abandoned stream-writer thread count. */
+    static int getAbandonedWriterCountForTesting() {
+        return abandonedWriterCount.get();
     }
 
     public Object handle(RequestContext requestContext, HttpServletResponse response) throws Exception {
@@ -347,10 +447,20 @@ public class StreamHandler extends BaseHandler {
      * @return {@link #PROXY_STREAMED} if the stream was proxied successfully,
      *         the upstream HTTP status code if the source responded with a
      *         non-200, or {@link #PROXY_CONNECT_ERROR} if the source could not
-     *         be reached or returned no body.
+     *         be reached, returned no body, or was refused because the
+     *         abandoned-writer ceiling ({@link #MAX_ABANDONED_WRITERS}) was reached.
      */
     private int proxyStream(String sourceUrl, HttpServletResponse response,
                             String deviceName, long startTime) {
+        int abandonedNow = abandonedWriterCount.get();
+        if (abandonedNow >= MAX_ABANDONED_WRITERS) {
+            logger.warn("Refusing to start proxied stream for device {} - {} abandoned stream-writer "
+                + "thread(s) already outstanding (ceiling {}); a client appears to be blackholing "
+                + "writes faster than the OS reclaims the blocked threads",
+                deviceName, abandonedNow, MAX_ABANDONED_WRITERS);
+            return PROXY_CONNECT_ERROR;
+        }
+
         RequestConfig proxyConfig = RequestConfig.custom()
             .setConnectTimeout(5000)
             .setSocketTimeout(30000)
@@ -389,6 +499,18 @@ public class StreamHandler extends BaseHandler {
                 try (var inputStream = entity.getContent()) {
                     while ((bytesRead = inputStream.read(buffer)) != -1) {
                         int lengthToWrite = bytesRead;
+                        // Coordinates the race between "this write stalled past the timeout"
+                        // (below, in the TimeoutException handler) and "this write actually
+                        // completed/threw anyway" (in the finally block here). Whichever side
+                        // reaches the compareAndSet first "wins": if the timeout handler wins,
+                        // the write is counted as abandoned and this finally block later
+                        // decrements it back out once the thread does eventually return; if
+                        // this finally block wins (the write finished right at the timeout
+                        // boundary, before being marked), nothing is counted at all. Each
+                        // abandoned write is therefore counted exactly once — see
+                        // abandonedWriterCount's field javadoc.
+                        AtomicBoolean abandonedClaimed = new AtomicBoolean(false);
+
                         // Run the write on a dedicated thread so a client that stops reading
                         // (dead/blackholed connection, no clean TCP close) can be bounded by
                         // WRITE_STALL_TIMEOUT_MS instead of blocking this loop — and the
@@ -396,17 +518,46 @@ public class StreamHandler extends BaseHandler {
                         // minute MAX_STREAM_DURATION_MS cap. See the field comment above
                         // writeStallTimeoutMs for why we don't try to force the write itself
                         // to unblock.
-                        Future<?> writeResult = STREAM_WRITE_EXECUTOR.submit(() -> {
-                            output.write(buffer, 0, lengthToWrite);
-                            output.flush();
-                            return null; // Callable<Void>, not Runnable — write()/flush() throw checked IOException
-                        });
+                        Future<?> writeResult;
+                        try {
+                            writeResult = getStreamWriteExecutor().submit(() -> {
+                                try {
+                                    output.write(buffer, 0, lengthToWrite);
+                                    output.flush();
+                                    return null; // Callable<Void>, not Runnable — write()/flush() throw checked IOException
+                                } finally {
+                                    if (!abandonedClaimed.compareAndSet(false, true)) {
+                                        // The timeout handler already claimed this write as
+                                        // abandoned (and incremented the counter) before it
+                                        // finally returned/threw — undo that now.
+                                        int remaining = abandonedWriterCount.decrementAndGet();
+                                        logger.debug("Previously abandoned stream writer thread for "
+                                            + "device {} finally completed - abandoned count now {}",
+                                            deviceName, remaining);
+                                    }
+                                }
+                            });
+                        } catch (RejectedExecutionException ree) {
+                            // Static executor was shut down (module shutdown / restart race) —
+                            // fail this one request cleanly rather than propagating an
+                            // executor-state exception or NPE-ing on a null Future.
+                            logger.warn("Stream proxy write rejected for device {} (write executor "
+                                + "unavailable, likely a module shutdown/restart race): {}",
+                                deviceName, ree.getMessage());
+                            writeStalled = true;
+                            break;
+                        }
                         try {
                             writeResult.get(writeStallTimeoutMs, TimeUnit.MILLISECONDS);
                         } catch (TimeoutException te) {
-                            logger.info("Stream proxy write stalled after {} ms (client not reading — "
-                                + "likely gone without a clean disconnect), closing upstream - device: {}",
-                                writeStallTimeoutMs, deviceName);
+                            if (abandonedClaimed.compareAndSet(false, true)) {
+                                int count = abandonedWriterCount.incrementAndGet();
+                                logger.warn("Stream proxy write stalled after {} ms (client not reading — "
+                                    + "likely gone without a clean disconnect), abandoning writer thread "
+                                    + "and closing upstream - device: {}, abandoned writer threads now {} "
+                                    + "(ceiling {})",
+                                    writeStallTimeoutMs, deviceName, count, MAX_ABANDONED_WRITERS);
+                            }
                             writeStalled = true;
                             break;
                         } catch (ExecutionException ee) {

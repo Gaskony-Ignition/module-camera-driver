@@ -220,6 +220,14 @@ public class CameraModuleHook extends AbstractDeviceModuleHook {
         SnapshotHandler.resetCounters();
         StreamHandler.resetCounters();
 
+        // Shut down the static stream-write executor backing StreamHandler.proxyStream()'s
+        // bounded writes — it is static (shared across module restarts within the same
+        // JVM) so it must be explicitly torn down here like every other executor; it will
+        // be lazily recreated on next use if the module is restarted without a gateway
+        // restart. See StreamHandler.shutdownWriteExecutor() javadoc for the shutdown/
+        // restart race handling.
+        StreamHandler.shutdownWriteExecutor();
+
         // Drain the go2rtc start executor — if startGo2RtcAsync is still in-flight
         // (e.g., extraction, process spawn) we wait briefly so stop() has a fully
         // initialised manager to act on. Bounded so a stuck launch can't block

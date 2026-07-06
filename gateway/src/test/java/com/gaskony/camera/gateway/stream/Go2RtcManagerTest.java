@@ -367,17 +367,13 @@ class Go2RtcManagerTest {
         // "candidates:" key must always be present under webrtc:.
         assertThat(yaml).contains("candidates:");
 
-        // "ice_servers: []" (disabling go2rtc's default Google STUN server) must
-        // track candidate presence exactly: it is only emitted once at least one
-        // explicit candidate is advertised (STUN would otherwise be redundant
-        // for a LAN-only deployment - see buildWebRtcCandidatesYaml). Whether the
-        // test host itself has a site-local IPv4 interface is non-deterministic,
-        // so assert the invariant rather than one specific outcome.
-        if (yaml.contains("candidates: []")) {
-            assertThat(yaml).doesNotContain("ice_servers");
-        } else {
-            assertThat(yaml).contains("ice_servers: []");
-        }
+        // "ice_servers: []" (disabling go2rtc's default Google STUN server) is now
+        // emitted unconditionally, regardless of whether any candidate ended up
+        // configured - an empty candidate list is exactly the constrained-network
+        // case most likely to hit the STUN gathering stall this disables. Whether
+        // the test host itself has a site-local IPv4 interface is non-deterministic,
+        // but the ice_servers invariant holds either way.
+        assertThat(yaml).contains("ice_servers: []");
     }
 
     @Test
@@ -415,10 +411,11 @@ class Go2RtcManagerTest {
         String yaml = generateConfigYaml(manager, configDir);
 
         assertThat(yaml).contains("candidates: []");
-        // No explicit candidates configured - leave go2rtc's default STUN server
-        // in place (it's still the only way to get any server-reflexive
-        // candidate in this case), so no "ice_servers" override is emitted.
-        assertThat(yaml).doesNotContain("ice_servers");
+        // Regression: this is exactly the constrained-network case (no operator
+        // file, no auto-detected site-local address) most likely to hit the 5-10s
+        // STUN gathering stall, so ice_servers: [] must still be emitted here too
+        // - it must NOT be skipped just because the candidate list is empty.
+        assertThat(yaml).contains("ice_servers: []");
     }
 
     // -----------------------------------------------------------------------
