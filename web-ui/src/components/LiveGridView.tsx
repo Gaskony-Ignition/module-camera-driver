@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Grid2x2, PlayCircle, Square, Camera, Settings } from 'lucide-react'
 import PageHeader from './PageHeader'
-import GridCell from './GridCell'
+import GridCell, { GridBulkCommand } from './GridCell'
 import GridGroupModal from './GridGroupModal'
 import { apiGet } from '../utils/apiClient'
 import { API_ENDPOINTS } from '../constants/api'
@@ -21,6 +21,15 @@ const STORAGE_KEYS = {
   gridEvents: 'camera-driver-grid-events',
 }
 
+const DEFAULT_GROUP_ID = '__default__'
+
+// Sentinel stored per-cell (default group only) meaning "the admin explicitly blanked this
+// cell" -- distinct from "never assigned, please auto-fill". Without this marker, clearing an
+// auto-filled cell would look like a no-op: the very next render's auto-fill pass would just
+// place the next unplaced device straight back into it. Custom groups never use this marker;
+// a blank selection there is a plain delete, same as before.
+const CLEARED_MARKER = '__cleared__'
+
 interface GroupData {
   name: string
   assignments: Record<number, string>
@@ -39,7 +48,7 @@ function LiveGridView() {
     return (localStorage.getItem(STORAGE_KEYS.gridSize) as GridSize) || '2x2'
   })
   const [activeGroup, setActiveGroup] = useState<string>(() => {
-    return localStorage.getItem(STORAGE_KEYS.gridGroup) || '__default__'
+    return localStorage.getItem(STORAGE_KEYS.gridGroup) || DEFAULT_GROUP_ID
   })
   const [groups, setGroups] = useState<Record<string, GroupData>>(() => {
     try {
@@ -112,7 +121,7 @@ function LiveGridView() {
       const updated = {
         ...prev,
         [activeGroup]: {
-          name: prev[activeGroup]?.name ?? (activeGroup === '__default__' ? 'All Cameras' : activeGroup),
+          name: prev[activeGroup]?.name ?? (activeGroup === DEFAULT_GROUP_ID ? 'All Cameras' : activeGroup),
           assignments,
         },
       }
@@ -120,6 +129,54 @@ function LiveGridView() {
       return updated
     })
   }, [activeGroup])
+
+  // "Effective" assignments used for RENDERING and for bulk actions (Stream/Stop/Snapshot All).
+  // For the default "All Cameras" group, this starts from the manually-stored assignments and
+  // then auto-fills every connected device that isn't already placed into the next empty cell,
+  // in stable (alphabetical by name) order, up to the current grid capacity. Manual placements
+  // (including cells explicitly cleared via CLEARED_MARKER) are never overwritten. Custom groups
+  // are returned unchanged -- only manually-assigned cells are populated there.
+  //
+  // This is deliberately NOT persisted to localStorage: it's re-derived on every render from
+  // the stored assignments + the current devices list, so connecting a new camera or resizing
+  // the grid makes it appear immediately without ever writing auto-fill guesses back to storage.
+  const getEffectiveAssignments = useCallback((): Record<number, string> => {
+    const stored = getAssignments()
+    if (activeGroup !== DEFAULT_GROUP_ID) {
+      return stored
+    }
+
+    const dim = getGridDimension(gridSize)
+    const totalCells = dim.cols * dim.rows
+
+    const effective: Record<number, string> = {}
+    const placedDeviceNames = new Set<string>()
+    const emptyCellIndices: number[] = []
+
+    for (let i = 0; i < totalCells; i++) {
+      const value = stored[i]
+      if (value && value !== CLEARED_MARKER) {
+        effective[i] = value
+        placedDeviceNames.add(value)
+      } else if (value !== CLEARED_MARKER) {
+        emptyCellIndices.push(i)
+      }
+      // value === CLEARED_MARKER: leave this cell out of `effective` (renders blank) and out
+      // of `emptyCellIndices` (never auto-filled).
+    }
+
+    const unplacedDevices = devices
+      .filter(d => !placedDeviceNames.has(d.name))
+      .sort((a, b) => a.name.localeCompare(b.name))
+
+    for (const cellIndex of emptyCellIndices) {
+      const next = unplacedDevices.shift()
+      if (!next) break
+      effective[cellIndex] = next.name
+    }
+
+    return effective
+  }, [activeGroup, devices, gridSize, getAssignments])
 
   const switchGroup = useCallback((groupId: string) => {
     setActiveGroup(groupId)
@@ -143,6 +200,10 @@ function LiveGridView() {
     const assignments = { ...getAssignments() }
     if (deviceName) {
       assignments[cellIndex] = deviceName
+    } else if (activeGroup === DEFAULT_GROUP_ID) {
+      // See CLEARED_MARKER comment: record the clear explicitly so the auto-fill pass
+      // in getEffectiveAssignments() leaves this cell alone instead of re-populating it.
+      assignments[cellIndex] = CLEARED_MARKER
     } else {
       delete assignments[cellIndex]
     }
@@ -151,22 +212,26 @@ function LiveGridView() {
     if (deviceName) {
       addEvent(deviceName, `Camera assigned to cell ${cellIndex + 1}`)
     }
-  }, [getAssignments, saveAssignments])
+  }, [getAssignments, saveAssignments, activeGroup])
 
   // -- Bulk actions --------------------------------------------------------
 
+  // Broadcast a {seq, action} command to every cell; each cell applies it once
+  // per seq (starting only assigned, running, not-already-streaming cameras).
+  const [bulkCommand, setBulkCommand] = useState<GridBulkCommand>({ seq: 0, action: 'stop' })
+
   const streamAll = useCallback(() => {
-    // StreamAll is handled by signalling grid cells to start via a key change
-    // For simplicity, we add an event noting the action
+    setBulkCommand(prev => ({ seq: prev.seq + 1, action: 'start' }))
     addEvent('All', 'Stream All requested')
   }, [])
 
   const stopAll = useCallback(() => {
+    setBulkCommand(prev => ({ seq: prev.seq + 1, action: 'stop' }))
     addEvent('All', 'Stop All requested')
   }, [])
 
   const snapshotAll = useCallback(() => {
-    const assignments = getAssignments()
+    const assignments = getEffectiveAssignments()
     const dim = getGridDimension(gridSize)
     const total = dim.cols * dim.rows
     for (let i = 0; i < total; i++) {
@@ -181,7 +246,7 @@ function LiveGridView() {
       }
     }
     addEvent('All', 'Snapshot All captured')
-  }, [getAssignments, gridSize, devices])
+  }, [getEffectiveAssignments, gridSize, devices])
 
   // -- Events --------------------------------------------------------------
 
@@ -210,9 +275,9 @@ function LiveGridView() {
 
   const dim = getGridDimension(gridSize)
   const totalCells = dim.cols * dim.rows
-  const assignments = getAssignments()
+  const assignments = getEffectiveAssignments()
 
-  const groupKeys = Object.keys(groups).filter(k => k !== '__default__')
+  const groupKeys = Object.keys(groups).filter(k => k !== DEFAULT_GROUP_ID)
 
   return (
     <div className="live-grid-view">
@@ -237,7 +302,7 @@ function LiveGridView() {
             onChange={(e) => switchGroup(e.target.value)}
             title="Camera group"
           >
-            <option value="__default__">All Cameras</option>
+            <option value={DEFAULT_GROUP_ID}>All Cameras</option>
             {groupKeys.map(k => (
               <option key={k} value={k}>{groups[k].name || k}</option>
             ))}
@@ -273,6 +338,7 @@ function LiveGridView() {
               selectedCamera={assignments[i] || ''}
               onCameraChange={handleCameraChange}
               onEvent={handleCellEvent}
+              bulkCommand={bulkCommand}
             />
           ))}
         </div>

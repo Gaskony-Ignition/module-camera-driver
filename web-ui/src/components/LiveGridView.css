@@ -212,6 +212,15 @@
   animation: cam-grid-pulse 1.5s ease-in-out infinite;
 }
 
+/* Transport visibility: which transport is actually live, so a silent WebRTC->MSE (or
+   MSE->Snapshot) fallback can never masquerade as "just laggy". */
+.app-wrapper .grid-live-badge.transport-webrtc { color: var(--success); }
+.app-wrapper .grid-live-badge.transport-webrtc .live-dot { background: var(--success); }
+.app-wrapper .grid-live-badge.transport-mse { color: var(--warning); }
+.app-wrapper .grid-live-badge.transport-mse .live-dot { background: var(--warning); }
+.app-wrapper .grid-live-badge.transport-snapshot { color: var(--error); }
+.app-wrapper .grid-live-badge.transport-snapshot .live-dot { background: var(--error); }
+
 @keyframes cam-grid-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }

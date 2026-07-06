@@ -362,16 +362,22 @@ public class Go2RtcManager {
     }
 
     /**
-     * Builds the YAML "candidates:" list under the "webrtc:" block.
+     * Builds the YAML "candidates:" (and, when non-empty, "ice_servers:") lines
+     * under the "webrtc:" block.
      *
      * <p>Prefers an operator-supplied {@value #WEBRTC_CANDIDATES_FILENAME} file
      * (one "host:port" entry per line, '#' comments and blank lines ignored)
      * when present, falling back to auto-detecting non-loopback site-local
      * IPv4 addresses from the host's network interfaces.</p>
      *
+     * <p>When at least one candidate is configured, also emits
+     * {@code ice_servers: []} to disable go2rtc's default Google STUN server —
+     * see the inline comment below for why.</p>
+     *
      * @param configDir directory containing (or to contain) the candidates file,
      *                  same directory as go2rtc.yaml
-     * @return a YAML fragment for the "candidates:" key, newline-terminated
+     * @return a YAML fragment for the "candidates:" (and possibly "ice_servers:")
+     *         keys, newline-terminated
      */
     private String buildWebRtcCandidatesYaml(Path configDir) {
         List<String> fileCandidates = loadWebRtcCandidatesFromFile(configDir);
@@ -398,6 +404,21 @@ public class Go2RtcManager {
         for (String candidate : candidates) {
             yaml.append("    - \"").append(candidate).append("\"\n");
         }
+
+        // Disable go2rtc's default STUN server (stun.l.google.com:19302) once explicit
+        // candidates are configured. This is a LAN-only deployment (candidates are either
+        // operator-supplied or auto-detected site-local addresses) so a STUN-derived
+        // server-reflexive candidate adds nothing beyond what "candidates" above already
+        // advertises. It does, however, cost real time: go2rtc will not answer an SDP
+        // offer until ICE gathering completes, and STUN gathering against an unreachable
+        // or slow-to-fail external server can take 5-10s (confirmed empirically against
+        // the bundled go2rtc: repeated /api/webrtc calls clustered at ~5.0s and ~10.0s
+        // when the STUN round trip stalled, vs ~20-40ms when it was skipped). That
+        // regularly exceeds WebRtcHandler's fixed 10s proxy read timeout, so every
+        // browser WebRTC attempt was falling back to MSE. See go2rtc 1.9.4
+        // internal/webrtc/webrtc.go: webrtc.ice_servers defaults to
+        // [{urls: [stun:stun.l.google.com:19302]}]; an empty list disables STUN gathering.
+        yaml.append("  ice_servers: []\n");
         return yaml.toString();
     }
 

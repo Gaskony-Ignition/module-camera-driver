@@ -1,8 +1,15 @@
-import { useRef, useEffect, useCallback } from 'react'
+import { useRef, useEffect, useCallback, useState } from 'react'
 import { Play, Square, Camera } from 'lucide-react'
 import { API_ENDPOINTS } from '../constants/api'
-import { CameraStreamEngine } from '../utils/CameraStreamEngine'
+import { CameraStreamEngine, transportLabel, describeTransportFallback, type CameraTransport } from '../utils/CameraStreamEngine'
 import type { Device, GridEvent } from '../types/device'
+
+/** Bulk command broadcast from LiveGridView's Stream All / Stop All buttons.
+ *  seq increments on every press so repeated presses re-trigger the effect. */
+export interface GridBulkCommand {
+  seq: number
+  action: 'start' | 'stop'
+}
 
 interface GridCellProps {
   cellIndex: number
@@ -10,9 +17,10 @@ interface GridCellProps {
   selectedCamera: string
   onCameraChange: (cellIndex: number, deviceName: string) => void
   onEvent: (event: GridEvent) => void
+  bulkCommand?: GridBulkCommand
 }
 
-function GridCell({ cellIndex, devices, selectedCamera, onCameraChange, onEvent }: GridCellProps) {
+function GridCell({ cellIndex, devices, selectedCamera, onCameraChange, onEvent, bulkCommand }: GridCellProps) {
   const device = selectedCamera
     ? devices.find(d => d.name === selectedCamera) ?? null
     : null
@@ -20,8 +28,21 @@ function GridCell({ cellIndex, devices, selectedCamera, onCameraChange, onEvent 
   const videoRef = useRef<HTMLVideoElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
   const engineRef = useRef<CameraStreamEngine | null>(null)
+  // React state so the play/stop icon and LIVE badge actually re-render;
+  // mirrored in a ref for use inside stable callbacks (snapshot timer).
+  const [isStreaming, setIsStreaming] = useState(false)
   const streamingRef = useRef(false)
+  const setStreaming = (value: boolean) => {
+    streamingRef.current = value
+    setIsStreaming(value)
+  }
   const snapshotTimerRef = useRef<number | null>(null)
+  // Which transport is actually live right now — drives the transport badge and lets a
+  // silent WebRTC->MSE->Snapshot fallback surface as an event-log line instead of just
+  // "looking laggy". Mirrored in a ref so the onStatus closure always compares against
+  // the latest value without re-creating the engine on every transport change.
+  const [activeTransport, setActiveTransport] = useState<CameraTransport | null>(null)
+  const activeTransportRef = useRef<CameraTransport | null>(null)
 
   const statusClass = device
     ? device.status === 'Running'
@@ -71,7 +92,9 @@ function GridCell({ cellIndex, devices, selectedCamera, onCameraChange, onEvent 
     if (!device || device.status !== 'Running' || !videoRef.current) return
     const profileToken = device.profiles?.[0]?.token ?? ''
 
-    streamingRef.current = true
+    setStreaming(true)
+    activeTransportRef.current = null
+    setActiveTransport(null)
 
     const engine = new CameraStreamEngine(videoRef.current, imgRef.current, {
       deviceName: device.name,
@@ -86,6 +109,21 @@ function GridCell({ cellIndex, devices, selectedCamera, onCameraChange, onEvent 
           const showVideo = detail?.transport === 'webrtc' || detail?.transport === 'mse'
           if (videoRef.current) videoRef.current.style.display = showVideo ? 'block' : 'none'
           if (imgRef.current) imgRef.current.style.display = showVideo ? 'none' : 'block'
+          if (detail?.transport) {
+            const previous = activeTransportRef.current
+            // A transport change mid-session (not the first one reported) means 'auto'
+            // silently fell back one rung of the chain — surface it in the event log so
+            // it can never masquerade as "just laggy".
+            if (previous && previous !== detail.transport) {
+              onEvent({
+                time: new Date().toLocaleTimeString(),
+                camera: device.name,
+                message: describeTransportFallback(previous, detail.transport),
+              })
+            }
+            activeTransportRef.current = detail.transport
+            setActiveTransport(detail.transport)
+          }
         } else if (status === 'error') {
           onEvent({
             time: new Date().toLocaleTimeString(),
@@ -115,7 +153,6 @@ function GridCell({ cellIndex, devices, selectedCamera, onCameraChange, onEvent 
       videoRef.current.style.display = 'none'
     }
     if (streamingRef.current && device) {
-      streamingRef.current = false
       // Restore snapshot
       if (imgRef.current && device.status === 'Running') {
         const profileToken = device.profiles?.[0]?.token ?? ''
@@ -128,7 +165,9 @@ function GridCell({ cellIndex, devices, selectedCamera, onCameraChange, onEvent 
         message: 'Stream stopped',
       })
     }
-    streamingRef.current = false
+    setStreaming(false)
+    activeTransportRef.current = null
+    setActiveTransport(null)
   }, [device, onEvent])
 
   const toggleStream = useCallback(() => {
@@ -138,6 +177,20 @@ function GridCell({ cellIndex, devices, selectedCamera, onCameraChange, onEvent 
       startStream()
     }
   }, [startStream, stopStream])
+
+  // -- Bulk Stream All / Stop All ------------------------------------------
+  // LiveGridView broadcasts a {seq, action} command; each cell applies it once
+  // per seq. Guarded by a ref so re-renders never replay an old command.
+  const lastBulkSeqRef = useRef(0)
+  useEffect(() => {
+    if (!bulkCommand || bulkCommand.seq === 0 || bulkCommand.seq === lastBulkSeqRef.current) return
+    lastBulkSeqRef.current = bulkCommand.seq
+    if (bulkCommand.action === 'start') {
+      if (!streamingRef.current) startStream()
+    } else {
+      if (streamingRef.current) stopStream()
+    }
+  }, [bulkCommand, startStream, stopStream])
 
   const captureSnapshot = useCallback(() => {
     if (!device) return
@@ -169,8 +222,8 @@ function GridCell({ cellIndex, devices, selectedCamera, onCameraChange, onEvent 
         <div className="grid-cell-actions">
           {device && (
             <>
-              <button onClick={toggleStream} title={streamingRef.current ? 'Stop stream' : 'Play stream'}>
-                {streamingRef.current
+              <button onClick={toggleStream} title={isStreaming ? 'Stop stream' : 'Play stream'}>
+                {isStreaming
                   ? <Square size={14} />
                   : <Play size={14} />}
               </button>
@@ -201,10 +254,10 @@ function GridCell({ cellIndex, devices, selectedCamera, onCameraChange, onEvent 
               playsInline
               style={{ display: 'none' }}
             />
-            {streamingRef.current && (
-              <div className="grid-live-badge">
+            {isStreaming && (
+              <div className={`grid-live-badge${activeTransport ? ` transport-${activeTransport}` : ''}`}>
                 <span className="live-dot" />
-                LIVE
+                {activeTransport ? transportLabel(activeTransport) : 'LIVE'}
               </div>
             )}
             {statusClass !== 'running' && (

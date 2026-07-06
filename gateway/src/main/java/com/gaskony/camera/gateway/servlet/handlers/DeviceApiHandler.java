@@ -58,10 +58,14 @@ public class DeviceApiHandler extends BaseHandler {
                 deviceJson.put("hasPTZ", device.hasPTZ());
                 deviceJson.put("go2rtcRegistered", device.isGo2RtcStreamRegistered());
 
-                // ONVIF device info
+                // ONVIF device info — peeked from the device's connect-time cache only.
+                // Listing N devices must never fan out into live SOAP calls (the
+                // 10-camera scale test timed this endpoint out when the cache was cold
+                // right after a gateway restart); a cold value is simply omitted and the
+                // UI fills it in once the per-device cache warms up.
                 if (device.isOnvifAvailable() && device.getClient() != null) {
                     try {
-                        DeviceInformation info = device.getClient().getDeviceInformation();
+                        DeviceInformation info = device.peekDeviceInformation();
                         if (info != null) {
                             deviceJson.put("manufacturer", info.manufacturer());
                             deviceJson.put("model", info.model());
@@ -69,11 +73,11 @@ public class DeviceApiHandler extends BaseHandler {
                             deviceJson.put("serialNumber", info.serialNumber());
                         }
 
-                        List<MediaProfile> profiles = device.getClient().getMediaProfiles();
+                        List<MediaProfile> profiles = device.peekMediaProfiles();
                         if (profiles != null) {
                             JSONArray profilesJson = new JSONArray();
                             for (MediaProfile profile : profiles) {
-                                profilesJson.put(buildOnvifProfileJson(device, profile));
+                                profilesJson.put(buildOnvifProfileJson(device, profile, false));
                             }
                             deviceJson.put("profiles", profilesJson);
                             deviceJson.put("profileCount", profiles.size());
@@ -156,7 +160,7 @@ public class DeviceApiHandler extends BaseHandler {
 
             if (device.isOnvifAvailable() && device.getClient() != null) {
                 try {
-                    DeviceInformation info = device.getClient().getDeviceInformation();
+                    DeviceInformation info = device.getDeviceInformationCached();
                     if (info != null) {
                         JSONObject deviceInfo = new JSONObject();
                         deviceInfo.put("manufacturer", info.manufacturer());
@@ -167,11 +171,11 @@ public class DeviceApiHandler extends BaseHandler {
                         result.put("deviceInfo", deviceInfo);
                     }
 
-                    List<MediaProfile> profiles = device.getClient().getMediaProfiles();
+                    List<MediaProfile> profiles = device.getMediaProfilesCached();
                     if (profiles != null) {
                         JSONArray profilesJson = new JSONArray();
                         for (MediaProfile profile : profiles) {
-                            profilesJson.put(buildOnvifProfileJson(device, profile));
+                            profilesJson.put(buildOnvifProfileJson(device, profile, true));
                         }
                         result.put("profiles", profilesJson);
                     }
@@ -197,7 +201,18 @@ public class DeviceApiHandler extends BaseHandler {
         return null;
     }
 
-    private JSONObject buildOnvifProfileJson(CameraDevice device, MediaProfile profile) throws Exception {
+    /**
+     * Builds the JSON representation of an ONVIF media profile.
+     *
+     * @param allowLiveFetch when {@code false} (the LIST endpoint), stream/snapshot
+     *                       URIs are peeked from cache only and never trigger a live
+     *                       SOAP call — a cold value is simply omitted from the JSON.
+     *                       When {@code true} (the single-device status endpoint), a
+     *                       cache miss may lazily fetch once, which is acceptable for
+     *                       a single device.
+     */
+    private JSONObject buildOnvifProfileJson(CameraDevice device, MediaProfile profile, boolean allowLiveFetch)
+            throws Exception {
         JSONObject profileJson = new JSONObject();
         profileJson.put("token", profile.getToken());
         profileJson.put("name", profile.getName());
@@ -206,17 +221,30 @@ public class DeviceApiHandler extends BaseHandler {
         profileJson.put("frameRate", profile.getFrameRate());
         profileJson.put("encoding", profile.getEncoding());
 
-        try {
-            String snapshotUri = device.getClient().getSnapshotUri(profile.getToken());
-            profileJson.put("snapshotUri", snapshotUri);
-        } catch (Exception e) {
-            logger.debug("Could not get snapshot URI for profile {}: {}", profile.getToken(), e.getMessage());
-        }
-        try {
-            String streamUri = device.getClient().getStreamUri(profile.getToken());
-            profileJson.put("streamUri", streamUri);
-        } catch (Exception e) {
-            logger.debug("Could not get stream URI for profile {}: {}", profile.getToken(), e.getMessage());
+        if (allowLiveFetch) {
+            // Cached after the first lookup per profile — never a repeated SOAP fan-out.
+            try {
+                String snapshotUri = device.getSnapshotUriCached(profile.getToken());
+                profileJson.put("snapshotUri", snapshotUri);
+            } catch (Exception e) {
+                logger.debug("Could not get snapshot URI for profile {}: {}", profile.getToken(), e.getMessage());
+            }
+            try {
+                String streamUri = device.getStreamUriCached(profile.getToken());
+                profileJson.put("streamUri", streamUri);
+            } catch (Exception e) {
+                logger.debug("Could not get stream URI for profile {}: {}", profile.getToken(), e.getMessage());
+            }
+        } else {
+            // LIST endpoint — peek only, never blocks on SOAP. Omit if cold.
+            String snapshotUri = device.peekSnapshotUri(profile.getToken());
+            if (snapshotUri != null) {
+                profileJson.put("snapshotUri", snapshotUri);
+            }
+            String streamUri = device.peekStreamUri(profile.getToken());
+            if (streamUri != null) {
+                profileJson.put("streamUri", streamUri);
+            }
         }
 
         return profileJson;

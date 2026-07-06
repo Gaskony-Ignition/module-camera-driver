@@ -41,8 +41,11 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Unified Camera device implementation.
@@ -125,6 +128,20 @@ public class CameraDevice extends ManagedAddressSpaceWithLifecycle implements De
     private volatile String defaultProfileToken = null;
     private ONVIFPoller poller;
     private AddressSpaceBuilder onvifAddressSpaceBuilder;
+
+    // ── ONVIF response cache ─────────────────────────────────────────────────
+    // The /devices API used to make live SOAP calls per device per request
+    // (device info + profiles + per-profile stream/snapshot URIs ≈ 8 round
+    // trips each). With several devices pointed at one camera, a single list
+    // request serialised dozens of SOAP calls against an already-busy camera
+    // and timed out in the UI (found by the 10-camera scale test). These
+    // values are effectively static per connection, so they are cached:
+    // populated on ONVIF connect, lazily filled for URIs, cleared on
+    // reconnect/close.
+    private volatile DeviceInformation cachedDeviceInfo = null;
+    private volatile List<MediaProfile> cachedMediaProfiles = null;
+    private final Map<String, String> cachedStreamUris = new ConcurrentHashMap<>();
+    private final Map<String, String> cachedSnapshotUris = new ConcurrentHashMap<>();
 
     // Generic/HTTP state
     private GenericCameraClient cameraClient;
@@ -586,6 +603,11 @@ public class CameraDevice extends ManagedAddressSpaceWithLifecycle implements De
             logger.info("ONVIF Device: {} {} (FW: {})",
                 deviceInfo.manufacturer(), deviceInfo.model(), deviceInfo.firmwareVersion());
 
+            // Fresh connection — reset the ONVIF response cache and pre-warm it
+            // with what this probe has already fetched.
+            clearOnvifCache();
+            this.cachedDeviceInfo = deviceInfo;
+
             // Discover services
             List<ONVIFService> services = onvifClient.getServices();
             List<MediaProfile> mediaProfiles = null;
@@ -611,6 +633,7 @@ public class CameraDevice extends ManagedAddressSpaceWithLifecycle implements De
             // Cache default profile token
             if (mediaProfiles != null && !mediaProfiles.isEmpty()) {
                 this.defaultProfileToken = mediaProfiles.get(0).getToken();
+                this.cachedMediaProfiles = mediaProfiles;
                 logger.info("Default profile token: {}", defaultProfileToken);
             }
 
@@ -646,14 +669,110 @@ public class CameraDevice extends ManagedAddressSpaceWithLifecycle implements De
             }
             onvifClient = null;
         }
+        clearOnvifCache();
+    }
+
+    private void clearOnvifCache() {
+        cachedDeviceInfo = null;
+        cachedMediaProfiles = null;
+        cachedStreamUris.clear();
+        cachedSnapshotUris.clear();
+    }
+
+    // ── Cached ONVIF accessors (for request-path callers like DeviceApiHandler) ──
+    // These serve connect-time data and only fall back to a live SOAP call when
+    // the cache is cold, so listing devices never fans out into dozens of
+    // round-trips against a busy camera.
+
+    /** Device information from the connect-time cache (lazy single fetch if cold). */
+    public DeviceInformation getDeviceInformationCached() throws IOException {
+        DeviceInformation info = cachedDeviceInfo;
+        if (info == null && onvifClient != null) {
+            info = onvifClient.getDeviceInformation();
+            cachedDeviceInfo = info;
+        }
+        return info;
+    }
+
+    /** Media profiles from the connect-time cache (lazy single fetch if cold). */
+    public List<MediaProfile> getMediaProfilesCached() throws IOException {
+        List<MediaProfile> profiles = cachedMediaProfiles;
+        if (profiles == null && onvifClient != null) {
+            profiles = onvifClient.getMediaProfiles();
+            cachedMediaProfiles = profiles;
+        }
+        return profiles;
+    }
+
+    /** RTSP stream URI for a profile, cached after the first lookup. */
+    public String getStreamUriCached(String profileToken) throws IOException {
+        String cached = cachedStreamUris.get(profileToken);
+        if (cached != null) {
+            return cached;
+        }
+        if (onvifClient == null) {
+            return null;
+        }
+        String uri = onvifClient.getStreamUri(profileToken);
+        if (uri != null) {
+            cachedStreamUris.put(profileToken, uri);
+        }
+        return uri;
+    }
+
+    /** Snapshot URI for a profile, cached after the first lookup. */
+    public String getSnapshotUriCached(String profileToken) throws IOException {
+        String cached = cachedSnapshotUris.get(profileToken);
+        if (cached != null) {
+            return cached;
+        }
+        if (onvifClient == null) {
+            return null;
+        }
+        String uri = onvifClient.getSnapshotUri(profileToken);
+        if (uri != null) {
+            cachedSnapshotUris.put(profileToken, uri);
+        }
+        return uri;
+    }
+
+    // ── Peek-only ONVIF accessors (for the device LIST endpoint) ──
+    // Unlike the *Cached() accessors above, these NEVER perform network I/O —
+    // they return whatever is already in the connect-time cache, or null.
+    // The list endpoint iterates every device and every profile; falling back
+    // to a live SOAP call per cache miss (as *Cached() does) turns one list
+    // request into dozens of round-trips against a busy camera and times out
+    // the UI (the bug this peek API fixes). A single-device request can still
+    // afford one lazy fetch, so handleDeviceStatus() keeps using *Cached().
+
+    /** Device information from the connect-time cache, or null if cold. Never blocks on I/O. */
+    public DeviceInformation peekDeviceInformation() {
+        return cachedDeviceInfo;
+    }
+
+    /** Media profiles from the connect-time cache, or null if cold. Never blocks on I/O.
+     *  Returns a defensive copy so callers can't mutate the cached list. */
+    public List<MediaProfile> peekMediaProfiles() {
+        List<MediaProfile> profiles = cachedMediaProfiles;
+        return profiles == null ? null : new ArrayList<>(profiles);
+    }
+
+    /** RTSP stream URI for a profile from cache, or null if not yet looked up. Never blocks on I/O. */
+    public String peekStreamUri(String profileToken) {
+        return cachedStreamUris.get(profileToken);
+    }
+
+    /** Snapshot URI for a profile from cache, or null if not yet looked up. Never blocks on I/O. */
+    public String peekSnapshotUri(String profileToken) {
+        return cachedSnapshotUris.get(profileToken);
     }
 
     // ── Address space builders ──
 
     private void buildOnvifAddressSpace() throws Exception {
-        DeviceInformation deviceInfo = onvifClient.getDeviceInformation();
+        DeviceInformation deviceInfo = getDeviceInformationCached();
         List<ONVIFService> services = onvifClient.getServices();
-        List<MediaProfile> mediaProfiles = onvifClient.getMediaProfiles();
+        List<MediaProfile> mediaProfiles = getMediaProfilesCached();
 
         onvifAddressSpaceBuilder = new AddressSpaceBuilder(
             context, getNodeContext(), rootNode, onvifClient, getNodeManager()::addNode

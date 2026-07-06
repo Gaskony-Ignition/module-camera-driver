@@ -5,6 +5,53 @@ All notable changes to the Ignition Camera Driver module will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.8] - 2026-07-06
+
+**Type:** PATCH — MSE stream proxy consumer leak (found by the 10-camera soak)
+
+### Fixed
+- **The gateway leaked upstream go2rtc consumers on the MSE streaming path.** A 30-minute 10-camera soak showed each MSE-viewed camera accumulating ~5 stale go2rtc consumers — connections the gateway kept feeding long after the browser had gone. Root cause: `StreamHandler.proxyStream()`'s write loop blocks in `output.write()` when a client goes away *without* a clean TCP close (network drop, laptop sleep, blackholed connection); a blocking Java write can't be force-unblocked from another thread, so the upstream connection was held until the 15-minute hard cap. A clean disconnect (tab close, or the MSE engine's reconnect) was already detected within ~1 s and is unaffected. Each write now runs on a dedicated thread bounded by a 20 s stall timeout; on timeout the loop closes the upstream go2rtc/MJPEG connection immediately (go2rtc reaps its consumer within ~6 s of the close), so orphaned consumers can no longer accumulate. WebRTC was never affected (ICE reaps dead peers itself).
+
+---
+
+## [3.1.7] - 2026-07-06
+
+**Type:** PATCH — Live View "All Cameras" auto-populates
+
+### Fixed
+- **"Stream All" only started the handful of cameras manually assigned to grid cells.** With the built-in "All Cameras" group selected, empty cells stayed on "-- Select Camera --" and Stream All ignored every unassigned camera, so connecting 10 cameras still showed a mostly empty grid (reported three times). The "All Cameras" group now auto-populates: every connected device that isn't already placed is filled into the next empty cell in stable alphabetical order, up to the grid's capacity, and Stream All / Snapshot All operate over that effective set. Manual placements are preserved; a cell the admin explicitly blanks stays blank (tracked with an internal cleared-cell marker) rather than being re-filled. Auto-fill is display-only and re-derived each render, so a newly-connected camera appears immediately and resizing the grid re-flows — nothing is written back to storage. Custom (named) groups are unchanged and remain manual-assignment only.
+
+---
+
+## [3.1.6] - 2026-07-06
+
+**Type:** PATCH — WebRTC always fell back to MSE; device list still timed out on a cold ONVIF cache
+
+### Fixed
+- **WebRTC never negotiated — every stream silently fell back to MSE.** The bundled go2rtc waits for ICE gathering to finish before answering an SDP offer, and its default config contacts Google's public STUN server (`stun.l.google.com:19302`). On the LAN/NAT test environment that round trip intermittently stalled at 5–10 s (measured directly against `/api/webrtc`: responses clustered at ~5.0 s and ~10.0 s vs ~20–40 ms when STUN was skipped), exceeding `WebRtcHandler`'s 10 s proxy read timeout so signalling timed out on every attempt. Since the module already advertises explicit host candidates (operator file or auto-detected site-local addresses), STUN adds nothing: `Go2RtcManager` now emits `ice_servers: []` under `webrtc:` whenever candidates are configured, disabling STUN gathering. Signalling now completes in milliseconds and WebRTC connects instead of degrading to MSE. This also makes the implementation match SECURITY.md's claim that no negotiation traffic leaves the local network.
+- **`/devices` could still time out right after a gateway restart.** The 3.1.4 fix cached ONVIF device info/profiles/URIs but the accessors still fell back to a *live* SOAP call on a cache miss; with 10 devices and a cold cache (e.g. gateway just restarted while the camera was busy), one list request could still fan out into dozens of serial round-trips and exceed the UI's fetch timeout. `DeviceApiHandler.handleListDevices()` now uses new peek-only accessors on `CameraDevice` (`peekDeviceInformation()`, `peekMediaProfiles()`, `peekStreamUri()`, `peekSnapshotUri()`) that read the cache and never touch the network; a cold field is simply omitted from the JSON and fills in once the device's cache warms up. The single-device status endpoint (`handleDeviceStatus`) is unchanged and may still lazily fetch once, which is acceptable for one device.
+
+---
+
+## [3.1.5] - 2026-07-04
+
+**Type:** PATCH — Live View bulk controls
+
+### Fixed
+- **"Stream All" / "Stop All" in Live View did nothing.** Both handlers were stubs that only wrote a line to the event log. They now broadcast a sequenced command that every grid cell applies once — starting all assigned, running, not-already-streaming cameras (or stopping them). Found during the 10-camera acceptance run.
+- **Grid cell play/stop icon and LIVE badge never updated.** The cell's streaming flag lived in a non-rendering ref; it is now React state (mirrored in a ref for timer callbacks), so the ▶/■ toggle and LIVE badge reflect reality.
+
+---
+
+## [3.1.4] - 2026-07-04
+
+**Type:** PATCH — device list scalability (found by the 10-camera acceptance test)
+
+### Fixed
+- **`/devices` timed out with 10 devices ("Failed to load devices: signal timed out").** The device-list and device-status handlers made *live* ONVIF SOAP calls per device per request — device info, media profiles, and stream+snapshot URIs for every profile (~8 round-trips each). At 1 device this was invisible; at 10 devices against one camera (already servicing 10 RTSP sessions and 10 pollers), a single page load serialised ~80 SOAP calls and blew past the UI timeout. `CameraDevice` now caches device information, media profiles, and per-profile URIs — populated at ONVIF connect, lazily filled for URIs, cleared on reconnect/close — and `DeviceApiHandler` serves from that cache, so listing devices costs zero camera round-trips in steady state. The address-space builder reuses the same cache, trimming redundant startup calls too.
+
+---
+
 ## [3.1.3] - 2026-07-04
 
 **Type:** PATCH — Dedicated Page boot fix
