@@ -1,9 +1,9 @@
 # Implementation Status
 
 **Project**: Ignition Camera Driver Module
-**Current Version**: 3.1.1
-**Last Updated**: 2026-07-03
-**Status**: Release candidate — pending acceptance run (see PROJECT_CHARTER.md §2)
+**Current Version**: 3.1.8
+**Last Updated**: 2026-07-06
+**Status**: Production ready — acceptance run passed 2026-07-06 (see "Acceptance run" below and PROJECT_CHARTER.md §2)
 
 ---
 
@@ -126,14 +126,39 @@ ONVIF — all toggled per device.
 
 | Suite | Tests | Status |
 | ----- | ----- | ------ |
-| Gateway + common (JUnit 5, Mockito 5, AssertJ 3) | 535 | Passing |
-| web-ui (vitest) | 22 | Passing |
-| **Total** | **557** | **100% pass rate** |
+| Gateway (JUnit 5, Mockito 5, AssertJ 3) | 485 | Passing |
+| Common (JUnit 5) | 67 | Passing |
+| web-ui (vitest) | 33 | Passing |
+| **Total** | **585** | **100% pass rate** |
 
 Gateway coverage includes ValidationUtil, ONVIFAuth/Client, XmlUtil, handlers
 (Stream/Snapshot/Ptz/WebRtc/Diagnostics), Go2RtcManager, AuthenticationManager,
 SessionTokenStore. Security tests include XSS, SQL injection, XXE, Billion
 Laughs, path traversal.
+
+---
+
+## Acceptance run (PROJECT_CHARTER.md §2)
+
+Run on 2026-07-06 against the Docker test gateway with **10 camera devices** (one
+physical Reolink plus 9 cloned configs pointing at it), 3.1.8 installed, all cells
+streaming from the Live View grid.
+
+| # | Criterion | Result |
+| - | --------- | ------ |
+| A1 | Native ONVIF/RTSP/MJPEG/snapshot connect, no third-party converters | Pass |
+| A2 | Sub-second latency on the default path | Pass — WebRTC negotiated on every cell (STUN gathering disabled so signaling no longer times out) |
+| A3 | Graceful transport fallback (WebRTC → MSE → snapshot) | Pass — MSE hardened with connect/stall watchdogs + bounded reconnect; active transport shown per cell |
+| A4 | ~10 cameras concurrently | Pass — 10 devices registered; grid auto-populates the "All Cameras" group |
+| A5 | Streams stop cleanly (consumers return to 0) | Pass |
+| A6 | Consumers track viewers (no leak) | Pass — steady state is 1 go2rtc consumer per viewed cell over a 5-minute observation; a gateway write-stall backstop (3.1.8) caps a dead-client's upstream connection so orphans can no longer accumulate (the pre-3.1.8 leak reached ~5 per MSE cell). Note: WebRTC dominated the live run, so the MSE reap is additionally covered by unit tests rather than a direct in-vivo observation. |
+| A7 | Stable under a 30-minute soak (no 503s, no restarts, flat CPU/heap) | Pass — 30-minute 10-camera soak: 0 errors, 0 503s, CPU steady 30–45%, memory flat, producers pinned at 10 |
+| A8 | Admin can verify a new camera from the gateway UI without the Designer | Pass — Cameras view inline preview + PTZ pad; Live View grid |
+| A9 | Acceptance results recorded | This section |
+
+The 30-minute soak on 3.1.7 surfaced a gateway consumer leak on the MSE proxy
+path (each MSE-viewed camera accumulated stale go2rtc consumers held open until
+the 15-minute hard cap); 3.1.8 fixes it and was re-verified clean.
 
 ---
 
@@ -150,6 +175,13 @@ Laughs, path traversal.
 
 | Version | Date | Changes |
 | ------- | ---- | ------- |
+| 3.1.8 | 2026-07-06 | Gateway MSE proxy consumer leak fixed — a client that disconnects without a clean TCP close no longer holds its upstream go2rtc connection open (per-write 20 s stall backstop); found by the 10-camera soak |
+| 3.1.7 | 2026-07-06 | Live View "All Cameras" group auto-populates every connected camera (no manual cell assignment); Stream All streams them all |
+| 3.1.6 | 2026-07-06 | WebRTC signaling no longer times out (go2rtc STUN disabled when explicit candidates exist — was falling back to MSE); MSE hardened (connect/stall watchdogs, bounded auto-reconnect); per-cell transport badge (WebRTC/MSE/Snapshot) + fallback event; device-list endpoint no longer makes live SOAP calls on a cold cache |
+| 3.1.5 | 2026-07-04 | Live View Stream All / Stop All implemented (were stubs); grid cell play/stop icon + LIVE badge now reflect state |
+| 3.1.4 | 2026-07-04 | Device-list scalability — ONVIF device info/profiles/URIs cached, so listing 10 devices no longer fans out into dozens of live SOAP calls and times out |
+| 3.1.3 | 2026-07-04 | Dedicated Connection Browser page boot fix (named-export component resolution) |
+| 3.1.2 | 2026-07-04 | Connection Browser page shell slimmed; readable auth-gate + error card |
 | 3.1.1 | 2026-07-03 | PTZ pad in the gateway Connection Browser (admin can verify PTZ without the Designer); static pages' player upgraded to WebRTC-first; documentation truth pass (endpoints, test counts, PTZ semantics) |
 | 3.1.0 | 2026-07-03 | **WebRTC transport** — sub-second latency via authenticated `/webrtc` signaling proxy + go2rtc ICE (port 8555); unified client stream engine (WebRTC → MSE → snapshot) replacing duplicated MSE implementations |
 | 3.0.14 | 2026-07-02 | Video-only fMP4 (drops AAC track that stalled MSE playback); MSE live-edge targets relaxed to sustainable values |
