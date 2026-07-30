@@ -5,6 +5,21 @@ All notable changes to the Ignition Camera Driver module will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-07-30
+
+**Type:** MINOR — module now opts in to Ignition Maker Edition
+
+### Added
+- **`CameraModuleHook` now overrides `isMakerEditionCompatible()` to return `true`.**
+  `AbstractDeviceModuleHook` (like every `AbstractGatewayModuleHook` subclass,
+  including device drivers) defaults this to `false`, so without the override
+  Maker Edition silently refuses to start the module and reports it as "not
+  eligible for use with Ignition Maker Edition" — no fault, no other log line.
+  Verified live on Maker 8.3.8 (see forum thread linked in the override's
+  Javadoc). Free module; no device-driver behaviour identified that would
+  misbehave under Maker's licensing. New capability, hence a minor bump rather
+  than a patch. Regression test: `CameraModuleHookMakerEditionTest`.
+
 ## [3.1.9] - 2026-07-06
 
 **Type:** PATCH — pre-release review fixes (adversarial review of 3.1.4–3.1.8)

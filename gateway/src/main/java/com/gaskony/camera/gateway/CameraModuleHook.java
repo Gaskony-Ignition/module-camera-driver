@@ -280,6 +280,26 @@ public class CameraModuleHook extends AbstractDeviceModuleHook {
         return true;
     }
 
+    /**
+     * Opt this module in to Ignition Maker Edition.
+     *
+     * <p>{@code AbstractDeviceModuleHook} (like every {@code AbstractGatewayModuleHook}
+     * subclass, including device drivers) defaults this to {@code false}, so without
+     * the override Maker Edition silently refuses to start the module and reports it
+     * as "not eligible for use with Ignition Maker Edition" — no fault, no other log
+     * line. Available since the 8.0.14 SDK.
+     *
+     * <p>Note: that same message is also shown when a module fails to load for an
+     * unrelated reason (e.g. an SDK/platform version mismatch) — the real failure
+     * reason gets overwritten, so the message alone can't tell you which case you're
+     * in. See
+     * https://forum.inductiveautomation.com/t/not-eligible-for-use-with-ignition-maker-edition/113129
+     */
+    @Override
+    public boolean isMakerEditionCompatible() {
+        return true;
+    }
+
     private static String loadModuleVersion() {
         try (InputStream is = CameraModuleHook.class.getResourceAsStream("/module.properties")) {
             if (is != null) {
