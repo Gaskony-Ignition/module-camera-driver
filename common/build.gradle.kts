@@ -17,6 +17,10 @@ dependencies {
     testImplementation(libs.junit.jupiter.api)
     testImplementation(libs.junit.jupiter.params)
     testRuntimeOnly(libs.junit.jupiter.engine)
+    // Gradle 8.10.2 bundles a junit-platform-launcher too old for Jupiter >=5.12
+    // ("OutputDirectoryCreator not available; probably due to unaligned versions")
+    // — pin an explicit matching launcher version.
+    testRuntimeOnly(libs.junit.platform.launcher)
 
     // AssertJ for fluent assertions
     testImplementation(libs.assertj.core)

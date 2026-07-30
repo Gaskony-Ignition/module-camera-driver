@@ -1,13 +1,14 @@
 [versions]
 ignition = "8.3.0"
-gson = "2.11.0"
+gson = "2.14.0"
 jakarta-servlet = "5.0.0"
 httpclient = "4.5.14"
 httpcore = "4.4.16"
-junit-jupiter = "5.11.3"
-mockito = "5.18.0"
+junit-jupiter = "5.14.4"
+junit-platform-launcher = "1.14.4"
+mockito = "5.23.0"
 assertj = "3.27.7"
-slf4j = "2.0.17"
+slf4j = "2.0.18"
 
 [libraries]
 ignition-common = { module = "com.inductiveautomation.ignitionsdk:ignition-common", version.ref = "ignition" }
@@ -24,6 +25,7 @@ httpcore = { module = "org.apache.httpcomponents:httpcore", version.ref = "httpc
 junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit-jupiter" }
 junit-jupiter-params = { module = "org.junit.jupiter:junit-jupiter-params", version.ref = "junit-jupiter" }
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit-jupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform-launcher" }
 mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }
 mockito-junit-jupiter = { module = "org.mockito:mockito-junit-jupiter", version.ref = "mockito" }
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }

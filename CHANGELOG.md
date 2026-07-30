@@ -5,6 +5,45 @@ All notable changes to the Ignition Camera Driver module will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.1] - 2026-07-30
+
+**Type:** PATCH — dependency audit (compileOnly/modlImplementation/testImplementation review)
+
+### Changed
+
+- **Gson moved from `compileOnly` 2.11.0 to `modlImplementation` 2.14.0 (latest stable).** The
+  only real `com.google.gson` usage in the module (`ApiKeyStore`) stays fully internal — a JSON
+  string is read/written to a file, no `Gson`/`JsonElement`/`JsonObject` ever crosses an Ignition
+  SDK API boundary — so shipping our own current copy is safe and avoids being pinned to the
+  gateway's bundled 2.8.9 (2021-era). `compileOnly` at 2.11.0 was already ahead of the platform's
+  actual bundled 2.8.9, which is the real landmine this audit was chasing: declaring newer than
+  what the gateway loads compiles fine and then throws `NoSuchMethodError` at runtime the first
+  time a post-2.8.9 API is touched. `CameraComponentDelegate`'s use of
+  `com.inductiveautomation.ignition.common.gson.JsonObject` is Ignition's own shaded/relocated
+  Gson and is unaffected either way. Precedent: `ignition-module-git` already ships its own newer
+  sqlite-jdbc/Jackson the same way. Packaging verified by unzipping the built `.modl` —
+  `gson-2.14.0.jar` (313KB) plus its `error_prone_annotations-2.48.0.jar` (20KB) are genuinely
+  present, not merely declared.
+- **`junit-jupiter` (test-only) bumped 5.11.3 → 5.14.4** (latest stable 5.x). JUnit 6.x was
+  evaluated and deliberately not taken: `mockito-junit-jupiter` 5.23.0 — the latest stable
+  Mockito — still targets the JUnit 5 platform, so moving Jupiter to 6.x would split the test
+  stack across two platform generations. Revisit when Mockito ships JUnit 6 support.
+- **`junit-platform-launcher` (test-only) pinned at 1.14.4** (new declaration). Gradle 8.10.2
+  bundles a launcher too old for Jupiter ≥5.12 and test discovery fails with
+  `OutputDirectoryCreator not available; probably due to unaligned versions` — the pin is
+  mandatory, not cosmetic.
+- **`mockito` (test-only) bumped 5.18.0 → 5.23.0** (latest stable 5.x).
+- **`slf4j` (test-only here — not used `compileOnly` anywhere in this module) bumped 2.0.17 →
+  2.0.18** (latest stable 2.0.x).
+- `assertj` (test-only) reviewed — already at 3.27.7, the latest stable 3.x release; no change.
+- `jakarta-servlet` (`compileOnly`) reviewed — left at 5.0.0. See report/commit notes: a 6.0.0
+  attempt was evaluated but not carried, since this module's servlet types (`HttpServletRequest`/
+  `HttpServletResponse` etc.) are handed to it directly by Ignition's Jetty-based routing, i.e.
+  a genuine SDK-boundary crossing where `compileOnly` must never exceed what the platform
+  actually loads (6.0.0 on the gateway scope) — 5.0.0 is safely older, not a bug.
+- `httpclient`/`httpcore` — untouched; superseded by a separate HttpClient 4→5 migration.
+- `ignition` SDK version (8.3.0) — untouched, out of scope.
+
 ## [3.2.0] - 2026-07-30
 
 **Type:** MINOR — module now opts in to Ignition Maker Edition

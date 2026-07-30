@@ -21,8 +21,14 @@ dependencies {
     modlImplementation(libs.httpclient)
     modlImplementation(libs.httpcore)
 
-    // JSON support for configuration (provided by Ignition at runtime)
-    compileOnly(libs.gson)
+    // JSON support for API key persistence (ApiKeyStore). Shipped via modlImplementation
+    // at latest stable rather than pinned to the platform's bundled 2.8.9 copy: the only
+    // Gson usage in this module (ApiKeyStore) stays fully internal (String in/out to a
+    // file; no Gson type ever crosses an Ignition SDK API boundary), so the module
+    // classloader's own newer copy is safe to ship and load — see modules/CLAUDE.md
+    // "compileOnly dependency versions" note for the reasoning and precedent
+    // (ignition-module-git ships its own newer sqlite-jdbc/Jackson the same way).
+    modlImplementation(libs.gson)
 
     // Jakarta Servlet API (provided by Ignition 8.3)
     compileOnly(libs.jakarta.servlet)
@@ -43,6 +49,10 @@ dependencies {
     testImplementation(libs.junit.jupiter.api)
     testImplementation(libs.junit.jupiter.params)
     testRuntimeOnly(libs.junit.jupiter.engine)
+    // Gradle 8.10.2 bundles a junit-platform-launcher too old for Jupiter >=5.12
+    // ("OutputDirectoryCreator not available; probably due to unaligned versions")
+    // — pin an explicit matching launcher version.
+    testRuntimeOnly(libs.junit.platform.launcher)
 
     // Mockito for mocking
     testImplementation(libs.mockito.core)
