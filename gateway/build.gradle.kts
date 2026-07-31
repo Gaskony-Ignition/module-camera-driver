@@ -92,7 +92,26 @@ dependencies {
 //   ./gradlew downloadGo2Rtc build    # Full build with go2rtc binaries
 //   -x downloadGo2Rtc                 # Explicitly skip download
 val go2rtcVersion = "1.9.4"
-val go2rtcOutputDir = layout.buildDirectory.dir("go2rtc-binaries/go2rtc")
+// Binary caches live OUTSIDE build/ deliberately (31/07/2026).
+//
+// These are large (~180MB of ffmpeg alone), immutable for a given version, and
+// slow to fetch — a full download takes ~35 minutes on a normal connection.
+// While they lived under build/, every `clean` threw them away and re-downloaded
+// them, which made `clean` so expensive that the tempting move was to skip it.
+// That is exactly the habit that let a packaging defect hide: the module shipped
+// without ffmpeg for an unknown number of builds and the only symptom was file
+// size. Making the correct action (clean builds) cheap is a better fix than
+// relying on discipline.
+//
+// They are keyed by version, so a version bump naturally fetches fresh copies,
+// and `verifyModulePackaging` still fails the build if anything is missing from
+// the packaged .modl. Gitignored — large, regenerable, local-only.
+// NOTE: layout.projectDirectory.dir() yields a Directory, whereas
+// layout.buildDirectory.dir() yields a Provider<Directory>. The download tasks
+// below call .get().asFile, so wrap in a provider to keep that shape rather
+// than touching every use site.
+val binaryCacheRoot = layout.projectDirectory.dir("../.binary-cache")
+val go2rtcOutputDir = provider { binaryCacheRoot.dir("go2rtc-$go2rtcVersion/go2rtc") }
 
 val downloadGo2Rtc by tasks.registering {
     description = "Downloads go2rtc binaries for bundling in the module"
@@ -170,7 +189,7 @@ val downloadGo2Rtc by tasks.registering {
 // how a build reached "SUCCESSFUL" while shipping a module with no ffmpeg at
 // all. Prefer a long timeout that occasionally waits over a short one that
 // quietly truncates the artefact.
-val ffmpegOutputDir = layout.buildDirectory.dir("ffmpeg-binaries/ffmpeg")
+val ffmpegOutputDir = provider { binaryCacheRoot.dir("ffmpeg-binaries/ffmpeg") }
 
 val downloadFfmpeg by tasks.registering {
     description = "Downloads static ffmpeg binaries for bundling in the module"
@@ -293,11 +312,11 @@ sourceSets {
         resources {
             // go2rtc binaries are placed in build/go2rtc-binaries/go2rtc/ by downloadGo2Rtc
             // They end up at classpath: go2rtc/go2rtc_linux_amd64 etc.
-            srcDir(layout.buildDirectory.dir("go2rtc-binaries"))
+            srcDir(binaryCacheRoot.dir("go2rtc-$go2rtcVersion"))
 
             // ffmpeg binaries are placed in build/ffmpeg-binaries/ffmpeg/ by downloadFfmpeg
             // They end up at classpath: ffmpeg/ffmpeg_linux_amd64 etc.
-            srcDir(layout.buildDirectory.dir("ffmpeg-binaries"))
+            srcDir(binaryCacheRoot.dir("ffmpeg-binaries"))
 
             // Include web-ui webpack output (perspective.js, connectionBrowser.js) in gateway.jar
             // so they're served via getMountedResourceFolder() at /res/camera-driver/*

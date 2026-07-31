@@ -91,3 +91,4 @@ web-ui/node_modules/
 *:Zone.Identifier
 *Zone.Identifier*
 *.Zone.Identifier
+.binary-cache/
