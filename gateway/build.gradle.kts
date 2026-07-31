@@ -17,9 +17,25 @@ dependencies {
     compileOnly(libs.perspective.common)
     compileOnly(libs.perspective.gateway)
 
-    // HTTP client for ONVIF communication
-    modlImplementation(libs.httpclient)
-    modlImplementation(libs.httpcore)
+    // HTTP client for ONVIF communication.
+    //
+    // slf4j-api is EXCLUDED deliberately. httpclient5 declares it as a compile
+    // dependency, so without this it gets dragged into the .modl (verified: the
+    // first 3.3.0 build shipped slf4j-api-1.7.36.jar, which HttpClient 4 never
+    // pulled in). SLF4J is a boundary library under modules/CLAUDE.md and must
+    // NEVER be shipped: it is a logging FACADE whose ServiceLoader binding has to
+    // resolve to the gateway's own logging backend. A second copy on the module
+    // classloader risks binding to nothing, which silently sends this module's
+    // logs into a void — the worst possible failure for a driver, because the
+    // symptom is "no errors reported" rather than an error.
+    // The platform provides slf4j-api at runtime (lib/core/common 2.0.12,
+    // lib/core/gateway 1.7.36) and ignition-common supplies it at compile time.
+    modlImplementation(libs.httpclient5) {
+        exclude(group = "org.slf4j", module = "slf4j-api")
+    }
+    modlImplementation(libs.httpcore5) {
+        exclude(group = "org.slf4j", module = "slf4j-api")
+    }
 
     // JSON support for API key persistence (ApiKeyStore). Shipped via modlImplementation
     // at latest stable rather than pinned to the platform's bundled 2.8.9 copy: the only
@@ -84,6 +100,17 @@ val downloadGo2Rtc by tasks.registering {
 
     outputs.dir(go2rtcOutputDir)
 
+    // See the full note on downloadFfmpeg: with no declared INPUTS, Gradle's
+    // up-to-date check compares only the output snapshot, so output left behind
+    // by a failed (warn-only) download matches forever and the task never
+    // retries. Name every expected file — a PARTIAL download is the normal
+    // failure mode, so "the directory has something in it" is the wrong test.
+    outputs.upToDateWhen {
+        val dir = go2rtcOutputDir.get().asFile
+        listOf("go2rtc_linux_amd64", "go2rtc_linux_arm64", "go2rtc_windows_amd64.exe")
+            .all { File(dir, it).exists() }
+    }
+
     doLast {
         val outputDir = go2rtcOutputDir.get().asFile
         outputDir.mkdirs()
@@ -116,7 +143,7 @@ val downloadGo2Rtc by tasks.registering {
                     "src" to "https://github.com/AlexxIT/go2rtc/releases/download/v${go2rtcVersion}/go2rtc_win64.zip",
                     "dest" to windowsZipFile,
                     "skipexisting" to "true",
-                    "maxtime" to "300"
+                    "maxtime" to "1800"
                 ))
                 ant.invokeMethod("unzip", mapOf("src" to windowsZipFile, "dest" to outputDir))
                 File(outputDir, "go2rtc.exe").renameTo(windowsExeFile)
@@ -132,6 +159,17 @@ val downloadGo2Rtc by tasks.registering {
 // ffmpeg static binary download task
 // Downloads platform-specific static ffmpeg binaries for bundling.
 // Required by go2rtc for JPEG snapshot extraction and MJPEG transcoding.
+//
+// DOWNLOAD TIMEOUT (31/07/2026): every ant `get` here uses maxtime=1800, raised
+// from the original 300. That 300s ceiling was not a safety margin, it was a
+// silent size limit: the arm64 tarball (~51MB) finished inside it, while the
+// amd64 (~79MB) and Windows (~101MB) archives did not, so those two ALWAYS
+// failed on a normal connection and were then swallowed by the warn-only catch
+// below. The release that did include them simply caught a faster moment on the
+// network. Combined with the up-to-date bug noted on the task itself, that is
+// how a build reached "SUCCESSFUL" while shipping a module with no ffmpeg at
+// all. Prefer a long timeout that occasionally waits over a short one that
+// quietly truncates the artefact.
 val ffmpegOutputDir = layout.buildDirectory.dir("ffmpeg-binaries/ffmpeg")
 
 val downloadFfmpeg by tasks.registering {
@@ -139,6 +177,31 @@ val downloadFfmpeg by tasks.registering {
     group = "build"
 
     outputs.dir(ffmpegOutputDir)
+
+    // WHY THIS LINE EXISTS (31/07/2026 — it cost a silently-broken release build):
+    // this task declares outputs but NO inputs, so Gradle's up-to-date check has
+    // nothing to compare except the output snapshot. Every download here is
+    // wrapped in a try/catch that only WARNS on failure (deliberate — a network
+    // blip shouldn't fail the build), so a failed download leaves the output dir
+    // empty and Gradle snapshots "empty". On every later build "empty" still
+    // matches "empty", the task reports UP-TO-DATE, and it never retries — not
+    // even after `clean`, because the snapshot lives in .gradle/, not build/.
+    //
+    // The result was a BUILD SUCCESSFUL that produced a 19MB .modl instead of
+    // 110MB, with ffmpeg (and therefore snapshot extraction) silently missing.
+    // One transient network failure poisoned every subsequent build.
+    //
+    // The condition must name EVERY expected file, not just "the directory is
+    // non-empty" — the first version of this fix checked only for non-emptiness
+    // and was satisfied by a single arm64 binary while amd64 and windows were
+    // both still missing, so the task kept reporting UP-TO-DATE and kept not
+    // retrying them. A partial download is the normal failure here (these are
+    // 50-100MB files), so "some output exists" is precisely the wrong test.
+    outputs.upToDateWhen {
+        val dir = ffmpegOutputDir.get().asFile
+        listOf("ffmpeg_linux_amd64", "ffmpeg_linux_arm64", "ffmpeg_windows_amd64.exe")
+            .all { File(dir, it).exists() }
+    }
 
     doLast {
         val outputDir = ffmpegOutputDir.get().asFile
@@ -154,7 +217,7 @@ val downloadFfmpeg by tasks.registering {
                     "src" to "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz",
                     "dest" to tarFile,
                     "skipexisting" to "true",
-                    "maxtime" to "300"
+                    "maxtime" to "1800"
                 ))
                 // Extract just the ffmpeg binary from the tarball
                 exec {
@@ -179,7 +242,7 @@ val downloadFfmpeg by tasks.registering {
                     "src" to "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-arm64-static.tar.xz",
                     "dest" to tarFile,
                     "skipexisting" to "true",
-                    "maxtime" to "300"
+                    "maxtime" to "1800"
                 ))
                 exec {
                     commandLine("bash", "-c",
@@ -203,7 +266,7 @@ val downloadFfmpeg by tasks.registering {
                     "src" to "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
                     "dest" to zipFile,
                     "skipexisting" to "true",
-                    "maxtime" to "300"
+                    "maxtime" to "1800"
                 ))
                 ant.invokeMethod("unzip", mapOf("src" to zipFile, "dest" to outputDir))
                 // Find the extracted ffmpeg.exe (nested in a version-named folder)

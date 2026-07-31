@@ -5,7 +5,7 @@ This file contains module-specific instructions. Shared standards are in `/modul
 ## Project Overview
 
 **Name**: Ignition Camera Driver Module
-**Version**: 3.2.1
+**Version**: 3.3.0
 **Status**: Production Ready
 **Language**: Java 17
 **Framework**: Inductive Automation Ignition SDK 8.3.0
@@ -37,7 +37,7 @@ in "Critical Bugs to Avoid" below. Do not go looking for a `.claude/` directory 
 ```bash
 cd /modules/ignition-module-camera-driver
 ./gradlew clean build
-# Output: build/CameraDriver-3.2.1.modl
+# Output: build/CameraDriver-3.3.0.modl
 ```
 
 ### Common Commands
@@ -232,5 +232,5 @@ Java packages are `com.gaskony.camera.*` as of v3.0.0 (renamed from `com.onvif.d
 
 ---
 
-**Last Updated**: 2026-07-03
-**Document Version**: 3.2.1
+**Last Updated**: 2026-07-31
+**Document Version**: 3.3.0

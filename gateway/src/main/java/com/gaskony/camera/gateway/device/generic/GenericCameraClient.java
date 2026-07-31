@@ -1,16 +1,19 @@
 package com.gaskony.camera.gateway.device.generic;
 
-import org.apache.http.HttpEntity;
-import org.apache.http.auth.AuthScope;
-import org.apache.http.auth.UsernamePasswordCredentials;
-import org.apache.http.client.CredentialsProvider;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.impl.client.BasicCredentialsProvider;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClientBuilder;
-import org.apache.http.util.EntityUtils;
+import org.apache.hc.client5.http.auth.AuthScope;
+import org.apache.hc.client5.http.auth.CredentialsStore;
+import org.apache.hc.client5.http.auth.UsernamePasswordCredentials;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.config.ConnectionConfig;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.auth.BasicCredentialsProvider;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
+import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.util.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,25 +37,36 @@ public class GenericCameraClient implements Closeable {
         this.snapshotUrl = snapshotUrl;
         this.mjpegUrl = mjpegUrl;
 
+        // HttpClient 5 moves the connect + socket (data-wait) timeouts onto the
+        // connection manager's ConnectionConfig; RequestConfig keeps only the
+        // connection-lease wait. Same timeoutMs duration on all three as before.
         int timeoutMs = timeoutSeconds * 1000;
+        Timeout timeoutDuration = Timeout.ofMilliseconds(timeoutMs);
 
         RequestConfig requestConfig = RequestConfig.custom()
-            .setConnectTimeout(timeoutMs)
-            .setSocketTimeout(timeoutMs)
-            .setConnectionRequestTimeout(timeoutMs)
+            .setConnectionRequestTimeout(timeoutDuration)
+            .setResponseTimeout(timeoutDuration)
             .setRedirectsEnabled(true)
             .setMaxRedirects(3)
             .build();
 
+        ConnectionConfig connectionConfig = ConnectionConfig.custom()
+            .setConnectTimeout(timeoutDuration)
+            .setSocketTimeout(timeoutDuration)
+            .build();
+
         HttpClientBuilder builder = HttpClientBuilder.create()
+            .setConnectionManager(PoolingHttpClientConnectionManagerBuilder.create()
+                .setDefaultConnectionConfig(connectionConfig)
+                .build())
             .setDefaultRequestConfig(requestConfig);
 
         // Add Basic Auth credentials if provided
         if (username != null && !username.trim().isEmpty()) {
-            CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
+            CredentialsStore credentialsProvider = new BasicCredentialsProvider();
             credentialsProvider.setCredentials(
-                AuthScope.ANY,
-                new UsernamePasswordCredentials(username, password != null ? password : "")
+                new AuthScope(null, -1),
+                new UsernamePasswordCredentials(username, password != null ? password.toCharArray() : new char[0])
             );
             builder.setDefaultCredentialsProvider(credentialsProvider);
         }
@@ -73,7 +87,7 @@ public class GenericCameraClient implements Closeable {
 
         HttpGet request = new HttpGet(snapshotUrl);
         try (CloseableHttpResponse response = httpClient.execute(request)) {
-            int statusCode = response.getStatusLine().getStatusCode();
+            int statusCode = response.getCode();
             if (statusCode != 200) {
                 throw new IOException("Snapshot request failed with status " + statusCode);
             }
@@ -104,7 +118,7 @@ public class GenericCameraClient implements Closeable {
 
         HttpGet request = new HttpGet(testUrl);
         try (CloseableHttpResponse response = httpClient.execute(request)) {
-            int statusCode = response.getStatusLine().getStatusCode();
+            int statusCode = response.getCode();
             // Consume entity to release connection
             EntityUtils.consumeQuietly(response.getEntity());
             boolean success = statusCode >= 200 && statusCode < 400;

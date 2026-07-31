@@ -1,11 +1,6 @@
 package com.gaskony.camera.gateway.onvif;
 
 import com.gaskony.camera.gateway.device.CameraConfig.SslValidationMode;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
-import org.apache.http.StatusLine;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.impl.client.CloseableHttpClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

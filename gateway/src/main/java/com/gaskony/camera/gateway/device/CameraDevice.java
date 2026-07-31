@@ -13,19 +13,23 @@ import com.gaskony.camera.gateway.onvif.PTZStatus;
 import com.gaskony.camera.gateway.servlet.handlers.SnapshotHandler;
 import com.gaskony.camera.gateway.stream.Go2RtcManager;
 import com.gaskony.camera.gateway.util.CredentialUtil;
-import org.apache.http.HttpResponse;
-import org.apache.http.auth.AuthScope;
-import org.apache.http.auth.UsernamePasswordCredentials;
-import org.apache.http.client.CredentialsProvider;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.conn.ssl.NoopHostnameVerifier;
-import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
-import org.apache.http.impl.client.BasicCredentialsProvider;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClientBuilder;
-import org.apache.http.ssl.SSLContextBuilder;
-import org.apache.http.util.EntityUtils;
+import org.apache.hc.client5.http.auth.AuthScope;
+import org.apache.hc.client5.http.auth.CredentialsStore;
+import org.apache.hc.client5.http.auth.UsernamePasswordCredentials;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.config.ConnectionConfig;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.auth.BasicCredentialsProvider;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.client5.http.ssl.DefaultClientTlsStrategy;
+import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.ssl.SSLContextBuilder;
+import org.apache.hc.core5.util.Timeout;
 import org.eclipse.milo.opcua.sdk.core.Reference;
 import org.eclipse.milo.opcua.sdk.server.ManagedAddressSpaceWithLifecycle;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaFolderNode;
@@ -490,30 +494,50 @@ public class CameraDevice extends ManagedAddressSpaceWithLifecycle implements De
      * Creates a short-timeout HTTP client for probing with auth and SSL support.
      */
     private CloseableHttpClient createProbeHttpClient(String username, String password, boolean useHttps) throws Exception {
+        // HttpClient 5 splits the old single connect/socket/connectionRequest
+        // timeout trio across two objects: RequestConfig keeps the
+        // connection-lease wait, while connect + socket (data-wait) timeouts
+        // move to the connection manager's ConnectionConfig. All three keep the
+        // same PROBE_TIMEOUT_MS duration as before.
+        Timeout probeTimeout = Timeout.ofMilliseconds(PROBE_TIMEOUT_MS);
+
         RequestConfig probeConfig = RequestConfig.custom()
-            .setConnectTimeout(PROBE_TIMEOUT_MS)
-            .setSocketTimeout(PROBE_TIMEOUT_MS)
-            .setConnectionRequestTimeout(PROBE_TIMEOUT_MS)
+            .setConnectionRequestTimeout(probeTimeout)
+            .setResponseTimeout(probeTimeout)
             .setRedirectsEnabled(true)
             .build();
 
-        HttpClientBuilder builder = HttpClientBuilder.create()
-            .setDefaultRequestConfig(probeConfig);
+        ConnectionConfig connectionConfig = ConnectionConfig.custom()
+            .setConnectTimeout(probeTimeout)
+            .setSocketTimeout(probeTimeout)
+            .build();
 
-        // Add credentials for Basic/Digest auth
-        if (username != null && !username.isEmpty()) {
-            CredentialsProvider creds = new BasicCredentialsProvider();
-            creds.setCredentials(AuthScope.ANY,
-                new UsernamePasswordCredentials(username, password != null ? password : ""));
-            builder.setDefaultCredentialsProvider(creds);
-        }
+        PoolingHttpClientConnectionManagerBuilder connectionManagerBuilder =
+            PoolingHttpClientConnectionManagerBuilder.create()
+                .setDefaultConnectionConfig(connectionConfig);
 
-        // Accept any certificate for probing (cameras commonly use self-signed)
+        // Accept any certificate for probing (cameras commonly use self-signed).
+        // Custom TLS now goes through the connection manager as a TlsSocketStrategy
+        // rather than the client builder directly.
         if (useHttps) {
             SSLContext sslContext = SSLContextBuilder.create()
                 .loadTrustMaterial(null, (chain, authType) -> true)
                 .build();
-            builder.setSSLSocketFactory(new SSLConnectionSocketFactory(sslContext, NoopHostnameVerifier.INSTANCE));
+            connectionManagerBuilder.setTlsSocketStrategy(
+                new DefaultClientTlsStrategy(sslContext, NoopHostnameVerifier.INSTANCE));
+        }
+
+        HttpClientBuilder builder = HttpClientBuilder.create()
+            .setConnectionManager(connectionManagerBuilder.build())
+            .setDefaultRequestConfig(probeConfig);
+
+        // Add credentials for Basic/Digest auth
+        if (username != null && !username.isEmpty()) {
+            CredentialsStore creds = new BasicCredentialsProvider();
+            creds.setCredentials(new AuthScope(null, -1),
+                new UsernamePasswordCredentials(username,
+                    (password != null ? password : "").toCharArray()));
+            builder.setDefaultCredentialsProvider(creds);
         }
 
         return builder.build();
@@ -524,19 +548,19 @@ public class CameraDevice extends ManagedAddressSpaceWithLifecycle implements De
      */
     private boolean testHttpImageUrl(CloseableHttpClient client, String url) {
         HttpGet get = new HttpGet(url);
-        try {
-            HttpResponse response = client.execute(get);
-            int statusCode = response.getStatusLine().getStatusCode();
-            String contentType = response.getEntity() != null && response.getEntity().getContentType() != null
-                ? response.getEntity().getContentType().getValue() : "";
-            EntityUtils.consumeQuietly(response.getEntity());
+        // try-with-resources releases the pooled connection on every path —
+        // HttpClient 5 request objects no longer expose releaseConnection().
+        try (ClassicHttpResponse response = client.execute(get)) {
+            int statusCode = response.getCode();
+            HttpEntity entity = response.getEntity();
+            String contentType = entity != null && entity.getContentType() != null
+                ? entity.getContentType() : "";
+            EntityUtils.consumeQuietly(entity);
 
             return statusCode == 200 && contentType.startsWith("image/");
         } catch (Exception e) {
             logger.trace("Snapshot probe {} — {}", url, e.getMessage());
             return false;
-        } finally {
-            get.releaseConnection();
         }
     }
 
@@ -546,19 +570,19 @@ public class CameraDevice extends ManagedAddressSpaceWithLifecycle implements De
      */
     private boolean testHttpStreamUrl(CloseableHttpClient client, String url) {
         HttpGet get = new HttpGet(url);
-        try {
-            HttpResponse response = client.execute(get);
-            int statusCode = response.getStatusLine().getStatusCode();
-            String contentType = response.getEntity() != null && response.getEntity().getContentType() != null
-                ? response.getEntity().getContentType().getValue().toLowerCase() : "";
-            EntityUtils.consumeQuietly(response.getEntity());
+        // try-with-resources releases the pooled connection on every path —
+        // HttpClient 5 request objects no longer expose releaseConnection().
+        try (ClassicHttpResponse response = client.execute(get)) {
+            int statusCode = response.getCode();
+            HttpEntity entity = response.getEntity();
+            String contentType = entity != null && entity.getContentType() != null
+                ? entity.getContentType().toLowerCase() : "";
+            EntityUtils.consumeQuietly(entity);
 
             return statusCode == 200 && (contentType.contains("multipart") || contentType.contains("video"));
         } catch (Exception e) {
             logger.trace("MJPEG probe {} — {}", url, e.getMessage());
             return false;
-        } finally {
-            get.releaseConnection();
         }
     }
 

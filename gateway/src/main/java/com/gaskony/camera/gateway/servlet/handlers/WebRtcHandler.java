@@ -9,14 +9,18 @@ import com.gaskony.camera.gateway.servlet.RateLimiter;
 import com.gaskony.camera.gateway.stream.Go2RtcManager;
 import com.gaskony.camera.gateway.util.ValidationUtil;
 import jakarta.servlet.http.HttpServletResponse;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.ContentType;
-import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClientBuilder;
-import org.apache.http.util.EntityUtils;
+import org.apache.hc.client5.http.classic.methods.HttpPost;
+import org.apache.hc.client5.http.config.ConnectionConfig;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
+import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.http.ParseException;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.http.io.entity.StringEntity;
+import org.apache.hc.core5.util.Timeout;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -94,19 +98,27 @@ public class WebRtcHandler extends BaseHandler {
 
         String signalingUrl = go2RtcManager.getWebRtcSignalingUrl(deviceName);
 
+        // HttpClient 5 moves the connect timeout onto the connection manager's
+        // ConnectionConfig; RequestConfig's setResponseTimeout replaces the old
+        // socketTimeout. Same two durations as before.
         RequestConfig proxyConfig = RequestConfig.custom()
-            .setConnectTimeout(CONNECT_TIMEOUT_MS)
-            .setSocketTimeout(SOCKET_TIMEOUT_MS)
+            .setResponseTimeout(Timeout.ofMilliseconds(SOCKET_TIMEOUT_MS))
+            .build();
+        ConnectionConfig connectionConfig = ConnectionConfig.custom()
+            .setConnectTimeout(Timeout.ofMilliseconds(CONNECT_TIMEOUT_MS))
             .build();
 
         try (CloseableHttpClient proxyClient = HttpClientBuilder.create()
+                .setConnectionManager(PoolingHttpClientConnectionManagerBuilder.create()
+                    .setDefaultConnectionConfig(connectionConfig)
+                    .build())
                 .setDefaultRequestConfig(proxyConfig).build()) {
             HttpPost post = new HttpPost(signalingUrl);
             post.setEntity(new StringEntity(offer, ContentType.create(SDP_CONTENT_TYPE, StandardCharsets.UTF_8)));
             go2RtcManager.applyApiAuth(post);
 
             try (CloseableHttpResponse upstream = proxyClient.execute(post)) {
-                int statusCode = upstream.getStatusLine().getStatusCode();
+                int statusCode = upstream.getCode();
                 String body = upstream.getEntity() != null
                     ? EntityUtils.toString(upstream.getEntity(), StandardCharsets.UTF_8)
                     : "";
@@ -115,7 +127,7 @@ public class WebRtcHandler extends BaseHandler {
                 response.setContentType(SDP_CONTENT_TYPE);
                 response.getWriter().write(body);
             }
-        } catch (IOException e) {
+        } catch (IOException | ParseException e) {
             // Do NOT log the SDP offer/answer or signalingUrl credentials.
             logger.warn("go2rtc WebRTC signaling failed for device {}: {}", deviceName, e.getMessage());
             if (!response.isCommitted()) {

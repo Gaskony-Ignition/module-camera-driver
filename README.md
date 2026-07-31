@@ -35,7 +35,7 @@ URLs for RTSP, MJPEG, and snapshot can be entered directly or auto-detected via 
 
 ## Current Status
 
-**Version**: 3.2.1 | **Status**: Production Ready
+**Version**: 3.3.0 | **Status**: Production Ready
 
 ### Key Features
 
@@ -58,7 +58,7 @@ URLs for RTSP, MJPEG, and snapshot can be entered directly or auto-detected via 
 ```bash
 cd /modules/ignition-module-camera-driver
 ./gradlew clean build
-# Output: build/CameraDriver-3.2.1.modl
+# Output: build/CameraDriver-3.3.0.modl
 ```
 
 ### 2. Install

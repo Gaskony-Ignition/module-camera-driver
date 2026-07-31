@@ -5,6 +5,81 @@ All notable changes to the Ignition Camera Driver module will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-07-31
+
+**Type:** MINOR — Apache HttpClient 4 → 5 migration (shipped dependency set changes materially)
+
+### Changed
+
+- **Migrated all HTTP client code from Apache HttpClient 4.5.14 / HttpCore 4.4.16 to
+  HttpClient5 5.6.2 / HttpCore5 5.4.3** (`modlImplementation`, matching the version already
+  proven in production by `ignition-module-git`). Every `org.apache.http.*` reference in the
+  module is gone — `ONVIFClient` (SOAP client), `CameraDevice` (stream-discovery probing),
+  `Go2RtcManager` (go2rtc REST API + stream proxying), `StreamHandler` (MJPEG proxy/stream),
+  `WebRtcHandler` (WebRTC SDP signaling proxy), and `GenericCameraClient` (snapshot/MJPEG HTTP
+  client) all now use `org.apache.hc.client5.http.*` / `org.apache.hc.core5.http.*`.
+- **Every timeout carried over at the same duration**, split across HttpClient 5's two
+  timeout homes (`RequestConfig.setConnectTimeout()` is deprecated in 5.x and does nothing on
+  a pooling connection manager): connect and socket/data-wait timeouts now live on
+  `ConnectionConfig` (applied via `PoolingHttpClientConnectionManagerBuilder`), while
+  `RequestConfig` keeps the connection-lease wait (`connectionRequestTimeout`) and the
+  response wait (`responseTimeout`, replacing the old `socketTimeout`). Affected: ONVIF
+  client (operator-configured timeout, both connect+response), device stream-discovery probes
+  (`PROBE_TIMEOUT_MS` = 1000ms), go2rtc API calls (`HTTP_TIMEOUT_MS` = 5000ms),
+  `StreamHandler` proxy (5s connect / 30s response), `WebRtcHandler` signaling (5s connect /
+  10s response), and `GenericCameraClient` (operator-configured timeout).
+- **All three `sslValidationMode` behaviours (STRICT / TRUST_FIRST_USE / INSECURE) ported
+  unchanged.** Custom TLS now goes through the connection manager as a `TlsSocketStrategy`
+  (`DefaultClientTlsStrategy`) instead of a client-builder-level socket factory.
+  `NoopHostnameVerifier` (INSECURE) and the JVM default hostname verifier via
+  `HttpsSupport.getDefaultHostnameVerifier()` (STRICT) moved package but are otherwise the
+  same classes; TRUST_FIRST_USE still falls back to STRICT with the same warning (it was
+  never implemented as certificate pinning). No mode was weakened.
+- **`StreamHandler`'s MJPEG/fMP4 proxy streaming was ported mechanically, not restructured**:
+  it still opens a `ClassicHttpResponse`/`HttpEntity` and reads `entity.getContent()` manually
+  on the same bounded write-thread-with-timeout path, so entity consumption and connection
+  release happen at exactly the same points as before. `Go2RtcManager`'s stream-management
+  API calls (add/remove/fetch/health-check) got the same faithful, non-restructuring port.
+- `EntityUtils.toString(...)` now also throws checked `ParseException`
+  (`org.apache.hc.core5.http.ParseException`, not an `IOException` subtype): wrapped into
+  `IOException` in `ONVIFClient.sendSoapRequest()` to preserve its existing `throws IOException`
+  contract, and added to `WebRtcHandler`'s existing upstream-failure catch (already handled
+  transparently by `Go2RtcManager.getStreamInfo()`'s pre-existing broad `catch (Exception)`).
+- `UsernamePasswordCredentials` now takes a `char[]` password and `AuthScope.ANY` no longer
+  exists — replaced with `new AuthScope(null, -1)` (matches any host/port, the documented 5.x
+  equivalent) across `ONVIFClient`, `CameraDevice`'s probe client, and `GenericCameraClient`.
+- Removed `HttpUriRequestBase`'s `releaseConnection()` calls (no longer exists in 5.x) in
+  favour of try-with-resources on the response, which is HttpClient 5's mechanism for
+  releasing a pooled connection — equivalent-or-safer, not a semantics change.
+- `ONVIFClientTest` — removed five dead `org.apache.http.*` imports left over from an earlier,
+  since-simplified mocking attempt; they were unused by any test body (verified before removal).
+
+### Verified
+
+- **Live acceptance against the real FrontPTZ camera** (REOLINK RLC-823A 16X, ONVIF on
+  port 8000), not just unit tests — these are the paths unit tests cannot reach:
+  `GetDeviceInformation` returned manufacturer/model/firmware/serial, which requires a
+  full SOAP round trip *with* WS-UsernameToken digest auth to have succeeded on the new
+  stack; `GetProfiles` returned 2 real media profiles; PTZ capability detected; and
+  `/stream` served live fMP4 (`ftyp`/`moov`/`moof`/`mdat` boxes, `video/mp4;
+  codecs="avc1.640029"`) proxied through `StreamHandler` from go2rtc — the one path where
+  entity-consumption and connection-release timing changed in HttpClient 5, and the one a
+  snapshot fetch never exercises. go2rtc itself came up alive from the bundled binaries
+  (port 1984, 0 restarts).
+- **Snapshot returns HTTP 500 "No snapshot source available"** on this device — and that
+  is NOT a regression from this migration. Confirmed by installing 3.2.1 (the HttpClient
+  4 build) on the same gateway against the same device config and getting a byte-for-byte
+  identical failure. The device has `enableSnapshot: true` with no snapshot URL
+  configured, and the module does not call ONVIF `GetSnapshotUri` to discover one. That
+  is a genuine pre-existing gap, tracked separately — it predates this work and was not
+  fixed here, because a dependency migration is the wrong place to change behaviour.
+
+- **Packaging verified by unzipping the built `.modl`**: `httpclient5-5.6.2.jar` and
+  `httpcore5-5.4.3.jar` are present; `httpclient-4.*.jar`, `httpcore-4.*.jar`,
+  `commons-logging-*.jar`, and `commons-codec-*.jar` are gone — HttpClient 5 has no runtime
+  dependency on the latter two, so dropping them is a genuine (if small) reduction in the
+  module's shipped surface, not just a version bump.
+
 ## [3.2.1] - 2026-07-30
 
 **Type:** PATCH — dependency audit (compileOnly/modlImplementation/testImplementation review)

@@ -11,11 +11,15 @@ import com.gaskony.camera.gateway.servlet.RateLimiter;
 import com.gaskony.camera.gateway.stream.Go2RtcManager;
 import com.gaskony.camera.gateway.util.ValidationUtil;
 import jakarta.servlet.http.HttpServletResponse;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.config.ConnectionConfig;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
+import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.util.Timeout;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -461,16 +465,25 @@ public class StreamHandler extends BaseHandler {
             return PROXY_CONNECT_ERROR;
         }
 
+        // HttpClient 5 moves the connect timeout onto the connection manager's
+        // ConnectionConfig; RequestConfig's setResponseTimeout replaces the old
+        // socketTimeout (time waiting for upstream data). Same two durations as
+        // before: 5s connect, 30s response/data-wait.
         RequestConfig proxyConfig = RequestConfig.custom()
-            .setConnectTimeout(5000)
-            .setSocketTimeout(30000)
+            .setResponseTimeout(Timeout.ofMilliseconds(30000))
+            .build();
+        ConnectionConfig connectionConfig = ConnectionConfig.custom()
+            .setConnectTimeout(Timeout.ofMilliseconds(5000))
             .build();
 
         try (CloseableHttpClient proxyClient = HttpClientBuilder.create()
+                .setConnectionManager(PoolingHttpClientConnectionManagerBuilder.create()
+                    .setDefaultConnectionConfig(connectionConfig)
+                    .build())
                 .setDefaultRequestConfig(proxyConfig).build()) {
             HttpGet request = new HttpGet(sourceUrl);
             try (CloseableHttpResponse upstream = proxyClient.execute(request)) {
-                int statusCode = upstream.getStatusLine().getStatusCode();
+                int statusCode = upstream.getCode();
                 if (statusCode != 200) {
                     // Do NOT log sourceUrl — it can embed camera credentials.
                     logger.warn("Stream proxy got HTTP {} from upstream source for device {}",
@@ -478,9 +491,9 @@ public class StreamHandler extends BaseHandler {
                     return statusCode;
                 }
 
-                org.apache.http.HttpEntity entity = upstream.getEntity();
+                HttpEntity entity = upstream.getEntity();
                 if (entity != null && entity.getContentType() != null) {
-                    String upstreamContentType = entity.getContentType().getValue();
+                    String upstreamContentType = entity.getContentType();
                     if (!response.isCommitted()) {
                         response.setContentType(upstreamContentType);
                     }

@@ -2,30 +2,36 @@ package com.gaskony.camera.gateway.onvif;
 
 import com.gaskony.camera.gateway.device.CameraConfig.SslValidationMode;
 import com.gaskony.camera.gateway.onvif.util.XmlUtil;
-import org.apache.http.Header;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
-import org.apache.http.auth.AuthScope;
-import org.apache.http.auth.UsernamePasswordCredentials;
-import org.apache.http.client.CredentialsProvider;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.conn.ssl.NoopHostnameVerifier;
-import org.apache.http.impl.client.BasicCredentialsProvider;
-import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
-import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClientBuilder;
-import org.apache.http.ssl.SSLContextBuilder;
-import org.apache.http.ssl.TrustStrategy;
-import org.apache.http.util.EntityUtils;
+import org.apache.hc.client5.http.auth.AuthScope;
+import org.apache.hc.client5.http.auth.CredentialsStore;
+import org.apache.hc.client5.http.auth.UsernamePasswordCredentials;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.classic.methods.HttpPost;
+import org.apache.hc.client5.http.config.ConnectionConfig;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.auth.BasicCredentialsProvider;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.client5.http.ssl.DefaultClientTlsStrategy;
+import org.apache.hc.client5.http.ssl.HttpsSupport;
+import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.Header;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.ParseException;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.http.io.entity.StringEntity;
+import org.apache.hc.core5.ssl.SSLContextBuilder;
+import org.apache.hc.core5.ssl.TrustStrategy;
+import org.apache.hc.core5.util.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
+import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
 import java.io.Closeable;
 import java.io.IOException;
@@ -74,42 +80,59 @@ public class ONVIFClient implements Closeable {
         this.timeout = timeout * 1000; // Convert to milliseconds
         this.sslValidationMode = sslValidationMode != null ? sslValidationMode : SslValidationMode.STRICT;
 
-        // Configure HTTP client
+        // Configure HTTP client.
+        // HttpClient 5 splits what HttpClient 4's RequestConfig.setConnectTimeout()
+        // used to cover: the connect-timeout and socket (data-wait) timeout now live
+        // on the connection manager's ConnectionConfig, while RequestConfig itself
+        // only carries the connection-lease wait (connectionRequestTimeout) and the
+        // response-wait (responseTimeout, HttpClient 4's old socketTimeout). Every
+        // one of the three original timeouts is preserved at the same duration.
+        Timeout timeoutDuration = Timeout.ofMilliseconds(this.timeout);
+
         RequestConfig requestConfig = RequestConfig.custom()
-            .setConnectTimeout(this.timeout)
-            .setSocketTimeout(this.timeout)
-            .setConnectionRequestTimeout(this.timeout)
+            .setConnectionRequestTimeout(timeoutDuration)
+            .setResponseTimeout(timeoutDuration)
             .setRedirectsEnabled(true)  // CRITICAL: Follow HTTP -> HTTPS redirects
             .setMaxRedirects(5)
             .build();
 
-        HttpClientBuilder clientBuilder = HttpClientBuilder.create()
-            .setDefaultRequestConfig(requestConfig);
+        ConnectionConfig connectionConfig = ConnectionConfig.custom()
+            .setConnectTimeout(timeoutDuration)
+            .setSocketTimeout(timeoutDuration)
+            .build();
 
-        // Configure HTTP authentication for snapshot URLs
-        CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
-        credentialsProvider.setCredentials(
-            AuthScope.ANY,
-            new UsernamePasswordCredentials(username, password)
-        );
-        clientBuilder.setDefaultCredentialsProvider(credentialsProvider);
+        PoolingHttpClientConnectionManagerBuilder connectionManagerBuilder =
+            PoolingHttpClientConnectionManagerBuilder.create()
+                .setDefaultConnectionConfig(connectionConfig);
 
-        // Configure SSL/TLS based on validation mode
+        // Configure SSL/TLS based on validation mode. In HttpClient 5, custom TLS
+        // (context + hostname verification policy) is applied to the connection
+        // manager as a TlsSocketStrategy rather than to the client builder directly.
         try {
             SSLContext sslContext = createSSLContext(this.sslValidationMode);
-            SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(
-                sslContext,
-                this.sslValidationMode == SslValidationMode.STRICT
-                    ? SSLConnectionSocketFactory.getDefaultHostnameVerifier()
-                    : NoopHostnameVerifier.INSTANCE
-            );
-            clientBuilder.setSSLSocketFactory(sslSocketFactory);
+            HostnameVerifier hostnameVerifier = this.sslValidationMode == SslValidationMode.STRICT
+                ? HttpsSupport.getDefaultHostnameVerifier()
+                : NoopHostnameVerifier.INSTANCE;
+            connectionManagerBuilder.setTlsSocketStrategy(
+                new DefaultClientTlsStrategy(sslContext, hostnameVerifier));
             logger.info("SSL configured with {} mode (device uses {})",
                 this.sslValidationMode, useHttps ? "HTTPS" : "HTTP");
         } catch (Exception e) {
             logger.warn("Failed to configure SSL context: {}", e.getMessage());
             logger.warn("HTTPS connections may fail with certificate errors");
         }
+
+        HttpClientBuilder clientBuilder = HttpClientBuilder.create()
+            .setConnectionManager(connectionManagerBuilder.build())
+            .setDefaultRequestConfig(requestConfig);
+
+        // Configure HTTP authentication for snapshot URLs
+        CredentialsStore credentialsProvider = new BasicCredentialsProvider();
+        credentialsProvider.setCredentials(
+            new AuthScope(null, -1),
+            new UsernamePasswordCredentials(username, password != null ? password.toCharArray() : new char[0])
+        );
+        clientBuilder.setDefaultCredentialsProvider(credentialsProvider);
 
         this.httpClient = clientBuilder.build();
 
@@ -443,7 +466,7 @@ public class ONVIFClient implements Closeable {
      * @throws IOException if communication fails
      */
     private String sendSoapRequest(String url, String soapRequest) throws IOException {
-        // Apache HttpClient 4 does not follow redirects for POST automatically.
+        // Apache HttpClient does not follow redirects for POST automatically.
         // ONVIF cameras sometimes redirect HTTP→HTTPS (302) or change paths, so we handle
         // 3xx responses manually and re-POST to the Location URL (up to 3 hops).
         //
@@ -464,9 +487,8 @@ public class ONVIFClient implements Closeable {
             post.setHeader("Content-Type", "application/soap+xml; charset=utf-8");
             post.setEntity(new StringEntity(soapRequest, StandardCharsets.UTF_8));
 
-            try {
-                HttpResponse response = httpClient.execute(post);
-                int statusCode = response.getStatusLine().getStatusCode();
+            try (ClassicHttpResponse response = httpClient.execute(post)) {
+                int statusCode = response.getCode();
 
                 if (statusCode >= 300 && statusCode < 400) {
                     Header location = response.getFirstHeader("Location");
@@ -504,7 +526,12 @@ public class ONVIFClient implements Closeable {
 
                 HttpEntity entity = response.getEntity();
                 if (entity != null) {
-                    String responseBody = EntityUtils.toString(entity);
+                    String responseBody;
+                    try {
+                        responseBody = EntityUtils.toString(entity);
+                    } catch (ParseException e) {
+                        throw new IOException("Failed to parse SOAP response body from: " + currentUrl, e);
+                    }
                     if (statusCode != 200) {
                         throw new IOException("SOAP request failed with status " + statusCode + ": " + responseBody);
                     }
@@ -782,19 +809,21 @@ public class ONVIFClient implements Closeable {
         // Create HTTP GET request
         HttpGet httpGet = new HttpGet(snapshotUri);
 
-        try {
-            // Execute request
-            HttpResponse response = httpClient.execute(httpGet);
+        // try-with-resources on the response guarantees the pooled connection is
+        // released back to the manager on every path (success, non-200, or
+        // exception) — HttpClient 5's request objects no longer expose a
+        // releaseConnection() method, so closing the response is the mechanism.
+        try (ClassicHttpResponse response = httpClient.execute(httpGet)) {
             HttpEntity entity = response.getEntity();
 
-            int statusCode = response.getStatusLine().getStatusCode();
+            int statusCode = response.getCode();
 
             if (statusCode != 200) {
                 // FIX H4: consume the entity before throwing so the pooled connection
                 // is returned to the pool rather than left in an unusable state.
                 EntityUtils.consumeQuietly(entity);
                 String errorMsg = String.format("Snapshot request failed with status %d: %s",
-                    statusCode, response.getStatusLine().getReasonPhrase());
+                    statusCode, response.getReasonPhrase());
                 logger.error(errorMsg);
                 throw new IOException(errorMsg);
             }
@@ -813,8 +842,6 @@ public class ONVIFClient implements Closeable {
         } catch (IOException e) {
             logger.error("Failed to retrieve snapshot from {}: {}", snapshotUri, e.getMessage());
             throw e;
-        } finally {
-            httpGet.releaseConnection();
         }
     }
 

@@ -1,13 +1,17 @@
 package com.gaskony.camera.gateway.stream;
 
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpDelete;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPut;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClientBuilder;
-import org.apache.http.util.EntityUtils;
+import org.apache.hc.client5.http.classic.methods.HttpDelete;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.classic.methods.HttpPut;
+import org.apache.hc.client5.http.config.ConnectionConfig;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
+import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.core5.http.HttpRequest;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.util.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -184,13 +188,23 @@ public class Go2RtcManager {
             return;
         }
 
-        // Create HTTP client for API calls
+        // Create HTTP client for API calls.
+        // HttpClient 5 moves the connect + socket (data-wait) timeouts onto the
+        // connection manager's ConnectionConfig; RequestConfig keeps only the
+        // connection-lease wait. All three keep the same HTTP_TIMEOUT_MS duration.
+        Timeout httpTimeout = Timeout.ofMilliseconds(HTTP_TIMEOUT_MS);
         RequestConfig requestConfig = RequestConfig.custom()
-            .setConnectTimeout(HTTP_TIMEOUT_MS)
-            .setSocketTimeout(HTTP_TIMEOUT_MS)
-            .setConnectionRequestTimeout(HTTP_TIMEOUT_MS)
+            .setConnectionRequestTimeout(httpTimeout)
+            .setResponseTimeout(httpTimeout)
+            .build();
+        ConnectionConfig connectionConfig = ConnectionConfig.custom()
+            .setConnectTimeout(httpTimeout)
+            .setSocketTimeout(httpTimeout)
             .build();
         httpClient = HttpClientBuilder.create()
+            .setConnectionManager(PoolingHttpClientConnectionManagerBuilder.create()
+                .setDefaultConnectionConfig(connectionConfig)
+                .build())
             .setDefaultRequestConfig(requestConfig)
             .build();
 
@@ -501,7 +515,7 @@ public class Go2RtcManager {
      *
      * @param request the outgoing request to add the Authorization header to
      */
-    public void applyApiAuth(org.apache.http.HttpRequest request) {
+    public void applyApiAuth(HttpRequest request) {
         if (apiPassword == null) return;
         String credentials = "admin:" + apiPassword;
         String encoded = Base64.getEncoder().encodeToString(
@@ -531,7 +545,7 @@ public class Go2RtcManager {
             HttpPut request = new HttpPut(url);
             applyApiAuth(request);
             try (CloseableHttpResponse response = httpClient.execute(request)) {
-                int statusCode = response.getStatusLine().getStatusCode();
+                int statusCode = response.getCode();
                 EntityUtils.consumeQuietly(response.getEntity());
                 if (statusCode >= 200 && statusCode < 300) {
                     logger.info("Stream '{}' added to go2rtc", streamName);
@@ -566,7 +580,7 @@ public class Go2RtcManager {
             HttpDelete request = new HttpDelete(url);
             applyApiAuth(request);
             try (CloseableHttpResponse response = httpClient.execute(request)) {
-                int statusCode = response.getStatusLine().getStatusCode();
+                int statusCode = response.getCode();
                 EntityUtils.consumeQuietly(response.getEntity());
                 if (statusCode >= 200 && statusCode < 300) {
                     logger.info("Stream '{}' removed from go2rtc", streamName);
@@ -659,7 +673,7 @@ public class Go2RtcManager {
             HttpGet request = new HttpGet(url);
             applyApiAuth(request);
             try (CloseableHttpResponse response = httpClient.execute(request)) {
-                int statusCode = response.getStatusLine().getStatusCode();
+                int statusCode = response.getCode();
                 if (statusCode == 200 && response.getEntity() != null) {
                     return EntityUtils.toByteArray(response.getEntity());
                 } else {
@@ -696,7 +710,7 @@ public class Go2RtcManager {
             applyApiAuth(request);
             try (CloseableHttpResponse response = httpClient.execute(request)) {
                 EntityUtils.consumeQuietly(response.getEntity());
-                boolean result = response.getStatusLine().getStatusCode() < 500;
+                boolean result = response.getCode() < 500;
                 lastHealthCheckResult = result;
                 lastHealthCheckTime = System.currentTimeMillis();
                 return result;
@@ -778,7 +792,7 @@ public class Go2RtcManager {
             HttpGet request = new HttpGet(url);
             applyApiAuth(request);
             try (CloseableHttpResponse response = httpClient.execute(request)) {
-                int statusCode = response.getStatusLine().getStatusCode();
+                int statusCode = response.getCode();
                 if (statusCode == 200 && response.getEntity() != null) {
                     String body = EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
                     JSONObject streams = new JSONObject(body);

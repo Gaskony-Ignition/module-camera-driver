@@ -2,8 +2,8 @@
 ignition = "8.3.0"
 gson = "2.14.0"
 jakarta-servlet = "5.0.0"
-httpclient = "4.5.14"
-httpcore = "4.4.16"
+httpclient5 = "5.6.2"
+httpcore5 = "5.4.3"
 junit-jupiter = "5.14.4"
 junit-platform-launcher = "1.14.4"
 mockito = "5.23.0"
@@ -20,8 +20,8 @@ perspective-designer = { module = "com.inductiveautomation.ignitionsdk:perspecti
 perspective-gateway = { module = "com.inductiveautomation.ignitionsdk:perspective-gateway", version.ref = "ignition" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 jakarta-servlet = { module = "jakarta.servlet:jakarta.servlet-api", version.ref = "jakarta-servlet" }
-httpclient = { module = "org.apache.httpcomponents:httpclient", version.ref = "httpclient" }
-httpcore = { module = "org.apache.httpcomponents:httpcore", version.ref = "httpcore" }
+httpclient5 = { module = "org.apache.httpcomponents.client5:httpclient5", version.ref = "httpclient5" }
+httpcore5 = { module = "org.apache.httpcomponents.core5:httpcore5", version.ref = "httpcore5" }
 junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit-jupiter" }
 junit-jupiter-params = { module = "org.junit.jupiter:junit-jupiter-params", version.ref = "junit-jupiter" }
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit-jupiter" }

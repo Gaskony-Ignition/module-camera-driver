@@ -13,7 +13,7 @@ configure<org.owasp.dependencycheck.gradle.extension.DependencyCheckExtension> {
     analyzers.assemblyEnabled = false
 }
 
-version = "3.2.1"
+version = "3.3.0"
 group = "com.gaskony"
 
 allprojects {
@@ -129,4 +129,88 @@ tasks.register("syncVersion") {
 
 tasks.named("assembleModlStructure") {
     dependsOn("syncVersion")
+}
+
+// ---------------------------------------------------------------------------
+// verifyModulePackaging — assert what is actually INSIDE the built .modl.
+//
+// Added 31/07/2026 after two packaging defects reached a green build in the
+// same afternoon, neither of which any test could have caught:
+//   1. The ffmpeg download task silently no-opped (see the note on
+//      downloadFfmpeg), producing a 19MB .modl instead of 110MB with snapshot
+//      extraction quietly missing.
+//   2. Migrating to httpclient5 dragged in a transitive slf4j-api, shipping a
+//      competing copy of a logging facade that must never be bundled.
+//
+// modules/CLAUDE.md already says "verify packaging by unzipping the built
+// .modl" — a build file is the honest place for that rule, because a rule
+// enforced by remembering is a rule that holds until the day it matters.
+// ---------------------------------------------------------------------------
+val verifyModulePackaging by tasks.registering {
+    description = "Fails the build if the packaged .modl is missing required content or ships a forbidden library"
+    group = "verification"
+    dependsOn("signModule")
+
+    doLast {
+        val modl = layout.buildDirectory.get().asFile
+            .listFiles { f -> f.name.endsWith(".modl") && !f.name.endsWith(".unsigned.modl") }
+            ?.maxByOrNull { it.lastModified() }
+            ?: throw GradleException("verifyModulePackaging: no signed .modl found in ${layout.buildDirectory.get()}")
+
+        val entries = mutableListOf<String>()
+        java.util.zip.ZipFile(modl).use { zip ->
+            zip.entries().asSequence().forEach { e ->
+                entries += e.name
+                // Binaries live inside gateway-<version>.jar, so look one level in.
+                if (e.name.startsWith("gateway-") && e.name.endsWith(".jar")) {
+                    java.util.zip.ZipInputStream(zip.getInputStream(e)).use { inner ->
+                        generateSequence { inner.nextEntry }.forEach { entries += "gateway.jar!/" + it.name }
+                    }
+                }
+            }
+        }
+
+        val problems = mutableListOf<String>()
+
+        // Required: our own shipped HTTP stack.
+        listOf("httpclient5-", "httpcore5-").forEach { prefix ->
+            if (entries.none { it.startsWith(prefix) && it.endsWith(".jar") }) {
+                problems += "missing required jar starting '$prefix'"
+            }
+        }
+
+        // Required: the bundled streaming binaries. D7-style self-containment —
+        // the module must work air-gapped, so a missing binary is a broken release.
+        listOf(
+            "gateway.jar!/go2rtc/go2rtc_linux_amd64",
+            "gateway.jar!/go2rtc/go2rtc_linux_arm64",
+            "gateway.jar!/go2rtc/go2rtc_windows_amd64.exe",
+            "gateway.jar!/ffmpeg/ffmpeg_linux_amd64",
+            "gateway.jar!/ffmpeg/ffmpeg_linux_arm64",
+            "gateway.jar!/ffmpeg/ffmpeg_windows_amd64.exe",
+        ).forEach { required ->
+            if (entries.none { it == required }) problems += "missing bundled binary: $required"
+        }
+
+        // Forbidden: boundary libraries the platform must provide. Shipping our
+        // own copy of these is the failure mode modules/CLAUDE.md exists to stop.
+        listOf("slf4j-api-", "slf4j-simple-", "jetty-", "jakarta.servlet-", "httpclient-4", "httpcore-4")
+            .forEach { prefix ->
+                entries.filter { it.startsWith(prefix) && it.endsWith(".jar") }
+                    .forEach { problems += "FORBIDDEN jar shipped in .modl: $it" }
+            }
+
+        if (problems.isNotEmpty()) {
+            throw GradleException(
+                "verifyModulePackaging FAILED for ${modl.name}:\n  " + problems.joinToString("\n  ") +
+                    "\n\nA green build is not proof of a correct package — see the notes on " +
+                    "downloadFfmpeg and the httpclient5 slf4j exclusion in gateway/build.gradle.kts."
+            )
+        }
+        logger.lifecycle("verifyModulePackaging: ${modl.name} OK (${entries.size} entries checked)")
+    }
+}
+
+tasks.named("build") {
+    dependsOn(verifyModulePackaging)
 }
