@@ -1,5 +1,7 @@
 # Ignition Camera Driver Module
 
+A single unified **Camera** device type for Ignition 8.3 that brings live video, PTZ control, and camera health straight into the platform — no separate VMS window, no vendor lock-in.
+
 ## Why this exists
 
 SCADA is supervisory control and data acquisition — and in today's world, no
@@ -16,13 +18,50 @@ The full purpose, definition of done, and permanent won't-do list live in
 [docs/PROJECT_CHARTER.md](docs/PROJECT_CHARTER.md) — the charter drives every
 release decision.
 
-## Overview
+## What it looks like
 
-The Camera Driver module provides a single unified **Camera** device type for connecting to IP cameras. Each camera supports multiple connection methods, enabled per device, and exposes its data through Ignition's OPC-UA server.
+Every camera pictured below is a synthetic RTSP test source stood up for this
+README (see *How to use it*) — `DemoLoadingDock` and `DemoYardCam`. No physical
+camera is required to reproduce any of it.
 
-### Connection methods
+**Camera device detail** — the Connection Browser's device list, expanded. It
+shows exactly what the module discovers per device: `DemoLoadingDock`'s and
+`DemoYardCam`'s RTSP media profiles (H.264), each with Snapshot/Stream/Copy
+URI actions. (ONVIF discovery — manufacturer/model/firmware/serial and
+multi-profile enumeration — is a real capability of the module against ONVIF
+hardware; it isn't pictured here because it needs physical ONVIF hardware to
+demonstrate honestly.)
 
-A single Camera device can use any combination of the following:
+![Camera device list showing RTSP media profiles for both synthetic devices](docs/images/camera-devices-list.png)
+
+**Gateway Live View grid** — the Connection Browser's built-in multi-camera
+grid, actually streaming: the left tile is `DemoLoadingDock`'s synthetic feed
+(colour bars, a moving marker, and a live timestamp overlay proving it isn't
+a static image); the right tile is `DemoYardCam`, a second synthetic source
+with a visibly different test pattern (SMPTE bars) so the two tiles are
+clearly distinct.
+
+![Gateway Live View grid with two tiles showing live synthetic test video and a live timestamp overlay](docs/images/gateway-live-view-grid.png)
+
+**Perspective `CameraViewer` and `CameraGrid` components** — the same video,
+now embedded in a Perspective page next to whatever process data it belongs
+with. The top pane is a single `CameraViewer` bound to `DemoLoadingDock`; the
+bottom pane is a `CameraGrid` showing both synthetic devices side by side,
+proving the grid component streams multiple devices at once.
+
+![Perspective view with a CameraViewer component on top and a two-camera CameraGrid below, both showing live video](docs/images/perspective-camera-viewer-grid.png)
+
+**Designer-scope authoring** — `CameraViewer` and `CameraGrid` are ordinary
+Perspective components in the Designer's own component palette (Camera Driver
+category), draggable onto any view. The property editor shown here is a
+`CameraViewer` dropped on a scratch view, exposing its real bindable
+properties — `deviceName`, `mode`, `snapshotInterval`, `showOverlay`,
+`objectFit`, `showSaveButton`, `showPtzControls` — the same as any built-in
+component, with no special-casing needed to use them.
+
+![Designer property editor for a CameraViewer component dropped on a scratch view, showing its deviceName, mode, snapshotInterval and other bindable properties](docs/images/designer-perspective-palette.png)
+
+## What it does
 
 | Method | Protocol | Capabilities |
 | -------- | ---------- | ------------- |
@@ -31,13 +70,9 @@ A single Camera device can use any combination of the following:
 | **Snapshot** | HTTP | JPEG snapshot capture from a still-image URL |
 | **ONVIF** | ONVIF SOAP | Device discovery, media profile enumeration, PTZ control, and auto-detection of stream/snapshot URLs (Profile S/T) |
 
-URLs for RTSP, MJPEG, and snapshot can be entered directly or auto-detected via ONVIF when enabled.
-
-## Current Status
-
-**Version**: 3.3.0 | **Status**: Production Ready
-
-### Key Features
+A single Camera device can use any combination of the above, enabled per
+device. URLs for RTSP, MJPEG, and snapshot can be entered directly or
+auto-detected via ONVIF when enabled.
 
 - Single unified **Camera** device type with per-device connection methods
 - Multi-protocol camera connectivity (RTSP, MJPEG, snapshot URLs, ONVIF)
@@ -48,35 +83,72 @@ URLs for RTSP, MJPEG, and snapshot can be entered directly or auto-detected via 
 - Bundled go2rtc and ffmpeg for RTSP-to-browser streaming — no external media server
 - Hierarchical OPC-UA address space with camera data
 - Connection Browser UI in Gateway Config (dashboard, live grid, diagnostics)
+- Perspective `CameraViewer` and `CameraGrid` components
 - Configurable SSL/TLS validation modes
 - 550+ automated tests with 100% pass rate (gateway/common JUnit + web-ui vitest)
 
-## Quick Start
+## How to use it
 
-### 1. Build
+### 1. Install
 
-```bash
-cd /modules/ignition-module-camera-driver
-./gradlew clean build
-# Output: build/CameraDriver-3.3.0.modl
-```
+Gateway web UI → **Config → System → Modules → Install or Upgrade a Module** →
+upload the signed `.modl`. No gateway restart is required — the module
+hot-loads.
 
-### 2. Install
+**WebRTC note:** the bundled go2rtc listens for WebRTC media on port **8555**
+(TCP+UDP). Host-network deployments need nothing. Docker *bridge*-network
+deployments must publish `-p 8555:8555 -p 8555:8555/udp` and list the
+host-reachable IP in `data/camera-driver/go2rtc/webrtc-candidates.txt` (one
+`host:port` per line). If WebRTC cannot connect, playback silently falls back
+to MSE.
 
-Gateway web UI → **Config → System → Modules → Install or Upgrade a Module** → upload the signed `.modl`. No gateway restart is required — the module hot-loads.
+### 2. Configure a device
 
-**WebRTC note:** the bundled go2rtc listens for WebRTC media on port **8555** (TCP+UDP). Host-network deployments need nothing. Docker *bridge*-network deployments must publish `-p 8555:8555 -p 8555:8555/udp` and list the host-reachable IP in `data/camera-driver/go2rtc/webrtc-candidates.txt` (one `host:port` per line). If WebRTC cannot connect, playback silently falls back to MSE.
-
-### 3. Configure
-
-1. Gateway > Config > OPC UA > Device Connections
-2. Create new Device > Select **"Camera"**
+1. Gateway → Config → OPC UA → Device Connections
+2. Create new Device → Select **"Camera"**
 3. Enter the camera IP address, username, and password
 4. Enable the connection methods the camera supports (RTSP, MJPEG, Snapshot, ONVIF)
 5. For RTSP/MJPEG/snapshot, either enter URLs directly or enable ONVIF to auto-detect them
 6. Save and view tags in OPC Browser, or open the Connection Browser
+   (`/data/camera-driver/connection-browser`)
 
-See **[docs/TESTING.md](docs/TESTING.md)** for complete testing instructions.
+Don't have a camera handy? The screenshots above were captured against
+synthetic RTSP sources — no hardware required to try the module:
+
+```bash
+# 1. RTSP test server. Use a port other than 8554 if the gateway itself is
+#    host-networked — its own bundled go2rtc already owns 8554 on that host.
+docker run -d --name mediamtx-demo --network host \
+  -e MEDIAMTX_RTSPADDRESS=:8556 \
+  bluenviron/mediamtx:latest
+
+# 2. A looping synthetic camera feed (colour bars + moving marker + live timestamp)
+ffmpeg -re -f lavfi -i "testsrc2=size=1280x720:rate=25" \
+  -vf "drawtext=text='DEMO CAMERA':fontcolor=white:fontsize=32:x=20:y=20:box=1:boxcolor=black@0.55" \
+  -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p \
+  -f rtsp rtsp://127.0.0.1:8556/cam1
+
+# 3. (optional) A second, visibly different feed — useful for trying CameraGrid
+#    with more than one tile, exactly as in the grid screenshots above.
+ffmpeg -re -f lavfi -i "smptebars=size=1280x720:rate=25" \
+  -vf "drawtext=text='DEMO CAMERA 2':fontcolor=white:fontsize=32:x=20:y=20:box=1:boxcolor=black@0.55" \
+  -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p \
+  -f rtsp rtsp://127.0.0.1:8556/cam2
+```
+
+Then create a Camera device as above with RTSP enabled, Snapshot/MJPEG/ONVIF
+disabled, and **RTSP URL Override** set to `rtsp://127.0.0.1:8556/cam1` (and,
+for a second device, `rtsp://127.0.0.1:8556/cam2`).
+
+### 3. Put it on a Perspective page
+
+Drag a `CameraViewer` (single camera) or `CameraGrid` (multi-camera) component
+onto a view and set `deviceName` (or `cameras: []` for the grid) to the device
+name(s) created above. See **[docs/USAGE.md](docs/USAGE.md)** for the full
+HTTP endpoint and component reference, and
+**[docs/TESTING.md](docs/TESTING.md)** for complete testing instructions.
+
+---
 
 ## Configuration Fields
 
@@ -108,9 +180,13 @@ All endpoints are at `/data/camera-driver/*` and require authentication.
 | `/data/camera-driver/health` | Health check |
 | `/data/camera-driver/metrics` | Per-camera resource metrics |
 
+## Current Status
+
+**Version**: 3.3.0 | **Status**: Production Ready
+
 ## Project Structure
 
-```
+```text
 ignition-module-camera-driver/
 ├── build.gradle.kts              # Root build configuration
 ├── settings.gradle.kts           # Subprojects
@@ -137,7 +213,7 @@ ignition-module-camera-driver/
 │       │   └── Go2RtcManager.java                  # RTSP-to-browser streaming (go2rtc + ffmpeg)
 │       └── auth/
 │           └── AuthenticationManager.java          # HTTP auth
-└── web-ui/                       # Connection Browser React component
+└── web-ui/                       # Connection Browser React component + Perspective components
 ```
 
 ## Documentation
@@ -177,6 +253,7 @@ properties file locations) that took significant time to debug.
 ./gradlew clean build        # Build module
 ./gradlew test               # Run tests
 ./gradlew clean build test   # Build and test
+# Output: build/CameraDriver-3.3.0.modl
 ```
 
 ## Git Repository

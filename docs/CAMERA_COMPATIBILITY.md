@@ -62,7 +62,7 @@ Even when HTTP snapshots don't work, **RTSP streams DO work** and are exposed in
 
 **Example Tag Value:**
 ```
-rtsp://10.60.9.146:554/h264Preview_01_main
+rtsp://192.0.2.10:554/h264Preview_01_main
 ```
 
 **Usage in Perspective:**

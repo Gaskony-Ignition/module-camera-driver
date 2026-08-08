@@ -201,7 +201,7 @@ const NODES = [
 
   // external
   {id:"camera",label:"IP Camera",sub:"ONVIF :8000 · RTSP :554",layer:"external",x:1545,y:170,
-    files:["e.g. Reolink RLC-823A 16X @ 10.60.9.148"],
+    files:["e.g. Reolink RLC-823A 16X @ 192.168.1.100"],
     desc:"The physical camera. ONVIF SOAP on :8000/onvif/device_service; RTSP video on :554. Port 80 here is the web UI (redirects to self-signed HTTPS)."},
   {id:"go2rtcproc",label:"go2rtc + ffmpeg",sub:"API :1984 · WebRTC :8555",layer:"external",x:1545,y:470,
     files:["bundled binaries, data/camera-driver/"],
