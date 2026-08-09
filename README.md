@@ -116,29 +116,25 @@ Don't have a camera handy? The screenshots above were captured against
 synthetic RTSP sources — no hardware required to try the module:
 
 ```bash
-# 1. RTSP test server. Use a port other than 8554 if the gateway itself is
-#    host-networked — its own bundled go2rtc already owns 8554 on that host.
-docker run -d --name mediamtx-demo --network host \
-  -e MEDIAMTX_RTSPADDRESS=:8556 \
-  bluenviron/mediamtx:latest
-
-# 2. A looping synthetic camera feed (colour bars + moving marker + live timestamp)
-ffmpeg -re -f lavfi -i "testsrc2=size=1280x720:rate=25" \
-  -vf "drawtext=text='DEMO CAMERA':fontcolor=white:fontsize=32:x=20:y=20:box=1:boxcolor=black@0.55" \
-  -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p \
-  -f rtsp rtsp://127.0.0.1:8556/cam1
-
-# 3. (optional) A second, visibly different feed — useful for trying CameraGrid
-#    with more than one tile, exactly as in the grid screenshots above.
-ffmpeg -re -f lavfi -i "smptebars=size=1280x720:rate=25" \
-  -vf "drawtext=text='DEMO CAMERA 2':fontcolor=white:fontsize=32:x=20:y=20:box=1:boxcolor=black@0.55" \
-  -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p \
-  -f rtsp rtsp://127.0.0.1:8556/cam2
+scripts/demo-cameras.sh up       # two synthetic cameras
+scripts/demo-cameras.sh status   # running? is anything actually watching?
+scripts/demo-cameras.sh down     # finished — leaves nothing behind
 ```
+
+That publishes `rtsp://127.0.0.1:8556/cam1` (test pattern) and
+`rtsp://127.0.0.1:8556/cam2` (colour bars, so a two-tile CameraGrid is
+obviously showing two cameras). Port 8556 rather than 8554 because the
+gateway's own bundled go2rtc owns 8554 when the gateway is host-networked, and
+the collision shows up as a stream that never opens rather than a port error.
 
 Then create a Camera device as above with RTSP enabled, Snapshot/MJPEG/ONVIF
 disabled, and **RTSP URL Override** set to `rtsp://127.0.0.1:8556/cam1` (and,
 for a second device, `rtsp://127.0.0.1:8556/cam2`).
+
+One container holds the whole demo, and encoding runs only while something is
+reading a stream. **Run `down` when you are done** — an earlier version of this
+section was three commands to start and none to stop, and left an encoder
+running at 25 fps for 24 hours after the demo it was for had finished.
 
 ### 3. Put it on a Perspective page
 
