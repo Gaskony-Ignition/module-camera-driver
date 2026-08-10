@@ -81,15 +81,6 @@ public abstract class BaseHandler {
     }
 
     /**
-     * Validates that the request is authenticated AND has administrator
-     * authority. See {@link AccessControl#requireAdministrator}.
-     */
-    protected boolean requireAdministrator(RequestContext requestContext,
-                                           HttpServletResponse response) throws IOException {
-        return AccessControl.requireAdministrator(authManager, requestContext, response);
-    }
-
-    /**
      * Sends an authentication required error response.
      */
     protected void sendAuthenticationRequired(HttpServletResponse response) throws IOException {

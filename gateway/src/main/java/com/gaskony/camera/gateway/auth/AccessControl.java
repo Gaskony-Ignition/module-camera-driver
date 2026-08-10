@@ -26,11 +26,15 @@ import java.io.IOException;
  *
  * <p>The implementation deliberately does not reach into Ignition role groups
  * via {@code GatewayContext.getUserSourceManager()} because {@link AuthenticationManager}
- * also serves API-key callers that have no Ignition user record. The
- * {@link #requireAdministrator} helper is implemented for parity with the PLC
- * pattern but currently delegates to the same authentication check; future
- * work (Sprint 3) should add a real role check once the access-control story
- * is unified across the module suite.</p>
+ * also serves API-key callers that have no Ignition user record.</p>
+ *
+ * <p>There is deliberately NO {@code requireAdministrator} helper. One existed
+ * and was a strict alias for {@link #requireAuthenticated}, kept so handlers
+ * could "mark intent" ahead of a role-group integration that never landed. No
+ * handler ever called it, so it protected nothing — but a method with that
+ * name is a trap: the next person to call it would reasonably believe an admin
+ * check had happened. Removed 10/08/2026. If a real role check is wanted, add
+ * one that actually checks, via {@code GatewayContext.getUserSourceManager()}.</p>
  *
  * <p>This is a per-module duplication of the PLC pattern (intentional — see
  * SPRINT2_PLAN.md "Out of scope" — Sprint 3 may promote a shared
@@ -83,31 +87,4 @@ public final class AccessControl {
         return false;
     }
 
-    /**
-     * Validates that the request is authenticated AND has administrator-level
-     * authority.
-     *
-     * <p>This module currently does not maintain Ignition role-group
-     * membership separately from "is a session present", so today this method
-     * is a strict alias for {@link #requireAuthenticated} — it is provided so
-     * that handlers that <em>should</em> require admin access can be migrated
-     * to a stronger semantic in a single point when role-group integration
-     * lands. See P3-CD follow-up notes in {@code FINAL_REVIEW.md §5 P3}.</p>
-     *
-     * @param authManager the module's authentication manager
-     * @param ctx         the route request context
-     * @param resp        the response to write the 401 to
-     * @return {@code true} if authenticated, {@code false} otherwise
-     * @throws IOException if writing the 401 fails
-     */
-    public static boolean requireAdministrator(AuthenticationManager authManager,
-                                               RequestContext ctx,
-                                               HttpServletResponse resp) throws IOException {
-        // TODO (Sprint 3): tighten to a real role check via
-        // GatewayContext.getUserSourceManager(). For now, "administrator"
-        // == "authenticated" so that endpoint code can mark its intent today
-        // without a behavioural change waiting on the broader access-control
-        // refactor (see SPRINT2_PLAN.md "Out of scope").
-        return requireAuthenticated(authManager, ctx, resp);
-    }
 }

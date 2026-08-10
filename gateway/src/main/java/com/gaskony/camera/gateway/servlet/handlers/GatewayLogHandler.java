@@ -42,10 +42,12 @@ public class GatewayLogHandler extends BaseHandler {
     public Object handleGatewayLogs(RequestContext requestContext, HttpServletResponse response) throws Exception {
         logger.debug("Gateway logs request received");
 
-        // P3-CD: shared AccessControl pattern. Note: this endpoint returns
-        // gateway-wide log content (Camera-tagged + optionally global) and
-        // could in future be elevated to requireAdministrator(...) once role
-        // gating is implemented (see SPRINT2_PLAN.md).
+        // P3-CD: shared AccessControl pattern. This endpoint returns
+        // gateway-wide log content (Camera-tagged + optionally global), so it
+        // is a candidate for a real administrator check if one is ever added.
+        // Note there is no requireAdministrator() to "elevate" to — the alias
+        // that used to exist only re-checked authentication (removed
+        // 10/08/2026); adding a genuine role check is the actual work.
         if (!requireAuthenticated(requestContext, response)) {
             return null;
         }

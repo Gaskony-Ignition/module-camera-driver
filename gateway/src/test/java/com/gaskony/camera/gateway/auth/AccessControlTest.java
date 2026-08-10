@@ -75,28 +75,4 @@ class AccessControlTest {
         verify(response, never()).sendError(eq(401), anyString());
     }
 
-    // -----------------------------------------------------------------------
-    // requireAdministrator (currently aliases to requireAuthenticated until
-    // role gating lands — see TODO in AccessControl.java)
-    // -----------------------------------------------------------------------
-
-    @Test
-    void testRequireAdministrator_Authenticated_ReturnsTrue() throws Exception {
-        when(authManager.isAuthenticated(requestContext)).thenReturn(true);
-
-        boolean result = AccessControl.requireAdministrator(authManager, requestContext, response);
-
-        assertThat(result).isTrue();
-    }
-
-    @Test
-    void testRequireAdministrator_Unauthenticated_ReturnsFalse_Writes401() throws Exception {
-        when(authManager.isAuthenticated(requestContext)).thenReturn(false);
-        when(response.isCommitted()).thenReturn(false);
-
-        boolean result = AccessControl.requireAdministrator(authManager, requestContext, response);
-
-        assertThat(result).isFalse();
-        verify(response).sendError(eq(401), anyString());
-    }
 }
