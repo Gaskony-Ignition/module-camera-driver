@@ -259,7 +259,7 @@ properties file locations) that took significant time to debug.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+Apache License 2.0 — see [LICENSE](LICENSE) for details.
 
 Copyright (c) 2025 Nigel Gwork
 
