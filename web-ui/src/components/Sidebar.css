@@ -1,0 +1,250 @@
+/* ==========================================================================
+   Navigation Sidebar — matched to AI Terminal aesthetic
+   Scoped to .app-wrapper to prevent Gateway UI pollution
+   ========================================================================== */
+
+.app-wrapper .nav-sidebar {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-default);
+  height: 100%;
+  flex-shrink: 0;
+  transition: width var(--transition-normal);
+  overflow: hidden;
+  z-index: var(--z-sidebar);
+  user-select: none;
+}
+
+.app-wrapper .nav-sidebar.expanded {
+  width: 200px;
+}
+
+.app-wrapper .nav-sidebar.collapsed {
+  width: 48px;
+}
+
+/* Navigation items container */
+.app-wrapper .nav-sidebar-items {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: var(--spacing-xs) 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Scrollbar for nav items */
+.app-wrapper .nav-sidebar-items::-webkit-scrollbar {
+  width: 4px;
+}
+
+.app-wrapper .nav-sidebar-items::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-wrapper .nav-sidebar-items::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 2px;
+}
+
+/* Individual nav item */
+.app-wrapper .nav-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 10px 12px;
+  margin: 1px 4px;
+  border: none;
+  border-left: 3px solid transparent;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  white-space: nowrap;
+  transition: background var(--transition-fast), border-color var(--transition-fast), opacity var(--transition-fast);
+  position: relative;
+  width: calc(100% - 8px);
+  text-align: left;
+}
+
+.app-wrapper .nav-sidebar-item:hover:not(.disabled) {
+  background: var(--bg-active);
+}
+
+.app-wrapper .nav-sidebar-item.active {
+  background: var(--bg-hover);
+  border-left-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.app-wrapper .nav-sidebar-item.disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Icon styling */
+.app-wrapper .nav-sidebar-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+}
+
+/* Label - hidden when collapsed */
+.app-wrapper .nav-sidebar-item-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 1;
+  transition: opacity var(--transition-fast);
+}
+
+.app-wrapper .nav-sidebar.collapsed .nav-sidebar-item-label {
+  opacity: 0;
+  width: 0;
+}
+
+/* Tooltip for collapsed state and disabled items */
+.app-wrapper .nav-sidebar-tooltip {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 8px;
+  padding: 4px 10px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 12px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  z-index: var(--z-tooltip);
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-default);
+}
+
+.app-wrapper .nav-sidebar-item:hover .nav-sidebar-tooltip {
+  opacity: 1;
+}
+
+/* Only show tooltip when collapsed or disabled */
+.app-wrapper .nav-sidebar.expanded .nav-sidebar-item:not(.disabled):hover .nav-sidebar-tooltip {
+  opacity: 0;
+}
+
+/* Version display above toggle */
+.app-wrapper .nav-sidebar-version {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.app-wrapper .nav-sidebar-version-text {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: var(--text-secondary);
+  opacity: 0.6;
+  transition: opacity var(--transition-fast);
+}
+
+.app-wrapper .nav-sidebar.collapsed .nav-sidebar-version-text {
+  opacity: 0;
+  width: 0;
+}
+
+.app-wrapper .nav-sidebar-version:hover .nav-sidebar-version-text {
+  opacity: 1;
+}
+
+/* Dedicated page button */
+.app-wrapper .nav-sidebar-dedicated-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  padding: 6px 12px;
+  margin: 0 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  border-radius: var(--radius-sm);
+}
+
+.app-wrapper .nav-sidebar-dedicated-btn:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.app-wrapper .nav-sidebar-dedicated-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 1;
+  transition: opacity var(--transition-fast);
+}
+
+.app-wrapper .nav-sidebar.collapsed .nav-sidebar-dedicated-label {
+  opacity: 0;
+  width: 0;
+}
+
+/* Toggle button at bottom */
+.app-wrapper .nav-sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  margin: var(--spacing-xs) 4px;
+  border: none;
+  border-top: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  gap: var(--spacing-sm);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.app-wrapper .nav-sidebar-toggle:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.app-wrapper .nav-sidebar-toggle-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 1;
+  transition: opacity var(--transition-fast);
+}
+
+.app-wrapper .nav-sidebar.collapsed .nav-sidebar-toggle-label {
+  opacity: 0;
+  width: 0;
+}
+
+/* Sidebar footer container */
+.app-wrapper .nav-sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}

@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Driver - Ignition</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        /* ── Catppuccin Mocha palette (matches standalone.html) ───────────────── */
+        :root {
+            --bg-primary:   #11111b;
+            --bg-secondary: #181825;
+            --border:       #313244;
+            --text-primary: #cdd6f4;
+            --text-muted:   #a6adc8;
+            --accent:       #89b4fa;
+            --accent-hover: #b4d0ff;
+            --error:        #f38ba8;
+            --font-sans:    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-mono:    'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        }
+
+        html, body {
+            font-family: var(--font-sans);
+            font-size: 14px;
+            line-height: 1.5;
+            height: 100%;
+            margin: 0;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        #root {
+            height: 100%;
+        }
+
+        .hidden { display: none !important; }
+
+        /* Auth required state (same wording/styling as standalone.html's auth-view) */
+        .auth-required-overlay {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-primary);
+        }
+
+        .auth-required-card {
+            text-align: center;
+            padding: 48px 56px;
+            border-radius: 12px;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+            max-width: 440px;
+        }
+
+        .auth-required-card .auth-module-identity {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            color: var(--text-primary);
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .auth-required-card .auth-module-identity svg {
+            color: var(--accent);
+            flex-shrink: 0;
+        }
+
+        .auth-required-card .auth-divider {
+            width: 48px;
+            height: 1px;
+            background: var(--border);
+            margin: 20px auto;
+        }
+
+        .auth-required-card .auth-icon {
+            font-size: 40px;
+            margin-bottom: 12px;
+            opacity: 0.8;
+        }
+
+        .auth-required-card h2 {
+            margin: 0 0 8px;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .auth-required-card p {
+            margin: 4px 0;
+            font-size: 14px;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .auth-required-card .auth-login-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 20px;
+            padding: 10px 24px;
+            background: var(--accent);
+            color: var(--bg-primary);
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.15s ease;
+        }
+
+        .auth-required-card .auth-login-btn:hover {
+            background: var(--accent-hover);
+        }
+
+        /* Load/error state shown while the app bundle boots (or fails to) */
+        .boot-error-overlay {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-primary);
+        }
+
+        .boot-error-card {
+            text-align: left;
+            padding: 32px 40px;
+            border-radius: 12px;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--error);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+            max-width: 560px;
+        }
+
+        .boot-error-card h2 {
+            margin: 0 0 12px;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--error);
+        }
+
+        .boot-error-card p {
+            margin: 4px 0;
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .boot-error-card pre {
+            margin-top: 12px;
+            padding: 10px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--text-primary);
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+    </style>
+</head>
+<body>
+    <!-- Auth required state -->
+    <div id="authView" class="auth-required-overlay hidden">
+        <div class="auth-required-card">
+            <div class="auth-module-identity">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                    <circle cx="12" cy="13" r="4"/>
+                </svg>
+                <span>Camera Driver</span>
+            </div>
+            <div class="auth-divider"></div>
+            <div class="auth-icon">&#128274;</div>
+            <h2>Authentication Required</h2>
+            <p>You must be logged in to the Ignition Gateway to use this module.</p>
+            <a href="/web/login" target="_top" class="auth-login-btn">
+                Log In to Gateway
+            </a>
+        </div>
+    </div>
+
+    <!-- Boot error state (bundle failed to load / mount) -->
+    <div id="bootErrorView" class="boot-error-overlay hidden">
+        <div class="boot-error-card">
+            <h2>Camera Driver failed to load</h2>
+            <p>The connection browser application could not be started. Try reloading the page.</p>
+            <pre id="bootErrorDetail"></pre>
+        </div>
+    </div>
+
+    <!-- React app mounts here once authenticated -->
+    <div id="root" class="hidden"></div>
+
+    <script>
+        // Single source of truth for API base path in this page.
+        var API_BASE = '/data/camera-driver';
+        var RES_BASE = '/res/camera-driver';
+
+        function showAuth() {
+            document.getElementById('authView').classList.remove('hidden');
+            document.getElementById('bootErrorView').classList.add('hidden');
+            document.getElementById('root').classList.add('hidden');
+        }
+
+        function showBootError(detail) {
+            document.getElementById('authView').classList.add('hidden');
+            document.getElementById('bootErrorView').classList.remove('hidden');
+            document.getElementById('root').classList.add('hidden');
+            document.getElementById('bootErrorDetail').textContent = detail || '';
+        }
+
+        function showApp() {
+            document.getElementById('authView').classList.add('hidden');
+            document.getElementById('bootErrorView').classList.add('hidden');
+            document.getElementById('root').classList.remove('hidden');
+        }
+
+        // Sequentially loads scripts in order — each next load only starts after
+        // the previous one's onload fires, so the React/ReactDOM globals (and the
+        // bridge to the UMD externals) are guaranteed to exist before the app
+        // bundle's factory function runs.
+        function loadScriptsInOrder(srcs, onDone, onError) {
+            var i = 0;
+            function next() {
+                if (i >= srcs.length) {
+                    onDone();
+                    return;
+                }
+                var src = srcs[i++];
+                var script = document.createElement('script');
+                script.src = src;
+                script.onload = next;
+                script.onerror = function () {
+                    onError('Failed to load script: ' + src);
+                };
+                document.body.appendChild(script);
+            }
+            next();
+        }
+
+        function bootApp() {
+            try {
+                loadScriptsInOrder(
+                    [
+                        RES_BASE + '/vendor/react.production.min.js',
+                        RES_BASE + '/vendor/react-dom.production.min.js'
+                    ],
+                    function () {
+                        try {
+                            // Bridge the UMD externals (webpack externals: ["react", "react-dom"]
+                            // in root/browser context reads window["react"] / window["react-dom"],
+                            // not window.React / window.ReactDOM) before the app bundle loads.
+                            window['react'] = window.React;
+                            window['react-dom'] = window.ReactDOM;
+
+                            if (!window.React || !window.ReactDOM) {
+                                showBootError('React/ReactDOM globals were not found after loading vendor scripts.');
+                                return;
+                            }
+                        } catch (bridgeErr) {
+                            showBootError(String(bridgeErr));
+                            return;
+                        }
+
+                        loadScriptsInOrder(
+                            [RES_BASE + '/connectionBrowser.js'],
+                            function () {
+                                try {
+                                    // web-ui/src/index.ts does `export { default as CameraConnectionBrowser }`,
+                                    // so the UMD global is a namespace object and the component is its
+                                    // .CameraConnectionBrowser property (the same export name Ignition's
+                                    // SystemJS mount selects in the embedded Config view). Fall back to
+                                    // .default / a direct function export if the bundle shape ever changes.
+                                    var exported = window.CameraConnectionBrowser;
+                                    var Root = exported && (exported.CameraConnectionBrowser || exported.default
+                                        || (typeof exported === 'function' ? exported : null));
+
+                                    if (typeof Root !== 'function') {
+                                        showBootError('CameraConnectionBrowser export was not found or is not a component.');
+                                        return;
+                                    }
+
+                                    var container = document.getElementById('root');
+                                    var root = ReactDOM.createRoot(container);
+                                    root.render(React.createElement(Root));
+                                    showApp();
+                                } catch (mountErr) {
+                                    showBootError(String(mountErr && mountErr.stack ? mountErr.stack : mountErr));
+                                }
+                            },
+                            showBootError
+                        );
+                    },
+                    showBootError
+                );
+            } catch (err) {
+                showBootError(String(err));
+            }
+        }
+
+        async function checkAuth() {
+            try {
+                var res = await fetch(API_BASE + '/auth-status', {
+                    signal: AbortSignal.timeout(5000),
+                    credentials: 'same-origin'
+                });
+
+                if (res.ok) {
+                    var data = await res.json();
+                    if (data.authenticated) {
+                        bootApp();
+                    } else {
+                        showAuth();
+                    }
+                } else {
+                    showAuth();
+                }
+            } catch (e) {
+                // Connection error - treat as auth required
+                showAuth();
+            }
+        }
+
+        checkAuth();
+    </script>
+</body>
+</html>

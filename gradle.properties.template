@@ -1,0 +1,13 @@
+# Gaskony Module Signing Configuration
+
+# Keystore configuration
+ignition.signing.keystoreFile=YOUR_KEYSTORE_PATH_HERE
+ignition.signing.keystorePassword=YOUR_PASSWORD_HERE
+
+# Certificate configuration
+ignition.signing.certAlias=YOUR_CERT_ALIAS_HERE
+ignition.signing.certPassword=YOUR_PASSWORD_HERE
+
+# Certificate file (self-signed, exported from keystore)
+# For self-signed modules, certFile can point to the public certificate
+ignition.signing.certFile=YOUR_CERT_FILE_PATH_HERE

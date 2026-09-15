@@ -1,0 +1,50 @@
+{
+  "type": "object",
+  "properties": {
+    "deviceName": {
+      "type": "string",
+      "default": "",
+      "description": "Name of the camera device connection in Ignition"
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["auto", "webrtc", "mse", "snapshot"],
+      "default": "auto",
+      "description": "Stream mode: auto (WebRTC, then MSE, then snapshot fallback), webrtc (live only), mse (live only), snapshot (polling only)"
+    },
+    "snapshotInterval": {
+      "type": "number",
+      "default": 5000,
+      "minimum": 1000,
+      "maximum": 60000,
+      "description": "Snapshot refresh interval in milliseconds (snapshot mode)"
+    },
+    "showOverlay": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show camera name and status overlay"
+    },
+    "objectFit": {
+      "type": "string",
+      "enum": ["contain", "cover", "fill"],
+      "default": "contain",
+      "description": "How the video fits the container"
+    },
+    "showSaveButton": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show snapshot download button"
+    },
+    "showPtzControls": {
+      "type": "boolean",
+      "default": false,
+      "description": "Show PTZ directional controls (ONVIF cameras with PTZ only)"
+    },
+    "style": {
+      "$ref": "urn:ignition-schema:schemas/style-properties.schema.json",
+      "default": {
+        "classes": ""
+      }
+    }
+  }
+}
