@@ -51,7 +51,10 @@ function CameraMetricsRow({ name, cam, serverNowMs }: { name: string; cam: Camer
   return (
     <tr className="cam-metrics-row">
       <td className="cam-metrics-name">
-        <span className={`cam-status-dot ${cam.go2rtcRegistered ? 'active' : 'inactive'}`} />
+        <span
+          className={`cam-status-dot ${cam.go2rtcRegistered ? 'active' : 'inactive'}`}
+          title={cam.go2rtcRegistered ? 'Registered with go2rtc' : 'Not registered with go2rtc'}
+        />
         {name}
       </td>
       <td>

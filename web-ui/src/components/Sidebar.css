@@ -80,6 +80,14 @@
   color: var(--accent-primary);
 }
 
+/* Without this, :hover's --bg-active wins over .active's --bg-hover (same
+   specificity, later in the cascade) whenever the pointer sits on the item
+   that was just clicked -- --accent-primary text measured 4.33:1 on
+   --bg-active (axe color-contrast), just under the 4.5:1 floor. */
+.app-wrapper .nav-sidebar-item.active:hover {
+  background: var(--bg-hover);
+}
+
 .app-wrapper .nav-sidebar-item.disabled {
   opacity: 0.4;
   cursor: default;
@@ -153,9 +161,10 @@
 
 .app-wrapper .nav-sidebar-version-text {
   font-family: var(--font-mono, monospace);
-  font-size: 10px;
-  color: var(--text-secondary);
-  opacity: 0.6;
+  font-size: 11px;
+  /* text-tertiary at full opacity, not a faded text-secondary: fading toward the
+     sidebar background is what put this under 4.5:1 (axe color-contrast, WCAG 1.4.3). */
+  color: var(--text-tertiary);
   transition: opacity var(--transition-fast);
 }
 

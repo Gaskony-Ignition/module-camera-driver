@@ -69,12 +69,28 @@ function PtzPad({ deviceName }: PtzPadProps) {
     stop()
   }, [stop])
 
+  // Enter/Space mirror the mouse/touch hold: a native <button> is already in
+  // the Tab order, but with only onMouseDown/onMouseUp bound, Enter/Space did
+  // nothing at all (2.1.1) -- these press-and-hold buttons need their own
+  // key handlers rather than a plain onClick.
   const holdProps = (pan: number, tilt: number, zoom: number) => ({
     onMouseDown: press(pan, tilt, zoom),
     onMouseUp: release,
     onMouseLeave: release,
     onTouchStart: press(pan, tilt, zoom),
     onTouchEnd: release,
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) {
+        e.preventDefault()
+        move(pan, tilt, zoom)
+      }
+    },
+    onKeyUp: (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        stop()
+      }
+    },
   })
 
   return (

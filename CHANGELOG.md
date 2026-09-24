@@ -5,6 +5,21 @@ All notable changes to the Ignition Camera Driver module will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.1] - 2026-09-24
+
+**Type:** PATCH — accessibility (WCAG 2.1 AA)
+
+### Changed
+
+- Gateway Config, the standalone dedicated page, and the Perspective
+  `CameraViewer`/`CameraGrid` components now meet WCAG 2.1 AA: text contrast
+  (sidebar version tag, status bar, active nav item), a visible focus ring on
+  every dropdown and the dedicated page's content frame, a minimum 11px text
+  size throughout, keyboard operation for the PTZ pad's press-and-hold
+  buttons (gateway and Perspective), a text/state alternative next to every
+  colour-only status dot, and a real close button (not a bare `<span>`) on
+  toast notifications.
+
 ## [3.3.0] - 2026-07-31
 
 **Type:** MINOR — Apache HttpClient 4 → 5 migration (shipped dependency set changes materially)

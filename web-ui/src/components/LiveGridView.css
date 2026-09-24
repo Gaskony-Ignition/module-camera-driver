@@ -40,6 +40,7 @@
 }
 
 .app-wrapper .grid-select:focus { border-color: var(--accent-primary); outline: none; }
+.app-wrapper .grid-select:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
 
 /* Grid container card */
 .app-wrapper .grid-container-card {
@@ -97,6 +98,7 @@
 }
 
 .app-wrapper .grid-cell-header select:focus { border-color: var(--accent-primary); outline: none; }
+.app-wrapper .grid-cell-header select:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
 
 .app-wrapper .grid-cell-actions {
   display: flex;
@@ -121,7 +123,7 @@
 .app-wrapper .grid-cell-body {
   flex: 1;
   position: relative;
-  background: #000;
+  background: var(--bg-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -148,7 +150,7 @@
   left: 8px;
   font-size: 11px;
   font-weight: 600;
-  color: #fff;
+  color: var(--text-primary);
   background: var(--modal-backdrop);
   padding: 2px 8px;
   border-radius: var(--radius-sm);
@@ -160,7 +162,7 @@
   position: absolute;
   top: 6px;
   right: 8px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   padding: 2px 8px;
   border-radius: var(--radius-sm);
@@ -176,11 +178,11 @@
   position: absolute;
   bottom: 6px;
   left: 8px;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #fff;
+  color: var(--text-primary);
   background: var(--overlay-dark);
   padding: 1px 6px;
   border-radius: 3px;
@@ -195,7 +197,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--success);
   background: var(--modal-backdrop);

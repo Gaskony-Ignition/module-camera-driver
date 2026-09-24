@@ -224,6 +224,7 @@ function GridCell({ cellIndex, devices, selectedCamera, onCameraChange, onEvent,
           value={selectedCamera}
           onChange={(e) => onCameraChange(cellIndex, e.target.value)}
           title="Select camera"
+          aria-label="Select camera"
         >
           <option value="">-- Select Camera --</option>
           {devices.map(d => (
@@ -233,12 +234,16 @@ function GridCell({ cellIndex, devices, selectedCamera, onCameraChange, onEvent,
         <div className="grid-cell-actions">
           {device && (
             <>
-              <button onClick={toggleStream} title={isStreaming ? 'Stop stream' : 'Play stream'}>
+              <button
+                onClick={toggleStream}
+                title={isStreaming ? 'Stop stream' : 'Play stream'}
+                aria-label={isStreaming ? 'Stop stream' : 'Play stream'}
+              >
                 {isStreaming
                   ? <Square size={14} />
                   : <Play size={14} />}
               </button>
-              <button onClick={captureSnapshot} title="Snapshot">
+              <button onClick={captureSnapshot} title="Snapshot" aria-label="Capture snapshot">
                 <Camera size={14} />
               </button>
             </>

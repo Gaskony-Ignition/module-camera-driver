@@ -74,20 +74,30 @@ export function showToast(message: string, type: 'success' | 'error' | 'info' = 
   })
   toast.textContent = message
 
-  // Close button
-  const closeBtn = document.createElement('span')
+  // Close button \u2014 a real <button>, not a <span> with only a click listener,
+  // so it is in the Tab order and Enter/Space dismiss it (2.1.1).
+  const closeBtn = document.createElement('button')
+  closeBtn.type = 'button'
   closeBtn.textContent = '\u00d7'
+  closeBtn.setAttribute('aria-label', 'Dismiss notification')
   Object.assign(closeBtn.style, {
     marginLeft: '10px',
     cursor: 'pointer',
     opacity: '0.6',
+    background: 'transparent',
+    border: 'none',
+    color: 'inherit',
+    font: 'inherit',
+    padding: '0',
   })
   closeBtn.addEventListener('click', () => toast.remove())
   toast.appendChild(closeBtn)
 
   container.appendChild(toast)
 
-  // Inject keyframes once
+  // Inject keyframes once. The toast container lives outside .app-wrapper
+  // (appended to document.body), so App.scss's reduced-motion block never
+  // reaches it -- guard this animation on its own.
   if (!document.getElementById('camera-toast-keyframes')) {
     const style = document.createElement('style')
     style.id = 'camera-toast-keyframes'
@@ -95,6 +105,9 @@ export function showToast(message: string, type: 'success' | 'error' | 'info' = 
       @keyframes camera-toast-in {
         from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #${CONTAINER_ID} * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
       }
     `
     document.head.appendChild(style)

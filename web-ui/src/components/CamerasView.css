@@ -38,6 +38,11 @@
   outline: none;
 }
 
+.app-wrapper .device-dropdown:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
 /* Loading state */
 .app-wrapper .cameras-loading {
   text-align: center;
@@ -176,7 +181,7 @@
 }
 
 .app-wrapper .meta-item-label {
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-tertiary);

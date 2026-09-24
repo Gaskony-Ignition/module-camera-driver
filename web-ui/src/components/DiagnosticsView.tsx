@@ -334,7 +334,7 @@ function DiagnosticsView() {
           </div>
         </div>
 
-        <div className="diag-logs-body" ref={logBodyRef}>
+        <div className="diag-logs-body" ref={logBodyRef} tabIndex={0} role="log" aria-label="Gateway log entries">
           {filteredLogs.length === 0 ? (
             <div className="diag-logs-empty">No log entries found</div>
           ) : (

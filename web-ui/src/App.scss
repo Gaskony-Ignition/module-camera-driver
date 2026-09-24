@@ -22,7 +22,9 @@
   --text-primary: #cdd6f4;
   --text-secondary: #bac2de;
   --text-tertiary: #a6adc8;
-  --text-muted: #6c7086;
+  /* Catppuccin Overlay1, not Overlay0 (#6c7086) -- Overlay0 measured 3.83:1 on
+     --bg-primary (axe color-contrast, global status bar), below the 4.5:1 floor. */
+  --text-muted: #7f849c;
   --text-inverse: #11111b;
 
   --accent-primary: #89b4fa;
@@ -336,6 +338,8 @@
 }
 .app-wrapper .form-input:focus,
 .app-wrapper .form-select:focus { border-color: var(--accent-primary); }
+.app-wrapper .form-input:focus-visible,
+.app-wrapper .form-select:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
 .app-wrapper .form-input::placeholder { color: var(--text-tertiary); }
 
 /* ==========================================================================
@@ -349,7 +353,7 @@
   border: none;
   padding: 2px 8px;
   border-radius: 3px;
-  font-size: 10px;
+  font-size: 11px;
   cursor: pointer;
 }
 .app-wrapper .copy-btn:hover { background: var(--bg-active); color: var(--text-primary); }
@@ -452,7 +456,7 @@
 .app-wrapper .connection-banner {
   padding: 8px 16px;
   background: var(--accent-warning);
-  color: #1e1e2e;
+  color: var(--bg-tertiary);
   font-size: 13px;
   text-align: center;
   font-weight: 500;

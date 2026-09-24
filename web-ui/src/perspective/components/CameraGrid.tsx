@@ -69,7 +69,7 @@ const cellStyles = {
         background: 'rgba(0,0,0,0.5)',
         border: 'none',
         color: '#fff',
-        fontSize: '10px',
+        fontSize: '11px',
         padding: '1px 6px',
         borderRadius: 3,
         cursor: 'pointer',
@@ -165,6 +165,7 @@ function CameraCell({ deviceName, mode, snapshotInterval, showOverlay, showSaveB
                             style={cellStyles.saveBtn}
                             onClick={() => saveSnapshot(deviceName, activeMode, imgRef)}
                             title="Save snapshot"
+                            aria-label="Save snapshot"
                         >
                             {'\u2B73'}
                         </button>

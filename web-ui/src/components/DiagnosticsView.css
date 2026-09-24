@@ -138,7 +138,7 @@
 
 .app-wrapper .dedup-badge {
   display: inline-block;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--accent-peach);
   background: var(--accent-peach-bg);

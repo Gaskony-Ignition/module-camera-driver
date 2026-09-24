@@ -60,8 +60,11 @@ function StatusBar({ health }: StatusBarProps) {
           <span>Running: <strong>{health?.runningCount ?? '-'}</strong></span>
         </span>
         <span className="global-status-bar-separator">|</span>
-        <span className="global-status-bar-item">
-          <span>go2rtc:</span>
+        <span
+          className="global-status-bar-item"
+          title={health?.go2rtcAvailable ? 'go2rtc: available' : 'go2rtc: unavailable'}
+        >
+          <span>go2rtc: {health?.go2rtcAvailable ? 'up' : 'down'}</span>
           <Circle
             size={6}
             fill={health?.go2rtcAvailable ? 'var(--success)' : 'var(--error)'}

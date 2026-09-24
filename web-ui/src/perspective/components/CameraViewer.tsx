@@ -201,12 +201,26 @@ function PtzControls({ deviceName }: { deviceName: string }) {
         sendStop();
     };
 
+    // Enter/Space mirror the mouse/touch hold -- with only onMouseDown/onMouseUp
+    // bound, a Tab-reachable button did nothing on Enter/Space (2.1.1).
     const btnProps = (pan: number, tilt: number, zoom: number) => ({
         onMouseDown: onStart(pan, tilt, zoom),
         onMouseUp: onEnd,
         onMouseLeave: onEnd,
         onTouchStart: onStart(pan, tilt, zoom),
         onTouchEnd: onEnd,
+        onKeyDown: (e: React.KeyboardEvent) => {
+            if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) {
+                e.preventDefault();
+                sendMove(pan, tilt, zoom);
+            }
+        },
+        onKeyUp: (e: React.KeyboardEvent) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                sendStop();
+            }
+        },
     });
 
     const empty = { width: 32, height: 32 };
@@ -215,18 +229,18 @@ function PtzControls({ deviceName }: { deviceName: string }) {
         <div style={ptzStyles.container}>
             <div style={ptzStyles.pad}>
                 <div style={empty} />
-                <button style={ptzStyles.btn} {...btnProps(0, 0.5, 0)} title="Tilt Up">{'\u25B2'}</button>
+                <button style={ptzStyles.btn} {...btnProps(0, 0.5, 0)} title="Tilt Up" aria-label="Tilt up">{'\u25B2'}</button>
                 <div style={empty} />
-                <button style={ptzStyles.btn} {...btnProps(-0.5, 0, 0)} title="Pan Left">{'\u25C0'}</button>
-                <button style={ptzStyles.btn} onMouseDown={() => sendStop()} title="Stop">{'\u25A0'}</button>
-                <button style={ptzStyles.btn} {...btnProps(0.5, 0, 0)} title="Pan Right">{'\u25B6'}</button>
+                <button style={ptzStyles.btn} {...btnProps(-0.5, 0, 0)} title="Pan Left" aria-label="Pan left">{'\u25C0'}</button>
+                <button style={ptzStyles.btn} onClick={sendStop} title="Stop" aria-label="Stop PTZ movement">{'\u25A0'}</button>
+                <button style={ptzStyles.btn} {...btnProps(0.5, 0, 0)} title="Pan Right" aria-label="Pan right">{'\u25B6'}</button>
                 <div style={empty} />
-                <button style={ptzStyles.btn} {...btnProps(0, -0.5, 0)} title="Tilt Down">{'\u25BC'}</button>
+                <button style={ptzStyles.btn} {...btnProps(0, -0.5, 0)} title="Tilt Down" aria-label="Tilt down">{'\u25BC'}</button>
                 <div style={empty} />
             </div>
             <div style={ptzStyles.zoomRow}>
-                <button style={{ ...ptzStyles.btn, width: 48 }} {...btnProps(0, 0, 0.5)} title="Zoom In">+</button>
-                <button style={{ ...ptzStyles.btn, width: 48 }} {...btnProps(0, 0, -0.5)} title="Zoom Out">{'\u2212'}</button>
+                <button style={{ ...ptzStyles.btn, width: 48 }} {...btnProps(0, 0, 0.5)} title="Zoom In" aria-label="Zoom in">+</button>
+                <button style={{ ...ptzStyles.btn, width: 48 }} {...btnProps(0, 0, -0.5)} title="Zoom Out" aria-label="Zoom out">{'\u2212'}</button>
             </div>
         </div>
     );
@@ -373,6 +387,7 @@ function CameraViewerComponent(props: CameraViewerProps) {
                             style={styles.saveBtn}
                             onClick={() => saveSnapshot(deviceName, activeMode, imgRef)}
                             title="Save snapshot"
+                            aria-label="Save snapshot"
                         >
                             {'\u2B73'}
                         </button>

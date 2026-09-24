@@ -1,0 +1,16 @@
+{
+  "gateway": "module-testing",
+  "web": [
+    "http://192.168.153.128:8088/data/camera-driver/connection-browser",
+    "http://192.168.153.128:8088/data/camera-driver/player",
+    "http://192.168.153.128:8088/res/camera-driver/standalone.html"
+  ],
+  "login": true,
+  "exceptions": [
+    {
+      "rule": "no-focus-ring",
+      "component": "IFRAME",
+      "reason": "standalone.html's content-frame iframe: document.activeElement reports it as focused, but Chromium never matches :focus or :focus-visible on an iframe once it holds a loaded document (verified 8.3.8, 24/09/2026 -- el.matches(':focus') is false while document.activeElement === el is true), so no CSS rule on the frame itself can ever paint a ring. A :focus-visible rule is left on .content-frame in case another engine honours it."
+    }
+  ]
+}
