@@ -1,0 +1,33 @@
+[versions]
+ignition = "8.3.0"
+gson = "2.14.0"
+jakarta-servlet = "5.0.0"
+httpclient5 = "5.6.2"
+httpcore5 = "5.4.3"
+junit-jupiter = "5.14.4"
+junit-platform-launcher = "1.14.4"
+mockito = "5.23.0"
+assertj = "3.27.7"
+slf4j = "2.0.18"
+
+[libraries]
+ignition-common = { module = "com.inductiveautomation.ignitionsdk:ignition-common", version.ref = "ignition" }
+ignition-designer-api = { module = "com.inductiveautomation.ignitionsdk:designer-api", version.ref = "ignition" }
+ignition-gateway-api = { module = "com.inductiveautomation.ignitionsdk:gateway-api", version.ref = "ignition" }
+ignition-driver-api = { module = "com.inductiveautomation.ignitionsdk:driver-api", version.ref = "ignition" }
+perspective-common = { module = "com.inductiveautomation.ignitionsdk:perspective-common", version.ref = "ignition" }
+perspective-designer = { module = "com.inductiveautomation.ignitionsdk:perspective-designer", version.ref = "ignition" }
+perspective-gateway = { module = "com.inductiveautomation.ignitionsdk:perspective-gateway", version.ref = "ignition" }
+gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
+jakarta-servlet = { module = "jakarta.servlet:jakarta.servlet-api", version.ref = "jakarta-servlet" }
+httpclient5 = { module = "org.apache.httpcomponents.client5:httpclient5", version.ref = "httpclient5" }
+httpcore5 = { module = "org.apache.httpcomponents.core5:httpcore5", version.ref = "httpcore5" }
+junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit-jupiter" }
+junit-jupiter-params = { module = "org.junit.jupiter:junit-jupiter-params", version.ref = "junit-jupiter" }
+junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit-jupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform-launcher" }
+mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }
+mockito-junit-jupiter = { module = "org.mockito:mockito-junit-jupiter", version.ref = "mockito" }
+assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }

@@ -1,0 +1,63 @@
+{
+  "type": "object",
+  "properties": {
+    "columns": {
+      "type": "number",
+      "default": 2,
+      "minimum": 1,
+      "maximum": 4,
+      "description": "Number of grid columns"
+    },
+    "rows": {
+      "type": "number",
+      "default": 2,
+      "minimum": 1,
+      "maximum": 4,
+      "description": "Number of grid rows"
+    },
+    "cameras": {
+      "type": "array",
+      "default": [],
+      "description": "Array of camera device names to show in grid cells (left-to-right, top-to-bottom)",
+      "items": {
+        "type": "string"
+      }
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["auto", "webrtc", "mse", "snapshot"],
+      "default": "auto",
+      "description": "Default stream mode for all cells"
+    },
+    "snapshotInterval": {
+      "type": "number",
+      "default": 5000,
+      "minimum": 1000,
+      "maximum": 60000,
+      "description": "Snapshot refresh interval in milliseconds"
+    },
+    "showOverlays": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show camera name and status overlays on each cell"
+    },
+    "showSaveButtons": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show snapshot download buttons on each cell"
+    },
+    "gap": {
+      "type": "number",
+      "default": 2,
+      "minimum": 0,
+      "maximum": 16,
+      "description": "Gap between grid cells in pixels"
+    },
+    "style": {
+      "$ref": "urn:ignition-schema:schemas/style-properties.schema.json",
+      "default": {
+        "classes": ""
+      }
+    }
+  }
+}

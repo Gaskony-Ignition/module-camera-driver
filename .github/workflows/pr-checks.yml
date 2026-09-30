@@ -1,0 +1,149 @@
+name: PR Checks
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  pr-title-check:
+    name: PR Title Format Check
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+
+    steps:
+      - name: Check PR title format
+        uses: amannn/action-semantic-pull-request@0723387faaf9b38adef4775cd42cfd5155ed6017 # v5.5.3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+          requireScope: false
+          subjectPattern: ^[A-Z].+$
+          subjectPatternError: |
+            The subject "{subject}" doesn't match the pattern "^[A-Z].+$".
+
+            Examples:
+            - feat: Add ONVIF device auto-discovery
+            - fix: Resolve RTSP stream reconnection issue
+            - refactor: Extract snapshot caching logic
+            - docs: Update installation instructions
+
+  size-label:
+    name: Add Size Label
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Add size label
+        uses: codelytv/pr-size-labeler@f2aafc4d8735009c6de18acefe15eecbfbfae56f # v1.9.0
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          xs_label: 'size/XS'
+          xs_max_size: '10'
+          s_label: 'size/S'
+          s_max_size: '100'
+          m_label: 'size/M'
+          m_max_size: '500'
+          l_label: 'size/L'
+          l_max_size: '1000'
+          xl_label: 'size/XL'
+          fail_if_xl: 'false'
+
+  test-coverage-comment:
+    name: Comment Test Coverage
+    runs-on: ubuntu-latest
+    needs: [pr-title-check]
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ./web-ui/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./web-ui
+        run: npm ci
+
+      - name: Run tests with coverage
+        working-directory: ./web-ui
+        run: npm run test:coverage
+
+      - name: Coverage Comment
+        uses: romeovs/lcov-reporter-action@dda1c9b1fa1622b225e9acd87a248751dbcc6ada # v0.3.1
+        with:
+          lcov-file: ./web-ui/coverage/lcov.info
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          delete-old-comments: true
+
+  gradle-check:
+    name: Gradle Check (tests + JaCoCo + SpotBugs + Checkstyle)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Node.js (for webpack frontend assets)
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ./web-ui/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: ./web-ui
+        run: npm ci
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Run gradle check (tests, JaCoCo verification, SpotBugs, Checkstyle)
+        run: ./gradlew check --no-daemon --stacktrace

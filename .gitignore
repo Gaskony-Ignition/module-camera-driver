@@ -1,0 +1,94 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**
+!**/src/test/**
+
+# Extracted bytecode / framework artifacts (never commit)
+/META-INF/
+/com/
+/mounted/
+*.zip
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Eclipse
+.classpath
+.project
+.settings/
+bin/
+
+# VS Code
+.vscode/
+
+# Claude Code
+.claude/
+
+# macOS
+.DS_Store
+
+# Module signing credentials (never commit)
+gradle.properties
+sign.properties
+sign.props
+keystore.jks
+certificates/
+*.p12
+*.pfx
+*.pem
+*.jks
+*.keystore
+*.der
+*.key
+
+# Environment files — broad deny with explicit allowlist
+.env
+.env.*
+!.env.example
+!.env.template
+!.env.*.example
+!.env.*.template
+
+# Public-only key material may still be committed if explicitly suffixed
+!*.public.key
+!*.pub.pem
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+*.swp
+*.swo
+*~
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Java heap dumps
+*.hprof
+hs_err_pid*
+
+# Note: package-lock.json is NOT ignored - it's required for reproducible CI builds
+
+# Build outputs
+*.modl
+*.jar
+!gradle-wrapper.jar
+web-ui/node_modules/
+
+# Windows WSL metadata (must never be committed)
+*:Zone.Identifier
+*Zone.Identifier*
+*.Zone.Identifier
+.binary-cache/

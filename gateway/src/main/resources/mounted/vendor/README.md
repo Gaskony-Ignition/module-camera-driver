@@ -1,0 +1,1 @@
+Pinned React UMD builds: react 18.3.1 / react-dom 18.3.1 (copied verbatim from `web-ui/node_modules/{react,react-dom}/umd/*.production.min.js`). Update these together with the `react`/`react-dom` versions in `web-ui/package.json` — do not let them drift.

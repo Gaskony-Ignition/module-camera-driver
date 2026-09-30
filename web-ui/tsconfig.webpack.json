@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": false,
+    "allowImportingTsExtensions": false,
+    "moduleResolution": "node",
+    "module": "ESNext",
+    "target": "ES2020",
+    "jsx": "react-jsx",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
+  },
+  "exclude": ["src/**/__tests__", "src/**/*.test.ts", "src/**/*.test.tsx", "src/**/test"]
+}

@@ -1,0 +1,393 @@
+# Security Documentation
+
+## Overview
+
+This document describes the security architecture, practices, and configuration for the Camera Driver module.
+
+## Module Signing
+
+### Configuration
+
+Module signing credentials are **NOT** stored in version control. To build signed modules:
+
+1. Copy `gradle.properties.template` to `gradle.properties`
+2. Set environment variables:
+   ```bash
+   export KEYSTORE_PASSWORD="your-secure-password"
+   export CERT_PASSWORD="your-secure-password"
+   ```
+3. Or edit `gradle.properties` locally (never commit this file)
+
+### Certificate Management
+
+- **Keystore**: `camera-driver.jks` (excluded from version control)
+- **Certificate**: `camera-driver.der` (excluded from version control)
+- **Alias**: `camera-driver`
+
+**IMPORTANT**: These files contain private keys and must never be committed to version control.
+
+## Authentication & Authorization
+
+### HTTP Endpoints (v2.2.0+)
+
+**Current Status**: All HTTP endpoints require authentication with comprehensive security features.
+
+- `/data/camera-driver/snapshot` - **REQUIRES AUTHENTICATION**
+- `/data/camera-driver/stream` - **REQUIRES AUTHENTICATION**
+
+**Supported Authentication Methods**:
+
+1. **HTTP Session Authentication** (Primary - for Ignition users)
+   - Users with valid Ignition Gateway sessions automatically authenticated
+   - No additional configuration required
+   - Seamless integration with Perspective and Vision clients
+   - Checks for `authenticated`, `username`, and `user` session attributes
+
+2. **Basic Authentication** (For external tools)
+   ```bash
+   curl -u username:password \
+     "http://gateway:8088/data/camera-driver/snapshot?device=Camera1&profile=000"
+   ```
+   - Validates credentials against Ignition gateway authentication
+   - Account lockout after 5 failed attempts (15-minute duration)
+   - Failed attempts tracked per username
+   - All authentication attempts logged for auditing
+
+3. **API Key Authentication** (For programmatic access)
+
+   **Query Parameter**:
+   ```bash
+   curl "http://gateway:8088/data/camera-driver/snapshot?device=Camera1&profile=000&apiKey=YOUR_KEY"
+   ```
+
+   **Header** (recommended for security):
+   ```bash
+   curl -H "X-API-Key: YOUR_KEY" \
+     "http://gateway:8088/data/camera-driver/snapshot?device=Camera1&profile=000"
+   ```
+
+   - SHA-256 hashed keys (no plain-text storage)
+   - Secure random key generation (256-bit entropy)
+   - Generate keys programmatically: `AuthenticationManager.generateApiKey()`
+   - Add keys via: `authManager.addApiKey(key, username)`
+
+**Security Features (v2.2.0)**:
+- ✅ Proper 401 Unauthorized responses with WWW-Authenticate header
+- ✅ Session validation checks for Ignition users
+- ✅ Multiple authentication methods for flexibility
+- ✅ Failed authentication attempts logged for auditing
+- ✅ **Account lockout** after 5 failed attempts (15-minute duration)
+- ✅ **SHA-256 hashed API keys** with secure storage
+- ✅ **Security event logging** for all authentication failures
+- ✅ **Failed attempt tracking** per username
+- ✅ **Lockout expiration** with automatic cleanup
+
+**Managing API Keys**:
+
+API keys can be added programmatically:
+
+```java
+AuthenticationManager authManager = onvifRoutes.getAuthenticationManager();
+
+// Generate a secure random API key
+String apiKey = AuthenticationManager.generateApiKey();
+
+// Add the key for a specific user
+authManager.addApiKey(apiKey, "apiuser");
+
+// Remove a key when no longer needed
+authManager.removeApiKey(apiKey);
+
+// Clear all account lockouts (administrative override)
+authManager.clearAllLockouts();
+```
+
+**Monitoring Authentication**:
+
+```java
+// Get failed attempt statistics
+Map<String, AtomicInteger> stats = authManager.getFailedAttemptStats();
+```
+
+### ONVIF Device Authentication
+
+Camera credentials are stored securely using Ignition's `SecretConfig`:
+- Passwords encrypted at rest in Ignition database
+- Never logged or exposed in error messages
+- Automatic cleanup via try-with-resources
+
+## SSL/TLS Configuration
+
+### Camera Communication (v2.0.0+)
+
+SSL/TLS certificate validation is **configurable** per device:
+
+```
+Validation Modes:
+- STRICT: Full certificate validation (production recommended)
+- TRUST_FIRST_USE: Accept and pin self-signed on first connection (NOT IMPLEMENTED — selecting it raises IllegalArgumentException)
+- INSECURE: Accept any certificate (development only)
+```
+
+**Default**: STRICT (changed from INSECURE in 2.34.x — see `/modules/.review/FINAL_REVIEW.md` §4 C5).
+
+`ONVIFClient.createSSLContext()` now treats any unknown / unset mode as STRICT and only relaxes validation when the operator has explicitly selected INSECURE. While INSECURE is active:
+
+- The constructor logs a WARN at client creation, naming the device URL.
+- `ONVIFPoller.poll()` re-emits a WARN every poll cycle (default interval 5 s) so the unsafe state is surfaced continuously in Gateway logs.
+
+`NoopHostnameVerifier` and the trust-all `X509TrustManager` continue to back the INSECURE path; switching the default does not change INSECURE's semantics, only its opt-in posture.
+
+**Why configurable?**: Many IP cameras ship with self-signed certificates. INSECURE is intended for closed networks during initial bring-up; production deployments should provision proper certificates and use STRICT.
+
+### Gateway Communication
+
+All HTTP endpoints support HTTPS when Ignition Gateway is configured with SSL.
+
+## Input Validation
+
+All user inputs are validated before use:
+
+### Device Names
+- Pattern: `[a-zA-Z0-9_.()\- ]+`
+- Maximum length: 64 characters
+- Allows letters, digits, spaces, `_`, `-`, `.`, and parentheses to match Ignition's
+  device-name charset; rejects `/`, `\`, control characters, and path traversal (`..`)
+
+### Profile Tokens
+- Pattern: `[a-zA-Z0-9_-]+`
+- Maximum length: 64 characters
+- Sanitized before XML insertion
+
+### IP Addresses
+- Validated via `ValidationUtil.isValidIpOrHost`: strict IPv4 (each octet 0–255) or a
+  valid DNS hostname
+- Bogus inputs such as `1111` or `25525525525` are rejected (the previous regex accepted them)
+
+## go2rtc Streaming Trust Boundary
+
+The bundled go2rtc process is launched on gateway localhost to transcode RTSP for browser
+playback. Its HTTP API receives credentialed RTSP URLs (`rtsp://user:pass@host`) when streams
+are registered.
+
+- **API authentication**: as of v3.0.8 the gateway generates a random per-launch password,
+  writes it into the go2rtc `api.password` config, and sends HTTP Basic auth on every API call.
+  This closes the prior exposure where any local process could `GET /api/streams` and read back
+  camera credentials from an unauthenticated localhost API.
+- **Trust boundary**: go2rtc binds to localhost only. The threat model assumes the gateway host
+  itself is trusted; operators should not run untrusted local processes on the gateway, and the
+  go2rtc API port should never be exposed beyond localhost.
+- **Stream proxy**: the module's own stream proxy never logs source URLs, so credentials do not
+  leak into gateway logs.
+
+## WebRTC Transport (v3.1.0+)
+
+WebRTC playback introduces one new network listener and one new endpoint; both are constrained:
+
+- **Signaling is authenticated**: browsers never talk to go2rtc directly. The SDP offer/answer
+  exchange goes through `POST /data/camera-driver/webrtc`, which enforces the same
+  authentication (session / Basic / API key / Perspective session token) and per-IP rate
+  limiting as every other module endpoint. The gateway then relays the exchange to go2rtc's
+  localhost API with the per-launch Basic auth password.
+- **Media listener (port 8555, TCP+UDP)**: go2rtc listens for ICE/DTLS media connections on
+  8555. This port carries **no plaintext video**: media is SRTP, keyed via the DTLS handshake
+  whose fingerprints are pinned in the SDP exchange — which only an authenticated client can
+  perform. An attacker connecting to 8555 without a signaled session cannot negotiate a stream.
+- **ICE candidates**: advertised candidates are auto-detected site-local IPv4 addresses, or an
+  operator-controlled allowlist file (`data/camera-driver/go2rtc/webrtc-candidates.txt`).
+  No STUN/TURN servers are contacted — no traffic leaves the local network for negotiation.
+- **Exposure guidance**: do not port-forward 8555 to untrusted networks. For remote viewing,
+  front the gateway with a VPN, as with the rest of the Ignition web interface.
+
+## XML Security
+
+### XXE Protection
+
+All XML parsing is protected against XML External Entity (XXE) attacks:
+
+```java
+DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+factory.setXIncludeAware(false);
+factory.setExpandEntityReferences(false);
+```
+
+### XML Injection Protection
+
+All user inputs are escaped before insertion into XML:
+- `&` → `&amp;`
+- `<` → `&lt;`
+- `>` → `&gt;`
+- `"` → `&quot;`
+- `'` → `&apos;`
+
+## CORS Policy
+
+Cross-Origin Resource Sharing (CORS) headers are restricted to known origins only. The wildcard `*` origin is **not** used in production.
+
+## Rate Limiting
+
+### Per-IP Rate Limiting (v2.1.0+)
+- **Limit**: 600 requests per minute per IP address
+- **Scope**: Applied to snapshot and stream endpoints
+- **Response**: HTTP 429 Too Many Requests when exceeded
+- **Tracking**: Per-IP via X-Forwarded-For and X-Real-IP headers
+- **Proxy-Aware**: Honors reverse proxy headers for accurate IP tracking
+
+### Global Resource Limits
+- Maximum concurrent snapshots: 50
+- Maximum concurrent streams: 20
+
+Exceeding limits returns HTTP 429 (Too Many Requests).
+
+**DoS Protection**: The per-IP rate limiting prevents abuse and resource exhaustion attacks while allowing legitimate users normal access to camera feeds.
+
+## Known Security Limitations
+
+### SHA-1 Hash Algorithm
+
+ONVIF WS-UsernameToken specification **requires** SHA-1 for password digests. This is a protocol-level limitation, not a code defect.
+
+**Mitigation**:
+- Use strong passwords (16+ characters, high entropy)
+- Network isolation (VPN, VLAN)
+- HTTPS for all ONVIF communication
+- Frequent password rotation
+
+**Reference**: ONVIF Core Specification Version 2.0, Section 5.1.1
+
+## Vulnerability Disclosure
+
+If you discover a security vulnerability, please report it responsibly:
+
+### Reporting Security Issues
+
+1. **GitHub Security Advisories** (Preferred):
+   - Visit: https://github.com/nigelgwork/ignition-module-camera-driver/security/advisories
+   - Click "Report a vulnerability"
+   - Provide detailed description of the vulnerability
+
+2. **GitHub Issues**:
+   - Create an issue at: https://github.com/nigelgwork/ignition-module-camera-driver/issues
+   - Mark with "Security" label
+   - Include version number, steps to reproduce, and impact assessment
+
+3. **Email**: For sensitive disclosures, contact via GitHub profile
+
+**Response Time**: We aim to respond within 48 hours
+
+**Please do NOT** publicly disclose vulnerabilities until a patch is available and users have been given reasonable time to update (typically 90 days).
+
+## Security Audit History
+
+| Date       | Version | Auditor         | Findings |
+|------------|---------|-----------------|----------|
+| 2025-11-22 | 1.0.23  | Internal Review | 3 Critical, 5 High |
+| 2025-11-22 | 2.0.0   | Internal Review | 2 Critical resolved, 1 Critical remaining (authentication) |
+| 2025-11-22 | 2.1.0   | Internal Review | All critical issues resolved + comprehensive testing |
+| 2025-11-22 | 2.2.0   | Internal Review | Production-ready authentication with account lockout + API key management |
+
+## Compliance Considerations
+
+### GDPR (General Data Protection Regulation)
+- Camera surveillance requires proper access controls ✅ (v2.0.0+)
+- Audit logging recommended for camera access
+
+### HIPAA (Health Insurance Portability and Accountability Act)
+- Healthcare facilities require authentication ✅ (v2.0.0+)
+- Encryption in transit recommended (HTTPS)
+- Access logging recommended
+
+### PCI-DSS (Payment Card Industry Data Security Standard)
+- Payment environments require encryption ✅
+- Access control implemented ✅ (v2.0.0+)
+- Regular security updates required
+
+## Security Best Practices
+
+### Deployment
+
+1. **Network Isolation**: Place cameras on dedicated VLAN
+2. **Firewall Rules**: Restrict camera access to Ignition Gateway only
+3. **HTTPS**: Enable SSL/TLS on Ignition Gateway
+4. **Strong Passwords**: Use 16+ character passwords for cameras
+5. **Regular Updates**: Keep Ignition and modules updated
+6. **Monitoring**: Enable access logging and alerting
+
+### Configuration
+
+1. **SSL/TLS Mode**: Use STRICT mode in production
+2. **Authentication**: Never disable authentication on endpoints
+3. **CORS**: Configure allowed origins explicitly
+4. **Rate Limits**: Adjust based on environment needs
+
+### Maintenance
+
+1. **Password Rotation**: Rotate camera passwords quarterly
+2. **Certificate Updates**: Renew certificates before expiration
+3. **Dependency Updates**: Monitor for security advisories
+4. **Audit Logs**: Review access logs regularly
+
+## Dependencies
+
+### Security Scanning
+
+All dependencies are scanned for known vulnerabilities:
+
+```bash
+./gradlew dependencyCheckAnalyze
+```
+
+### Current Dependencies (v2.0.0)
+
+- `org.apache.httpcomponents:httpclient:4.5.14` - ✅ No critical CVEs
+- `org.apache.httpcomponents:httpcore:4.4.16` - ✅ No critical CVEs
+- `com.google.code.gson:gson:2.13.2` - ✅ No known vulnerabilities
+- `Ignition SDK 8.3.0` - Managed by Ignition platform
+
+## Change Log
+
+### v2.2.0 (2025-11-22) - CURRENT
+- **SECURITY**: Production-ready authentication with comprehensive security features
+- **SECURITY**: Account lockout after 5 failed attempts (15-minute duration)
+- **SECURITY**: SHA-256 hashed API keys with secure random generation
+- **SECURITY**: Failed authentication tracking per username
+- **SECURITY**: Security event logging for all authentication failures
+- **SECURITY**: Lockout expiration with automatic cleanup
+- **SECURITY**: Secure credential validation (no plain-text storage)
+- **SECURITY**: API key management via AuthenticationManager
+- **ENHANCEMENT**: Separated authentication logic into AuthenticationManager class
+- **ENHANCEMENT**: Support for X-API-Key header (in addition to query parameter)
+- Placeholder authentication from v2.1.0 **FULLY IMPLEMENTED**
+
+### v2.1.0 (2025-11-22)
+- **SECURITY**: HTTP endpoint authentication implemented (session, Basic Auth, API key)
+- **SECURITY**: Per-IP rate limiting implemented (600 req/min)
+- **SECURITY**: 168 comprehensive automated tests including security tests
+- **SECURITY**: XSS, SQL injection, JNDI injection, and path traversal protection verified
+- **SECURITY**: XXE and Billion Laughs attack prevention tested
+- **KNOWN LIMITATION**: Basic Auth and API key were placeholders (**FIXED in v2.2.0**)
+- Critical authentication gap from v2.0.0 **RESOLVED**
+
+### v2.0.0 (2025-11-22)
+- **SECURITY**: Removed hardcoded credentials from version control
+- **SECURITY**: Made SSL/TLS validation configurable (STRICT mode available)
+- **SECURITY**: Added ValidationUtil for centralized input validation
+- **SECURITY**: Improved CORS policy with origin validation
+- **KNOWN LIMITATION**: HTTP endpoints still use OPEN_ROUTE (**FIXED in v2.1.0**)
+- Created comprehensive security documentation
+
+### v1.0.23 (Previous)
+- Credentials hardcoded (CRITICAL vulnerability - **FIXED** in v2.0.0)
+- No authentication on endpoints (CRITICAL vulnerability - **FIXED** in v2.1.0)
+- SSL validation always disabled (HIGH vulnerability - **FIXED** in v2.0.0)
+
+## References
+
+- [OWASP Top 10 2021](https://owasp.org/Top10/)
+- [ONVIF Core Specification](https://www.onvif.org/specs/core/ONVIF-Core-Specification.pdf)
+- [CWE Top 25](https://cwe.mitre.org/top25/)
+- [Ignition Security Best Practices](https://docs.inductiveautomation.com/)
