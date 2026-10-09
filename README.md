@@ -219,7 +219,7 @@ The gateway UI, the standalone dedicated page and the Perspective `CameraViewer`
 
 Apache License 2.0 — see [LICENSE](LICENSE) for details.
 
-Copyright (c) 2025 Nigel Gwork — [@nigelgwork](https://github.com/nigelgwork)
+Copyright (c) 2025 Gaskony
 
 - **GitHub**: <https://github.com/Gaskony-Ignition/ignition-module-camera-driver>
 - **Issues**: <https://github.com/Gaskony-Ignition/ignition-module-camera-driver/issues>
