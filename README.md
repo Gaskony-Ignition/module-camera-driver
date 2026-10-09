@@ -2,6 +2,8 @@
 
 A single unified **Camera** device type for Ignition 8.3 that brings live video, PTZ control, and camera health straight into the platform — no separate VMS window, no vendor lock-in.
 
+> **Not an Inductive Automation product, and not supported by Inductive Automation.** Personal work, largely built with AI tools and tested for one purpose on one gateway. Take the ideas; fork and review it before it goes near production. [NOTICE.md](NOTICE.md) says more.
+
 ## Why this exists
 
 SCADA is supervisory control and data acquisition — and in today's world, no
