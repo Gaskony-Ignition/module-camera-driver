@@ -179,7 +179,7 @@ All endpoints are at `/data/camera-driver/*` and require authentication.
 
 ## Current Status
 
-**Version**: 3.3.1 | **Status**: Production Ready
+**Version**: 3.3.2 | **Status**: Production Ready
 
 The gateway UI, the standalone dedicated page and the Perspective `CameraViewer`/`CameraGrid` components meet WCAG 2.1 AA, with one recorded exception in [a11y.json](a11y.json): Chromium never draws a focus ring on the standalone page's content frame once it holds a loaded document.
 
@@ -212,7 +212,7 @@ The gateway UI, the standalone dedicated page and the Perspective `CameraViewer`
 ./gradlew clean build        # Build module
 ./gradlew test               # Run tests
 ./gradlew clean build test   # Build and test
-# Output: build/CameraDriver-3.3.1.modl
+# Output: build/CameraDriver-3.3.2.modl
 ```
 
 ## License

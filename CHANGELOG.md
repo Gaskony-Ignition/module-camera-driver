@@ -5,6 +5,26 @@ All notable changes to the Ignition Camera Driver module will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.2] - 2026-11-03
+
+**Type:** PATCH — security (dependency update)
+
+### Security
+
+- Updated Apache HttpClient 5 from 5.6.2 to 5.6.5 (and HttpCore 5 from 5.4.3 to
+  5.4.4). 5.6.2 is affected by GHSA-hjcp-jmpx-g3qm / CVE-2026-64607 (connection
+  leak on a content-encoding decode error leading to pool exhaustion), fixed in
+  5.6.3. Both libraries are bundled in the module.
+- Updated web-ui build dependencies (vitest 5, rimraf 6, lockfile refresh) to
+  clear Dependabot alerts. These are build tooling and are not shipped in the module.
+
+### Changed
+
+- CI now submits the Gradle runtime classpath (what the `.modl` bundles) to the
+  dependency graph, so Dependabot sees the Java dependencies.
+- Documentation: not-supported notice and wording, and removal of machine paths
+  and lab addresses.
+
 ## [3.3.1] - 2026-09-24
 
 **Type:** PATCH — accessibility (WCAG 2.1 AA)
