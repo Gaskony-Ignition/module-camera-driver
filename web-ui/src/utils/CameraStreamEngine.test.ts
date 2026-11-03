@@ -602,7 +602,7 @@ describe('CameraStreamEngine WebRTC post-playing failure recovery (fix #2)', () 
         URL.revokeObjectURL = vi.fn();
 
         pcInstances = [];
-        vi.stubGlobal('RTCPeerConnection', vi.fn().mockImplementation(() => {
+        vi.stubGlobal('RTCPeerConnection', vi.fn().mockImplementation(function () {
             const pc = new FakePeerConnection();
             pcInstances.push(pc);
             return pc;

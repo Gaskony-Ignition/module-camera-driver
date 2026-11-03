@@ -18,7 +18,7 @@ import type { Device } from '../types/device'
 const engineInstances: Array<{ start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }> = []
 
 vi.mock('../utils/CameraStreamEngine', () => ({
-  CameraStreamEngine: vi.fn().mockImplementation(() => {
+  CameraStreamEngine: vi.fn().mockImplementation(function () {
     const instance = { start: vi.fn(), stop: vi.fn() }
     engineInstances.push(instance)
     return instance
