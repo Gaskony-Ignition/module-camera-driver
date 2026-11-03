@@ -187,9 +187,8 @@ The gateway UI, the standalone dedicated page and the Perspective `CameraViewer`
 
 | Document | Description |
 | ---------- | ------------- |
-| [CHANGELOG.md](CHANGELOG.md) | Complete version history |
+| [CHANGELOG.md](CHANGELOG.md) | Version history |
 | [docs/PROJECT_CHARTER.md](docs/PROJECT_CHARTER.md) | Purpose, definition of done, won't-do list |
-| [/modules/.claude/skills/](../.claude/skills/) | Shared skills across all modules |
 | [docs/USAGE.md](docs/USAGE.md) | HTTP endpoint usage guide |
 | [SECURITY.md](SECURITY.md) | Security architecture |
 | [docs/TESTING.md](docs/TESTING.md) | Testing guide |
