@@ -1,7 +1,7 @@
 # Claude Context - Ignition Camera Driver Module
 
-Module-specific instructions. Shared standards are in `/modules/CLAUDE.md` and
-`/modules/.claude/skills/`.
+Module-specific instructions. Shared standards are in `../CLAUDE.md` and
+`../.claude/skills/` (the workspace `modules/` folder).
 
 ## Project Overview
 
@@ -14,7 +14,7 @@ ONVIF)
 ## Project Location
 
 ```text
-/modules/ignition-module-camera-driver/
+modules/ignition-module-camera-driver/
 ```
 
 ## Essential Reading Order
@@ -22,7 +22,7 @@ ONVIF)
 1. `docs/PROJECT_CHARTER.md` — purpose, definition of done, won't-do list;
    drives all release decisions
 2. This file — architecture and gotchas
-3. `/modules/.claude/skills/` — shared skills (building, reviewing, testing,
+3. `../.claude/skills/` — shared skills (building, reviewing, testing,
    security)
 4. `SECURITY.md` — security architecture and practices
 5. `README.md` — user-facing documentation
@@ -110,7 +110,7 @@ The properties file must sit at the exact package path:
 
 ### Before Making Changes
 
-1. Load the relevant shared skills from `/modules/.claude/skills/`
+1. Load the relevant shared skills from `../.claude/skills/`
 2. Check `SECURITY.md` for security requirements
 3. Check `docs/PROJECT_CHARTER.md` for what's in/out of scope
 
