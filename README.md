@@ -22,46 +22,44 @@ release decision.
 
 ## What it looks like
 
-Every camera pictured below is a synthetic RTSP test source stood up for this
-README (see *How to use it*) — `DemoLoadingDock` and `DemoYardCam`. No physical
-camera is required to reproduce any of it.
+Every camera pictured below is one of four synthetic RTSP test sources
+(`DemoLoadingDock`, `DemoYardCam`, `DemoGateCam`, `DemoProcessLine`), each an
+ffmpeg test pattern. No physical camera is needed (`scripts/demo-cameras.sh`
+in *How to use it* stands up two).
 
-**Camera device detail** — the Connection Browser's device list, expanded. It
-shows exactly what the module discovers per device: `DemoLoadingDock`'s and
-`DemoYardCam`'s RTSP media profiles (H.264), each with Snapshot/Stream/Copy
-URI actions. (ONVIF discovery — manufacturer/model/firmware/serial and
-multi-profile enumeration — is a real capability of the module against ONVIF
-hardware; it isn't pictured here because it needs physical ONVIF hardware to
-demonstrate honestly.)
+**Camera device detail** — the Connection Browser's device list for all four
+devices. It shows exactly what the module discovers per device: each one's
+RTSP media profile (H.264) with Snapshot/Stream/Copy URI actions. (ONVIF
+discovery — manufacturer/model/firmware/serial and multi-profile enumeration —
+is a real capability of the module against ONVIF hardware; it isn't pictured
+here because it needs physical ONVIF hardware to demonstrate honestly.)
 
-![Camera device list showing RTSP media profiles for both synthetic devices](docs/images/camera-devices-list.png)
+![Camera device list showing RTSP media profiles for the four synthetic devices](docs/images/camera-devices-list.png)
 
 **Gateway Live View grid** — the Connection Browser's built-in multi-camera
-grid, actually streaming: the left tile is `DemoLoadingDock`'s synthetic feed
-(colour bars, a moving marker, and a live timestamp overlay proving it isn't
-a static image); the right tile is `DemoYardCam`, a second synthetic source
-with a visibly different test pattern (SMPTE bars) so the two tiles are
-clearly distinct.
+grid, streaming all four devices at once, each with a distinct pattern:
+`DemoLoadingDock` (colour bars with a running counter), `DemoYardCam` (SMPTE HD
+bars), `DemoGateCam` (bars with a moving sweep and a burnt-in timecode) and
+`DemoProcessLine` (a Game of Life pattern that changes every frame).
 
-![Gateway Live View grid with two tiles showing live synthetic test video and a live timestamp overlay](docs/images/gateway-live-view-grid.png)
+![Gateway Live View grid with four tiles each showing live synthetic test video](docs/images/gateway-live-view-grid.png)
 
 **Perspective `CameraViewer` and `CameraGrid` components** — the same video,
 now embedded in a Perspective page next to whatever process data it belongs
-with. The top pane is a single `CameraViewer` bound to `DemoLoadingDock`; the
-bottom pane is a `CameraGrid` showing both synthetic devices side by side,
-proving the grid component streams multiple devices at once.
+with. On the left is a single `CameraViewer` bound to `DemoLoadingDock`; on the
+right a 2×2 `CameraGrid` streams all four devices at once.
 
-![Perspective view with a CameraViewer component on top and a two-camera CameraGrid below, both showing live video](docs/images/perspective-camera-viewer-grid.png)
+![Perspective view with a CameraViewer component on the left and a four-camera CameraGrid on the right, all showing live video](docs/images/perspective-camera-viewer-grid.png)
 
 **Designer-scope authoring** — `CameraViewer` and `CameraGrid` are ordinary
-Perspective components in the Designer's own component palette (Camera Driver
-category), draggable onto any view. The property editor shown here is a
-`CameraViewer` dropped on a scratch view, exposing its real bindable
-properties — `deviceName`, `mode`, `snapshotInterval`, `showOverlay`,
-`objectFit`, `showSaveButton`, `showPtzControls` — the same as any built-in
-component, with no special-casing needed to use them.
+Perspective components in the Designer's own component palette, under a Camera
+Driver category, draggable onto any view. Here the same view is open in the
+Designer with its `CameraViewer` selected, streaming live on the canvas too. In
+the property editor a `CameraViewer` exposes its bindable properties —
+`deviceName`, `mode`, `snapshotInterval`, `showOverlay`, `objectFit`,
+`showSaveButton`, `showPtzControls` — the same as any built-in component.
 
-![Designer property editor for a CameraViewer component dropped on a scratch view, showing its deviceName, mode, snapshotInterval and other bindable properties](docs/images/designer-perspective-palette.png)
+![Ignition Designer with the Perspective component palette open on its Camera Driver category (Camera Grid, Camera Viewer) and a view of four live cameras on the canvas](docs/images/designer-perspective-palette.png)
 
 ## What it does
 
