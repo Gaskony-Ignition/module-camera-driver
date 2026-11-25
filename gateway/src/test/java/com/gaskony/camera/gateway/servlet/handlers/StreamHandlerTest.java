@@ -206,6 +206,74 @@ class StreamHandlerTest {
         return "http://127.0.0.1:" + upstreamServer.getAddress().getPort() + "/stream.mp4";
     }
 
+    /** Like a live camera: streams until the reader goes away. */
+    private String startEndlessUpstreamServer() throws IOException {
+        upstreamServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        upstreamServer.createContext("/stream.mp4", exchange -> {
+            exchange.getResponseHeaders().add("Content-Type", "video/mp4");
+            exchange.sendResponseHeaders(200, 0);
+            byte[] chunk = new byte[8192];
+            try (OutputStream os = exchange.getResponseBody()) {
+                while (true) {
+                    os.write(chunk);
+                    os.flush();
+                }
+            } catch (IOException ignored) {
+                // The proxy closed the upstream connection: what the test wants.
+            }
+        });
+        upstreamServer.start();
+        return "http://127.0.0.1:" + upstreamServer.getAddress().getPort() + "/stream.mp4";
+    }
+
+    @Test
+    void testProxyStream_ClientGoneOnEndlessStream_FreesSlotPromptly() throws Exception {
+        // A live camera stream never ends. Closing HttpClient's entity stream reads the rest of
+        // the body to reuse the connection, so a departed viewer pinned its stream slot for good.
+        authenticatedRequest();
+        when(requestContext.getParameter("device")).thenReturn("StallCam");
+        deviceStreamingFrom(startEndlessUpstreamServer());
+
+        AtomicInteger writeCount = new AtomicInteger(0);
+        ServletOutputStream throwingStream = new ServletOutputStream() {
+            @Override
+            public boolean isReady() {
+                return true;
+            }
+
+            @Override
+            public void setWriteListener(WriteListener listener) {
+                // Not used in the blocking write path under test.
+            }
+
+            @Override
+            public void write(int b) {
+                // unused
+            }
+
+            @Override
+            public void write(byte[] b, int off, int len) throws IOException {
+                if (writeCount.incrementAndGet() >= 2) {
+                    throw new IOException("simulated client disconnect (broken pipe)");
+                }
+            }
+        };
+        when(response.getOutputStream()).thenReturn(throwingStream);
+        when(response.isCommitted()).thenReturn(true);
+
+        java.util.concurrent.ExecutorService runner = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            java.util.concurrent.Future<?> done = runner.submit(() -> {
+                handler.handle(requestContext, response);
+                return null;
+            });
+            done.get(5, java.util.concurrent.TimeUnit.SECONDS);
+        } finally {
+            runner.shutdownNow();
+        }
+        Assertions.assertThat(StreamHandler.getActiveStreams()).isZero();
+    }
+
     private CameraDevice deviceStreamingFrom(String url) {
         CameraDevice device = connectedDeviceWithoutFallbacks("StallCam");
         when(device.isGo2RtcStreamRegistered()).thenReturn(true);

@@ -509,7 +509,8 @@ public class StreamHandler extends BaseHandler {
                 long totalBytes = 0;
                 boolean writeStalled = false;
 
-                try (var inputStream = entity.getContent()) {
+                var inputStream = entity.getContent();
+                try {
                     while ((bytesRead = inputStream.read(buffer)) != -1) {
                         int lengthToWrite = bytesRead;
                         // Coordinates the race between "this write stalled past the timeout"
@@ -590,6 +591,16 @@ public class StreamHandler extends BaseHandler {
                             logger.info("Stream proxy hit max duration, closing to free route slot - device: {}", deviceName);
                             break;
                         }
+                    }
+                } finally {
+                    // Cancel before closing: closing HttpClient's entity stream reads the rest of
+                    // the body so the connection can be reused, and a live stream has no end, so
+                    // the close never returned and the viewer's stream slot was never freed.
+                    request.cancel();
+                    try {
+                        inputStream.close();
+                    } catch (IOException ignored) {
+                        // The connection was just aborted; nothing left to release.
                     }
                 }
                 // Closing this try-with-resources block (inputStream, then upstream, then

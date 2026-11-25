@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.3.3] - 2026-11-25
 
-**Type:** PATCH — dependency upgrade (latest stable)
+**Type:** PATCH — dependency upgrade (latest stable), plus a stream-slot fix
+
+### Fixed
+
+- **Live streams kept running after the viewer left, until every slot was taken and new viewers
+  got 503 "Maximum concurrent streams reached".** When a viewer went away, the proxy closed the
+  upstream go2rtc/MJPEG body, and HttpClient 5 reads a body to its end on close so it can reuse
+  the connection. A live stream has no end, so the close never returned: the slot was never
+  freed, the go2rtc consumer kept streaming to nobody, and the 15-minute cap never fired. The
+  proxy now cancels the upstream request before closing it.
 
 ### Changed
 
