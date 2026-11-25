@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tasks.register(…)` / `extra.set(…)`, and `syncVersion` no longer reads
   `Task.project` at execution time.
 - **Gradle plugins / tools:** SpotBugs plugin 6.4.8 → 6.5.13, OWASP Dependency
-  Check 12.2.0 → 13.0.0, Checkstyle 10.26.1 → 12.3.1, JaCoCo 0.8.11 → 0.8.16.
+  Check 12.2.0 → 13.0.0, Checkstyle 10.26.1 → 14.4.0 (run on a Java 21 toolchain; Foojay resolver fetches it if missing), JaCoCo 0.8.11 → 0.8.16.
 - **Bundled (`modlImplementation`):** Gson 2.14.0 → 2.15.0, HttpCore 5 (and
   `httpcore5-h2`, now declared so it stays aligned with HttpCore) 5.4.4 → 5.5.
   HttpClient 5 stays 5.6.5 (latest).
@@ -46,8 +46,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript 6.0.3, not 7.0.2 — `typescript-eslint` 8.74.0 supports only
   `>=4.8.4 <6.1.0` and `ts-loader` fails on TS 7 (`TypeError: Cannot read
   properties of undefined (reading 'fileExists')`).
-- Checkstyle 12.3.1, not 14.4.0 — 13.0.0+ needs Java 21 (`Checkstyle 14.4.0 is
-  not compatible with the configured JVM (17)`).
 - JUnit Jupiter 5.14.4 / platform launcher 1.14.4 (Mockito's JUnit 5 support
   does not cover 6); Ignition SDK and `compileOnly` versions unchanged.
 

@@ -67,9 +67,18 @@ subprojects {
         apply(plugin = "com.github.spotbugs")
 
         configure<CheckstyleExtension> {
-            toolVersion = "12.3.1"
+            toolVersion = "14.4.0"
             configFile = rootProject.file("config/checkstyle/checkstyle.xml")
             isIgnoreFailures = true
+        }
+
+        // Checkstyle 11+ runs only on Java 21+. Only the Checkstyle worker uses this
+        // toolchain; compilation and the shipped bytecode stay on the Java 17 toolchain.
+        val checkstyleLauncher = the<JavaToolchainService>().launcherFor {
+            languageVersion.set(JavaLanguageVersion.of(21))
+        }
+        tasks.withType<Checkstyle>().configureEach {
+            javaLauncher.set(checkstyleLauncher)
         }
 
         configure<com.github.spotbugs.snom.SpotBugsExtension> {
