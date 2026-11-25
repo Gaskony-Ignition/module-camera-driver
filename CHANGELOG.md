@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the connection. A live stream has no end, so the close never returned: the slot was never
   freed, the go2rtc consumer kept streaming to nobody, and the 15-minute cap never fired. The
   proxy now cancels the upstream request before closing it.
+- **A viewer leaving was logged as "go2rtc could not be reached"** at WARN, and the handler then
+  tried the fallback sources (MJPEG, snapshot polling) for a client that had gone, opening a
+  second upstream connection on a device with an MJPEG URL. A failed write to the viewer now ends
+  the stream, logged as "Stream proxy ended … clientGone: true".
 
 ### Changed
 

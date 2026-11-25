@@ -508,6 +508,7 @@ public class StreamHandler extends BaseHandler {
                 int bytesRead;
                 long totalBytes = 0;
                 boolean writeStalled = false;
+                boolean clientGone = false;
 
                 var inputStream = entity.getContent();
                 try {
@@ -575,11 +576,11 @@ public class StreamHandler extends BaseHandler {
                             writeStalled = true;
                             break;
                         } catch (ExecutionException ee) {
-                            Throwable cause = ee.getCause();
-                            if (cause instanceof IOException ioe) {
-                                throw ioe;
-                            }
-                            throw new IOException("Stream proxy write failed for device " + deviceName, cause);
+                            // A failed write to the client means the viewer left. The upstream
+                            // was fine, so this is the end of the stream, not a cue to try the
+                            // fallback sources for a client that is no longer there.
+                            clientGone = true;
+                            break;
                         } catch (InterruptedException ie) {
                             Thread.currentThread().interrupt();
                             writeStalled = true;
@@ -608,8 +609,8 @@ public class StreamHandler extends BaseHandler {
                 // here, whether we got here via clean stream end, the duration cap, or a
                 // detected write stall — go2rtc reaps its consumer within ~6s of that close.
 
-                logger.info("Stream proxy ended - device: {}, bytes: {}, duration: {} ms, writeStalled: {}",
-                    deviceName, totalBytes, System.currentTimeMillis() - startTime, writeStalled);
+                logger.info("Stream proxy ended - device: {}, bytes: {}, duration: {} ms, writeStalled: {}, clientGone: {}",
+                    deviceName, totalBytes, System.currentTimeMillis() - startTime, writeStalled, clientGone);
                 return PROXY_STREAMED;
             }
         } catch (IOException e) {

@@ -274,6 +274,59 @@ class StreamHandlerTest {
         Assertions.assertThat(StreamHandler.getActiveStreams()).isZero();
     }
 
+    @Test
+    void testProxyStream_ClientGone_DoesNotOpenTheFallbackSource() throws Exception {
+        // A viewer leaving was reported as "go2rtc could not be reached" and the handler went on
+        // to open the MJPEG fallback for a client that was no longer there.
+        authenticatedRequest();
+        when(requestContext.getParameter("device")).thenReturn("StallCam");
+        CameraDevice device = deviceStreamingFrom(startEndlessUpstreamServer());
+        AtomicInteger mjpegHits = new AtomicInteger(0);
+        HttpServer mjpeg = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        mjpeg.createContext("/mjpeg", exchange -> {
+            mjpegHits.incrementAndGet();
+            exchange.sendResponseHeaders(503, -1);
+            exchange.close();
+        });
+        mjpeg.start();
+        try {
+            when(device.getConfig().advanced().mjpegUrl())
+                .thenReturn("http://127.0.0.1:" + mjpeg.getAddress().getPort() + "/mjpeg");
+            AtomicInteger writeCount = new AtomicInteger(0);
+            ServletOutputStream leavingViewer = new ServletOutputStream() {
+                @Override
+                public boolean isReady() {
+                    return true;
+                }
+
+                @Override
+                public void setWriteListener(WriteListener listener) {
+                    // Not used in the blocking write path under test.
+                }
+
+                @Override
+                public void write(int b) {
+                    // unused
+                }
+
+                @Override
+                public void write(byte[] b, int off, int len) throws IOException {
+                    if (writeCount.incrementAndGet() >= 2) {
+                        throw new IOException("simulated client disconnect (broken pipe)");
+                    }
+                }
+            };
+            when(response.getOutputStream()).thenReturn(leavingViewer);
+            when(response.isCommitted()).thenReturn(true);
+
+            handler.handle(requestContext, response);
+
+            Assertions.assertThat(mjpegHits.get()).isZero();
+        } finally {
+            mjpeg.stop(0);
+        }
+    }
+
     private CameraDevice deviceStreamingFrom(String url) {
         CameraDevice device = connectedDeviceWithoutFallbacks("StallCam");
         when(device.isGo2RtcStreamRegistered()).thenReturn(true);
@@ -283,7 +336,7 @@ class StreamHandlerTest {
     }
 
     @Test
-    void testProxyStream_ClientWriteThrows_TerminatesPromptlyAndReportsError() throws Exception {
+    void testProxyStream_ClientWriteThrows_TerminatesPromptly() throws Exception {
         authenticatedRequest();
         when(requestContext.getParameter("device")).thenReturn("StallCam");
         deviceStreamingFrom(startUpstreamServer(64 * 1024));
