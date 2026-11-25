@@ -9,7 +9,8 @@ java {
 }
 
 // Output path for generated resources
-val projectOutput: String by extra("${layout.buildDirectory.get().asFile}/generated-resources/")
+val projectOutput = "${layout.buildDirectory.get().asFile}/generated-resources/"
+extra.set("projectOutput", projectOutput)
 
 /**
  * Check if npm/node is available on the system.
@@ -27,7 +28,7 @@ fun isNpmAvailable(): Boolean {
  * Task: Install npm dependencies.
  * Only runs if node_modules doesn't exist.
  */
-val npmInstall by tasks.registering(Exec::class) {
+val npmInstall = tasks.register<Exec>("npmInstall") {
     group = "build"
     description = "Install npm dependencies"
 
@@ -60,7 +61,7 @@ val npmInstall by tasks.registering(Exec::class) {
 /**
  * Task: Build React component with webpack.
  */
-val webpack by tasks.registering(Exec::class) {
+val webpack = tasks.register<Exec>("webpack") {
     group = "Ignition Module"
     description = "Build React component with webpack"
 
@@ -84,7 +85,7 @@ val webpack by tasks.registering(Exec::class) {
 /**
  * Task: Run Vitest frontend unit tests.
  */
-val frontendTest by tasks.registering(Exec::class) {
+val frontendTest = tasks.register<Exec>("frontendTest") {
     group = "verification"
     description = "Run Vitest frontend unit tests"
 
@@ -109,7 +110,7 @@ tasks {
     }
 }
 
-val deepClean by tasks.registering {
+val deepClean = tasks.register("deepClean") {
     doLast {
         delete(file(".gradle"))
         delete(file("node_modules"))

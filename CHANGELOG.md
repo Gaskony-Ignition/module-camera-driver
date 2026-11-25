@@ -5,6 +5,52 @@ All notable changes to the Ignition Camera Driver module will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.3] - 2026-11-25
+
+**Type:** PATCH — dependency upgrade (latest stable)
+
+### Changed
+
+- **Build:** Gradle wrapper 8.10.2 → 9.9.2 (`io.ia.sdk.modl` stays 0.5.0, the
+  latest). Gradle 9 fallout fixed: the ffmpeg download task's removed
+  `Project.exec` calls now use `providers.exec { … }.result.get().assertNormalExitValue()`,
+  the deprecated `by tasks.registering` / `by extra` delegates are replaced with
+  `tasks.register(…)` / `extra.set(…)`, and `syncVersion` no longer reads
+  `Task.project` at execution time.
+- **Gradle plugins / tools:** SpotBugs plugin 6.4.8 → 6.5.13, OWASP Dependency
+  Check 12.2.0 → 13.0.0, Checkstyle 10.26.1 → 12.3.1, JaCoCo 0.8.11 → 0.8.16.
+- **Bundled (`modlImplementation`):** Gson 2.14.0 → 2.15.0, HttpCore 5 (and
+  `httpcore5-h2`, now declared so it stays aligned with HttpCore) 5.4.4 → 5.5.
+  HttpClient 5 stays 5.6.5 (latest).
+- **Test-only:** Mockito 5.23.0 → 5.24.0, SLF4J (test logging) 2.0.18 → 2.0.20.
+- **Web UI (build tooling, not shipped except the bundle):** ESLint 9 → 10 and
+  `@eslint/js` 10, `eslint-plugin-react-hooks` 5 → 7, `eslint-plugin-react-refresh`
+  0.4 → 0.5, `globals` 16 → 17, `@testing-library/react` 14 → 16 (with
+  `@testing-library/dom` 10 now declared, as RTL 16 requires) and `jest-dom` 6 → 8,
+  `jsdom` 24 → 31, `lucide-react` 0.575 → 1.79, `sass-loader` 12 → 17,
+  `webpack-cli` 5 → 7, TypeScript 5.9 → 6.0, plus minor updates (rimraf 6.1.4,
+  sass, typescript-eslint, vitest, webpack). `npm audit`: 0 vulnerabilities; the
+  minimatch (<11.0.1) and glob (9.0.0–14.0.1) Dependabot alerts are cleared.
+- TypeScript 6 fallout: `tsconfig.webpack.json` moves off the deprecated
+  `moduleResolution: node` (node10) to `bundler`, and stylesheet side-effect
+  imports get a `*.css`/`*.scss` module declaration. The test setup now imports
+  `@testing-library/jest-dom/vitest`.
+- `eslint-plugin-react-hooks` 7 adds React Compiler diagnostics at error level;
+  they run at warn level here (the module does not use the React Compiler).
+- CI Node.js 20 → 22 (ESLint 10, sass-loader 17 and Vitest 5 need it).
+
+### Held back
+
+- React / React DOM 18.3.1 and `@types/react(-dom)` 18.x — the Gateway's SystemJS
+  needs React's UMD build, removed in 19.
+- TypeScript 6.0.3, not 7.0.2 — `typescript-eslint` 8.74.0 supports only
+  `>=4.8.4 <6.1.0` and `ts-loader` fails on TS 7 (`TypeError: Cannot read
+  properties of undefined (reading 'fileExists')`).
+- Checkstyle 12.3.1, not 14.4.0 — 13.0.0+ needs Java 21 (`Checkstyle 14.4.0 is
+  not compatible with the configured JVM (17)`).
+- JUnit Jupiter 5.14.4 / platform launcher 1.14.4 (Mockito's JUnit 5 support
+  does not cover 6); Ignition SDK and `compileOnly` versions unchanged.
+
 ## [3.3.2] - 2026-11-03
 
 **Type:** PATCH — security (dependency update)

@@ -1,14 +1,14 @@
 [versions]
 ignition = "8.3.0"
-gson = "2.14.0"
+gson = "2.15.0"
 jakarta-servlet = "5.0.0"
 httpclient5 = "5.6.5"
-httpcore5 = "5.4.4"
+httpcore5 = "5.5"
 junit-jupiter = "5.14.4"
 junit-platform-launcher = "1.14.4"
-mockito = "5.23.0"
+mockito = "5.24.0"
 assertj = "3.27.7"
-slf4j = "2.0.18"
+slf4j = "2.0.20"
 
 [libraries]
 ignition-common = { module = "com.inductiveautomation.ignitionsdk:ignition-common", version.ref = "ignition" }
@@ -22,6 +22,7 @@ gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 jakarta-servlet = { module = "jakarta.servlet:jakarta.servlet-api", version.ref = "jakarta-servlet" }
 httpclient5 = { module = "org.apache.httpcomponents.client5:httpclient5", version.ref = "httpclient5" }
 httpcore5 = { module = "org.apache.httpcomponents.core5:httpcore5", version.ref = "httpcore5" }
+httpcore5-h2 = { module = "org.apache.httpcomponents.core5:httpcore5-h2", version.ref = "httpcore5" }
 junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit-jupiter" }
 junit-jupiter-params = { module = "org.junit.jupiter:junit-jupiter-params", version.ref = "junit-jupiter" }
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit-jupiter" }

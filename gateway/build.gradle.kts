@@ -36,6 +36,11 @@ dependencies {
     modlImplementation(libs.httpcore5) {
         exclude(group = "org.slf4j", module = "slf4j-api")
     }
+    // httpclient5 pulls httpcore5-h2 transitively at its own (older) core version;
+    // declare it at the same version as httpcore5 so the two core jars never diverge.
+    modlImplementation(libs.httpcore5.h2) {
+        exclude(group = "org.slf4j", module = "slf4j-api")
+    }
 
     // JSON support for API key persistence (ApiKeyStore). Shipped via modlImplementation
     // at latest stable rather than pinned to the platform's bundled 2.8.9 copy: the only
@@ -65,9 +70,9 @@ dependencies {
     testImplementation(libs.junit.jupiter.api)
     testImplementation(libs.junit.jupiter.params)
     testRuntimeOnly(libs.junit.jupiter.engine)
-    // Gradle 8.10.2 bundles a junit-platform-launcher too old for Jupiter >=5.12
-    // ("OutputDirectoryCreator not available; probably due to unaligned versions")
-    // — pin an explicit matching launcher version.
+    // Pin a launcher that matches Jupiter rather than relying on the one Gradle
+    // supplies (Gradle 8.10.2's was too old for Jupiter >=5.12: "OutputDirectoryCreator
+    // not available; probably due to unaligned versions").
     testRuntimeOnly(libs.junit.platform.launcher)
 
     // Mockito for mocking
@@ -113,7 +118,7 @@ val go2rtcVersion = "1.9.4"
 val binaryCacheRoot = layout.projectDirectory.dir("../.binary-cache")
 val go2rtcOutputDir = provider { binaryCacheRoot.dir("go2rtc-$go2rtcVersion/go2rtc") }
 
-val downloadGo2Rtc by tasks.registering {
+val downloadGo2Rtc = tasks.register("downloadGo2Rtc") {
     description = "Downloads go2rtc binaries for bundling in the module"
     group = "build"
 
@@ -191,7 +196,7 @@ val downloadGo2Rtc by tasks.registering {
 // quietly truncates the artefact.
 val ffmpegOutputDir = provider { binaryCacheRoot.dir("ffmpeg-binaries/ffmpeg") }
 
-val downloadFfmpeg by tasks.registering {
+val downloadFfmpeg = tasks.register("downloadFfmpeg") {
     description = "Downloads static ffmpeg binaries for bundling in the module"
     group = "build"
 
@@ -239,10 +244,12 @@ val downloadFfmpeg by tasks.registering {
                     "maxtime" to "1800"
                 ))
                 // Extract just the ffmpeg binary from the tarball
-                exec {
+                // Project.exec was removed in Gradle 9; providers.exec runs the command
+                // eagerly here and assertNormalExitValue() keeps a failed extraction an error.
+                providers.exec {
                     commandLine("bash", "-c",
                         "tar -xf '${tarFile.absolutePath}' -C '${outputDir.absolutePath}' --wildcards '*/ffmpeg' --strip-components=1")
-                }
+                }.result.get().assertNormalExitValue()
                 File(outputDir, "ffmpeg").renameTo(linuxAmd64File)
                 tarFile.delete()
             } catch (e: Exception) {
@@ -263,10 +270,12 @@ val downloadFfmpeg by tasks.registering {
                     "skipexisting" to "true",
                     "maxtime" to "1800"
                 ))
-                exec {
+                // Project.exec was removed in Gradle 9; providers.exec runs the command
+                // eagerly here and assertNormalExitValue() keeps a failed extraction an error.
+                providers.exec {
                     commandLine("bash", "-c",
                         "tar -xf '${tarFile.absolutePath}' -C '${outputDir.absolutePath}' --wildcards '*/ffmpeg' --strip-components=1")
-                }
+                }.result.get().assertNormalExitValue()
                 File(outputDir, "ffmpeg").renameTo(linuxArm64File)
                 tarFile.delete()
             } catch (e: Exception) {
@@ -345,7 +354,7 @@ tasks.test {
 }
 
 jacoco {
-    toolVersion = "0.8.11"
+    toolVersion = "0.8.16"
 }
 
 tasks.jacocoTestReport {

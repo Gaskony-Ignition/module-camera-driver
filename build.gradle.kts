@@ -1,8 +1,8 @@
 plugins {
     base
     id("io.ia.sdk.modl") version "0.5.0"
-    id("com.github.spotbugs") version "6.4.8" apply false
-    id("org.owasp.dependencycheck") version "12.2.0" apply false
+    id("com.github.spotbugs") version "6.5.13" apply false
+    id("org.owasp.dependencycheck") version "13.0.0" apply false
 }
 
 // ── OWASP Dependency Check ──────────────────────────────────────────────────
@@ -13,7 +13,7 @@ configure<org.owasp.dependencycheck.gradle.extension.DependencyCheckExtension> {
     analyzers.assemblyEnabled = false
 }
 
-version = "3.3.2"
+version = "3.3.3"
 group = "com.gaskony"
 
 allprojects {
@@ -67,7 +67,7 @@ subprojects {
         apply(plugin = "com.github.spotbugs")
 
         configure<CheckstyleExtension> {
-            toolVersion = "10.26.1"
+            toolVersion = "12.3.1"
             configFile = rootProject.file("config/checkstyle/checkstyle.xml")
             isIgnoreFailures = true
         }
@@ -90,8 +90,10 @@ subprojects {
 tasks.register("syncVersion") {
     group = "versioning"
     description = "Syncs project.version to all files that embed it"
+    // Captured at configuration time: reading Task.project inside doLast is
+    // deprecated in Gradle 9 and fails in Gradle 10.
+    val ver = project.version.toString()
     doLast {
-        val ver = project.version.toString()
         fun sync(f: File, pattern: Regex, replacement: String) {
             if (!f.exists()) return
             val text = f.readText()
@@ -146,7 +148,7 @@ tasks.named("assembleModlStructure") {
 // .modl" — a build file is the honest place for that rule, because a rule
 // enforced by remembering is a rule that holds until the day it matters.
 // ---------------------------------------------------------------------------
-val verifyModulePackaging by tasks.registering {
+val verifyModulePackaging = tasks.register("verifyModulePackaging") {
     description = "Fails the build if the packaged .modl is missing required content or ships a forbidden library"
     group = "verification"
     dependsOn("signModule")
